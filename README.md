@@ -4,8 +4,8 @@ A python package for quantitative finance and derivative pricing.
 
 Emphasis on documentation, references and examples (although examples are lacking right now).  
 
-At https://www.frmcalcs.com/app_frm/, some use cases are are hosted.
+At <a href="https://www.frmcalcs.com/app_frm/" target="_blank">frmcalcs.com/app_frm/</a>, some use cases are are hosted.
 
-<a href="https://www.frmcalcs.com/app_frm/" target="_blank">Hello, world!</a>
+
 
 
