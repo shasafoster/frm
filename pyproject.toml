@@ -36,8 +36,3 @@ include-package-data = false
 
 [tool.setuptools.packages.find]
 exclude = ["references", "testing"]  # Add these lines to exclude specific packages
-
-[pypi]
-repository = "upload.pypi.org/legacy"
-username = "frm"
-password = "pypi-AgEIcHlwaS5vcmcCJDJmMzkwMzBlLTU1OTMtNDQ3ZC1hYjJkLTZlOGYxZGNjNDE3ZgACKlszLCJhZTAwZTI4Ny1mZmQyLTQ0NmUtOGQ0MC02ZTdlMGUwNWVhNjgiXQAABiAtL19wrr3JdKr0587IUlh3BJylGswNPaEeunKGZv4rCA"
