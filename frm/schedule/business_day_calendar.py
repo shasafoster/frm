@@ -10,7 +10,7 @@ if __name__ == "__main__":
     os.chdir(pathlib.Path(__file__).parent.parent.parent.resolve())     
     print('__main__ - current working directory:', os.getcwd())
 
-from frm.market_data.iban_ccys import VALID_CCYS
+from frm.frm.market_data.iban_ccys import VALID_CCYS
 
 import os
 import holidays

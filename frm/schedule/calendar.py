@@ -16,7 +16,7 @@ import numpy as np
 import datetime as dt
 import time
 import pickle
-from frm.market_data.iban_ccys import VALID_CCYS
+from frm.frm.market_data.iban_ccys import VALID_CCYS
 
 def log(log_idx, t1, msg):
     t2 = time.time()
@@ -80,7 +80,7 @@ def get_holidays(ccy,
     if end_date == None:
         end_date = dt.datetime(2100, 1, 1)    
     
-    with open('./frm/schedule/ccy_holidays_dict.pkl', 'rb') as f:
+    with open('./frm/frm/schedule/ccy_holidays_dict.pkl', 'rb') as f:
         ccy_holidays_dict = pickle.load(f)    
 
     if ccy.upper() in ccy_holidays_dict.keys():

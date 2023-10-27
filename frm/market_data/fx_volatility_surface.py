@@ -10,14 +10,14 @@ if __name__ == "__main__":
     os.chdir(pathlib.Path(__file__).parent.parent.parent.resolve())     
     print('__main__ - current working directory:', os.getcwd())
     
-from frm.market_data.ir_zero_curve import ZeroCurve
-from frm.pricing_engine.garman_kohlhagen import gk_price, gk_solve_implied_σ, gk_solve_strike
-from frm.pricing_engine.heston_gk import heston_fit_vanilla_fx_smile, heston1993_price_fx_vanilla_european, heston_carr_madan_fx_vanilla_european
+from frm.frm.market_data.ir_zero_curve import ZeroCurve
+from frm.frm.pricing_engine.garman_kohlhagen import gk_price, gk_solve_implied_σ, gk_solve_strike
+from frm.frm.pricing_engine.heston_gk import heston_fit_vanilla_fx_smile, heston1993_price_fx_vanilla_european, heston_carr_madan_fx_vanilla_european
 
-from frm.schedule.tenor import calc_tenor_date
-from frm.schedule.daycounter import DayCounter, VALID_DAY_COUNT_BASIS_TYPES
-from frm.schedule.business_day_calendar import get_calendar        
-from frm.schedule.utilities import convert_column_type    
+from frm.frm.schedule.tenor import calc_tenor_date
+from frm.frm.schedule.daycounter import DayCounter, VALID_DAY_COUNT_BASIS_TYPES
+from frm.frm.schedule.business_day_calendar import get_calendar        
+from frm.frm.schedule.utilities import convert_column_type    
 
 import numpy as np
 import pandas as pd
@@ -236,15 +236,15 @@ class FXVolatilitySurface:
                                 dates: pd.DatetimeIndex,
                                 flat_extrapolation: bool=True):
         
-        dates = dates.drop_duplicates()
-        combined_index = self.fx_forward_curve.index.union(dates)
+        unique_dates = dates.drop_duplicates()
+        combined_index = self.fx_forward_curve.index.union(unique_dates)
         result = self.fx_forward_curve.reindex(combined_index)
         start_date, end_date = self.fx_forward_curve.index.min(), self.fx_forward_curve.index.max()
         
         if flat_extrapolation:
             result['fx_forward_rate'] = result['fx_forward_rate'].interpolate(method='time', limit_area='inside').ffill().bfill()
             # Find out of range dates and warn
-            out_of_range_dates = dates[(dates < start_date) | (dates > end_date)]
+            out_of_range_dates = unique_dates[(unique_dates < start_date) | (unique_dates > end_date)]
             for date in out_of_range_dates:
                 warnings.warn(f"Date {date} is outside the range {start_date} - {end_date}, flat extrapolation applied.")
         else:
@@ -484,21 +484,24 @@ class FXVolatilitySurface:
         assert expiry_datetimeindex.shape == cp.shape
 
         σ = self.interp_σ_surface(expiry_datetimeindex, K, cp)
+        r_f = self.foreign_zero_curve.zero_rate(expiry_datetimeindex,compounding_frequency='simple').values
+        r_d = self.domestic_zero_curve.zero_rate(expiry_datetimeindex,compounding_frequency='simple').values
+        F = self.interp_fx_forward_curve(expiry_datetimeindex, flat_extrapolation=True)
 
         result = gk_price(
             S=self.fx_spot_rate,
             tau=self.daycounter.year_fraction(self.curve_date, expiry_datetimeindex),
-            r_f=self.foreign_zero_curve.zero_rate(expiry_datetimeindex,compounding_frequency='simple').values,
-            r_d=self.domestic_zero_curve.zero_rate(expiry_datetimeindex,compounding_frequency='simple').values,
+            r_f=r_f,
+            r_d=r_d,
             cp=cp,
             K=K,
             σ=σ,
-            F=self.interp_fx_forward_curve(expiry_datetimeindex, flat_extrapolation=True),
+            F=F,
             analytical_greeks_flag=analytical_greeks_flag
         )    
 
         if analytical_greeks_flag:
-            return result[0], result[1]
+            return result[0], result[1], pd.DataFrame({'σ': σ, 'r_f':r_f, 'r_d':r_d, 'F':F})
 
         return result
         

@@ -10,7 +10,7 @@ if __name__ == "__main__":
     os.chdir(pathlib.Path(__file__).parent.parent.parent.resolve())     
     print('__main__ - current working directory:', os.getcwd())
     
-from frm.schedule.business_day_calendar import get_calendar, VALID_CITY_HOLIDAYS, VALID_CURRENCY_HOLIDAYS
+from frm.frm.schedule.business_day_calendar import get_calendar, VALID_CITY_HOLIDAYS, VALID_CURRENCY_HOLIDAYS
 
 import numpy as np
 import pandas as pd

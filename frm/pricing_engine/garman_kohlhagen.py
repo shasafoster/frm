@@ -56,12 +56,12 @@ def gk_price(S: float,
     if F is not None: 
         F = np.atleast_1d(F).astype(float)
         assert (F > 0.0).all() 
-    
+        
         # Use market forward rate
         d1 = (np.log(F / K) + (0.5 * σ**2) * tau) / (σ * np.sqrt(tau))
         d2 = d1 - σ * np.sqrt(tau)    
         X = cp * np.exp(-r_d * tau) * (F * norm.cdf(cp * d1) - K * norm.cdf(cp * d2))    
-    
+
     else:
         # Under interest rate parity 
         F = S * np.exp((r_d - r_f) * tau)
@@ -73,10 +73,10 @@ def gk_price(S: float,
     if not (analytical_greeks_flag or numerical_greeks_flag):
         return X
     else:
-        Δ_shift = 1 / 100 
-        σ_shift = 1 / 100  
+        Δ_shift = 1 / 100 # 1% shift
+        σ_shift = 1 / 100 # 1% shift
         θ_shift = 1 / 365.25 # 1 Day
-        ρ_shift = 1 / 100 
+        ρ_shift = 1 / 100 # 1% shift
     
         if analytical_greeks_flag:
             greeks_analytical = {}
@@ -340,18 +340,18 @@ def gk_solve_implied_σ(S: float,
 if __name__ == '__main__':
     pass
 
-#     S=00.6629
-#     σ=0.098408
-#     r_d=0.05381
-#     r_f=0.0466
-#     tau=1.0
-#     cp=1
-#     K=0.7882
-#     F = 0.667962
-#     p1 = gk_price(S=S,tau=tau,r_f=r_f,r_d=r_d,cp=cp,K=K,σ=σ,F=F)
-#     print('F specified:', p1)
-#     p2 = gk_price(S=S,tau=tau,r_f=r_f,r_d=r_d,cp=cp,K=K,σ=σ)
-#     print('IR parity', p2)
+    S=0.6438
+    σ=0.0953686
+    r_d=0.05408
+    r_f=0.04189
+    tau=0.33403698
+    cp=-1
+    K=0.71000
+    F = 0.646478
+    p1 = gk_price(S=S,tau=tau,r_f=r_f,r_d=r_d,cp=cp,K=K,σ=σ,F=F)
+    print('F specified:', p1)
+    p2 = gk_price(S=S,tau=tau,r_f=r_f,r_d=r_d,cp=cp,K=K,σ=σ)
+    print('IR parity', p2)
 
 
 

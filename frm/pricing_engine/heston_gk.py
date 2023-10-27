@@ -13,7 +13,7 @@ if __name__ == "__main__":
     print('__main__ - current working directory:', os.getcwd())
    
 
-from frm.pricing_engine.garman_kohlhagen import gk_price, gk_solve_implied_σ, gk_solve_strike
+from frm.frm.pricing_engine.garman_kohlhagen import gk_price, gk_solve_implied_σ, gk_solve_strike
 import numpy as np
 import scipy.fft
 import scipy.optimize 

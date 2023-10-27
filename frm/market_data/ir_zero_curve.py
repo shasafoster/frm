@@ -10,13 +10,13 @@ if __name__ == "__main__":
     os.chdir(pathlib.Path(__file__).parent.parent.parent.resolve())     
     print('__main__ - current working directory:', os.getcwd())
         
-from frm.instruments.ir.swap import Swap
-from frm.instruments.ir.leg import Leg
-from frm.schedule.daycounter import DayCounter, VALID_DAY_COUNT_BASIS_TYPES
-from frm.market_data.iban_ccys import VALID_CCYS
-from frm.schedule.business_day_calendar import get_calendar
-from frm.schedule.tenor import calc_tenor_date
-from frm.schedule.utilities import convert_column_type
+from frm.frm.instruments.ir.swap import Swap
+from frm.frm.instruments.ir.leg import Leg
+from frm.frm.schedule.daycounter import DayCounter, VALID_DAY_COUNT_BASIS_TYPES
+from frm.frm.market_data.iban_ccys import VALID_CCYS
+from frm.frm.schedule.business_day_calendar import get_calendar
+from frm.frm.schedule.tenor import calc_tenor_date
+from frm.frm.schedule.utilities import convert_column_type
 
 from scipy.interpolate import CubicSpline 
 import pandas as pd

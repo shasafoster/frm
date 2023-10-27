@@ -36,7 +36,7 @@ end_dates = pd.DatetimeIndex([dt.date(2021,3,31),
                               dt.date(2021,9,30),
                               dt.date(2021,12,31)])
 
-DayCount = DayCounter('ACT/360')
+DayCount = DayCounter('act/360')
 
 days = DayCount.day_count(start_dates,end_dates)
 
@@ -67,7 +67,7 @@ class DatetimeIndexTest(TestCase):
                                   dt.date(2021,9,30),
                                   dt.date(2021,12,31)])
     
-    DayCount = DayCounter('ACT/360')
+    DayCount = DayCounter('act/360')
     DayCount.day_count(start_dates,end_dates)
     
 
@@ -116,9 +116,9 @@ class DatetimeIndexTest(TestCase):
 #%%
 
 
-class Actual360Test(TestCase):
+class actual360Test(TestCase):
 
-    DayCounter = DayCounter('ACT/360')
+    DayCounter = DayCounter('act/360')
     start_date = dt.date(2010, 1, 13)
     end_date = dt.date(2012, 1, 3)
 
@@ -165,9 +165,9 @@ class Actual360Test(TestCase):
         )
 
 
-class Actual365Test(TestCase):
+class actual365Test(TestCase):
 
-    DayCounter = DayCounter('ACT/365')
+    DayCounter = DayCounter('act/365')
     start_date = dt.date(2010, 1, 13)
     end_date = dt.date(2012, 1, 13)
 
@@ -214,9 +214,9 @@ class Actual365Test(TestCase):
         )
 
 
-class ActualActualTest(TestCase):
+class actualactualTest(TestCase):
 
-    DayCounter = DayCounter('ACT/ACT')
+    DayCounter = DayCounter('act/act')
     start_date = dt.date(2010, 1, 13)
     end_date = dt.date(2014, 1, 13)
 
@@ -313,7 +313,7 @@ class Thirty360Test(TestCase):
 
 class ThirtyE360Test(TestCase):
 
-    DayCounter = DayCounter('30E/360')
+    DayCounter = DayCounter('30e/360')
     start_date = dt.date(2010, 8, 31)
     end_date = dt.date(2011, 2, 28)
 
@@ -361,7 +361,7 @@ class ThirtyE360Test(TestCase):
 
 class ThirtyE360ISDATest(TestCase):
 
-    DayCounter = DayCounter('30E/360 ISDA') 
+    DayCounter = DayCounter('30e/360_isda') 
     start_date = dt.date(2011, 8, 31)
     end_date = dt.date(2012, 2, 29)
 

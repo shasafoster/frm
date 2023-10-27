@@ -10,9 +10,9 @@ if __name__ == "__main__":
     os.chdir(pathlib.Path(__file__).parent.parent.parent.parent.resolve())     
     print('__main__ - current working directory:', os.getcwd())
 
-from frm.schedule.tenor import calc_tenor_date
-from frm.schedule.business_day_calendar import get_calendar
-from frm.schedule.daycounter import DayCounter
+from frm.frm.schedule.tenor import calc_tenor_date
+from frm.frm.schedule.business_day_calendar import get_calendar
+from frm.frm.schedule.daycounter import DayCounter
 
 import numpy as np
 import pandas as pd    

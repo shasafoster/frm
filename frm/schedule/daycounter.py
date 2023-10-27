@@ -25,7 +25,7 @@ from typing import Optional, Literal, Union
 #                               Literal['act/365'], 
 #                               Literal['act/act']]
 
-VALID_DAY_COUNT_BASIS = ['30/360','30e/360','30e/360 isda','act/360','act/365','act/act']
+VALID_DAY_COUNT_BASIS = ['30/360','30e/360','30e/360_isda','act/360','act/365','act/act']
 VALID_DAY_COUNT_BASIS_TYPES = Union[tuple(Literal[i] for i in VALID_DAY_COUNT_BASIS)]
 
 @dataclass

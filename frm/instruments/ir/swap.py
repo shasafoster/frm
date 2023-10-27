@@ -10,10 +10,10 @@ if __name__ == "__main__":
     os.chdir(pathlib.Path(__file__).parent.parent.parent.parent.resolve())     
     print('__main__ - current working directory:', os.getcwd())
     
-from frm.schedule.daycounter import DayCounter, VALID_DAY_COUNT_BASIS
-from frm.schedule.schedule import payment_schedule, VALID_DAY_ROLL, VALID_LAST_STUB, VALID_PAYMENT_TYPE, VALID_PAYMENT_FREQUENCY, VALID_STUB, VALID_ROLL_CONVENTION
-from frm.schedule.business_day_calendar import get_calendar, VALID_CITY_HOLIDAYS, VALID_CURRENCY_HOLIDAYS
-from frm.instruments.ir.leg import Leg
+from frm.frm.schedule.daycounter import DayCounter, VALID_DAY_COUNT_BASIS
+from frm.frm.schedule.schedule import payment_schedule, VALID_DAY_ROLL, VALID_LAST_STUB, VALID_PAYMENT_TYPE, VALID_PAYMENT_FREQUENCY, VALID_STUB, VALID_ROLL_CONVENTION
+from frm.frm.schedule.business_day_calendar import get_calendar, VALID_CITY_HOLIDAYS, VALID_CURRENCY_HOLIDAYS
+from frm.frm.instruments.ir.leg import Leg
 
 import numpy as np
 import pandas as pd
