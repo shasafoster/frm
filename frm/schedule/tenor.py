@@ -38,7 +38,7 @@ def get_spot_offset(curve_ccy: str=None) -> int:
         else:
             return 2
 
-    # need to find evidence for this
+    # Spot offset for interest rate products
     elif len(curve_ccy) == 3:    
         if curve_ccy in {'aud','cad'}:
             return 1

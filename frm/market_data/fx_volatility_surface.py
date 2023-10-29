@@ -54,6 +54,7 @@ class FXVolatilitySurface:
 
     # Non initialisation arguments
     daycounter: DayCounter = field(init=False)
+    spot_date: pd.Timestamp
     fx_spot_rate: float = field(init=False)
     domestic_ccy: str = field(init=False)
     foreign_ccy: str = field(init=False)
@@ -64,6 +65,7 @@ class FXVolatilitySurface:
     # volatility definitions
     Δ_σ_pillar: pd.DataFrame=None
     smile_interpolation_method: Optional[VALID_FX_SMILE_INTERPOLATION_METHOD] = 'cubic_spline'
+    spot_date: Optional[pd.Timestamp] = None
     
     #atmΔ: pd.DataFrame=None
     #atmF: pd.DataFrame=None
@@ -74,6 +76,7 @@ class FXVolatilitySurface:
     
     day_count_basis: InitVar[Optional[VALID_DAY_COUNT_BASIS_TYPES]] = 'act/act'
     
+    
 
     def __post_init__(self, day_count_basis):
          
@@ -81,6 +84,12 @@ class FXVolatilitySurface:
         self.K_σ_daily_smile_func = dict()
 
         holiday_calendar = get_calendar(ccys=[self.curve_ccy[:3],self.curve_ccy[3:]])
+
+        if self.spot_date is None:
+            result = calc_tenor_date(self.curve_date, 'sp', self.curve_ccy, holiday_calendar=holiday_calendar, spot_offset=True)
+            holiday_rolled_offset_date, cleaned_tenor_name, spot_date = result
+            assert holiday_rolled_offset_date == spot_date
+            self.spot_date = spot_date
 
         # curve_ccy validation
         self.curve_ccy = self.curve_ccy.lower().strip()
@@ -91,13 +100,13 @@ class FXVolatilitySurface:
             warnings.warn("non conventional fx market, typically 'usd' is the domestic currency for 'audusd', 'eurusd', 'gbpusd' and 'nzdusd' pairs")
         elif self.domestic_ccy == 'usd' and self.foreign_ccy not in {'aud','eur','gbp','nzd'}:
             warnings.warn("non conventional fx market, typically 'usd' is the foreign currency  except for 'audusd', 'eurusd', 'gbpusd' and 'nzdusd' pairs")
-
+ 
         # fx_forward_curve validation 
         assert 'fx_forward_rate' in self.fx_forward_curve.columns 
         self.fx_forward_curve = convert_column_type(self.fx_forward_curve)
         assert ('tenor_name' in self.fx_forward_curve.columns) or ('tenor_date' in self.fx_forward_curve.columns)
         if 'tenor_date' not in self.fx_forward_curve.columns:
-            result = calc_tenor_date(self.curve_date, self.fx_forward_curve['tenor_name'], self.curve_ccy, holiday_calendar=holiday_calendar, spot_offset=False)
+            result = calc_tenor_date(self.curve_date, self.fx_forward_curve['tenor_name'], self.curve_ccy, holiday_calendar=holiday_calendar, spot_offset=True)
             holiday_rolled_offset_date, cleaned_tenor_name, spot_date = result
             self.fx_forward_curve['tenor_date'] = holiday_rolled_offset_date
             self.fx_forward_curve['tenor_name'] = cleaned_tenor_name
@@ -105,10 +114,10 @@ class FXVolatilitySurface:
             
         self.fx_forward_curve.set_index('tenor_date', inplace=True,drop=True)
             
-        if self.curve_date not in self.fx_forward_curve.index:
-            raise ValueError("The curve date (" + self.curve_date.strftime('%Y-%m-%d') + ') fx rate (i.e the fx spot rate) is in missing in fx_forward_curve')
+        if self.spot_date not in self.fx_forward_curve.index:
+            raise ValueError("The spot date (" + self.spot_date.strftime('%Y-%m-%d') + ') fx rate (i.e the fx spot rate) is in missing in fx_forward_curve')
         
-        self.fx_spot_rate = self.fx_forward_curve.loc[self.curve_date,'fx_forward_rate']
+        self.fx_spot_rate = self.fx_forward_curve.loc[self.spot_date,'fx_forward_rate']
         
         # Δ_σ_pillar validation
         if self.Δ_σ_pillar is not None:
