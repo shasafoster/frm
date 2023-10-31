@@ -14,7 +14,7 @@ from frm.frm.market_data.ir_zero_curve import ZeroCurve
 from frm.frm.pricing_engine.garman_kohlhagen import gk_price, gk_solve_implied_σ, gk_solve_strike
 from frm.frm.pricing_engine.heston_gk import heston_fit_vanilla_fx_smile, heston1993_price_fx_vanilla_european, heston_carr_madan_fx_vanilla_european
 
-from frm.frm.schedule.tenor import calc_tenor_date
+from frm.frm.schedule.tenor import calc_tenor_date, get_spot_offset
 from frm.frm.schedule.daycounter import DayCounter, VALID_DAY_COUNT_BASIS_TYPES
 from frm.frm.schedule.business_day_calendar import get_calendar        
 from frm.frm.schedule.utilities import convert_column_type    
@@ -104,20 +104,32 @@ class FXVolatilitySurface:
         # fx_forward_curve validation 
         assert 'fx_forward_rate' in self.fx_forward_curve.columns 
         self.fx_forward_curve = convert_column_type(self.fx_forward_curve)
-        assert ('tenor_name' in self.fx_forward_curve.columns) or ('tenor_date' in self.fx_forward_curve.columns)
-        if 'tenor_date' not in self.fx_forward_curve.columns:
+        assert ('tenor_name' in self.fx_forward_curve.columns) or ('expiry_date' in self.fx_forward_curve.columns and 'delivery_date' in self.fx_forward_curve.columns)
+        if 'expiry_date' not in self.fx_forward_curve.columns and 'delivery_date' not in self.fx_forward_curve.columns:
+            
             result = calc_tenor_date(self.curve_date, self.fx_forward_curve['tenor_name'], self.curve_ccy, holiday_calendar=holiday_calendar, spot_offset=True)
             holiday_rolled_offset_date, cleaned_tenor_name, spot_date = result
-            self.fx_forward_curve['tenor_date'] = holiday_rolled_offset_date
             self.fx_forward_curve['tenor_name'] = cleaned_tenor_name
-            self.fx_forward_curve['tenor_years'] = self.daycounter.year_fraction(self.curve_date, self.fx_forward_curve['tenor_date'])
+            self.fx_forward_curve['delivery_date'] = holiday_rolled_offset_date
+            self.fx_forward_curve['years_to_delivery'] = self.daycounter.year_fraction(self.curve_date, self.fx_forward_curve['tenor_years_delivery'])            
+
+            spot_offset = -1 * get_spot_offset(curve_ccy=self.curve_ccy)
+            holiday_rolled_offset_date = np.busday_offset(holiday_rolled_offset_date, offsets=spot_offset, roll='preceeding', busdaycal=holiday_calendar)
+                
+            result = calc_tenor_date(self.curve_date, self.fx_forward_curve['tenor_name'], self.curve_ccy, holiday_calendar=holiday_calendar, spot_offset=True)
+            holiday_rolled_offset_date, cleaned_tenor_name, spot_date = result
             
-        self.fx_forward_curve.set_index('tenor_date', inplace=True,drop=True)
+            self.fx_forward_curve['expiry_date'] = holiday_rolled_offset_date
+            self.fx_forward_curve['yrs_to_expiry'] = self.daycounter.year_fraction(self.curve_date, self.fx_forward_curve['tenor_years_observation'])
             
-        if self.spot_date not in self.fx_forward_curve.index:
-            raise ValueError("The spot date (" + self.spot_date.strftime('%Y-%m-%d') + ') fx rate (i.e the fx spot rate) is in missing in fx_forward_curve')
+
+                        
+        self.fx_forward_curve.set_index('expiry_date', inplace=True,drop=True)
+            
+        if self.curve_date not in self.fx_forward_curve.index:
+            raise ValueError("The curve date (" + self.curve_date.strftime('%Y-%m-%d') + ') fx rate (i.e the fx spot rate) is in missing in fx_forward_curve')
         
-        self.fx_spot_rate = self.fx_forward_curve.loc[self.spot_date,'fx_forward_rate']
+        self.fx_spot_rate = self.fx_forward_curve.loc[self.curve_date,'fx_forward_rate']
         
         # Δ_σ_pillar validation
         if self.Δ_σ_pillar is not None:
@@ -237,15 +249,19 @@ class FXVolatilitySurface:
     
         df['foreign_ccy_simple_interest_rate'] = self.foreign_zero_curve.zero_rate(dates=df.index,compounding_frequency='simple').values       
         df['domestic_ccy_simple_interest_rate'] = self.domestic_zero_curve.zero_rate(dates=df.index,compounding_frequency='simple').values
-        df['fx_forward_rate'] = self.interp_fx_forward_curve(dates=df.index, flat_extrapolation=True)
+        df['fx_forward_rate'] = self.interp_fx_forward_curve(expiry_dates=df.index, flat_extrapolation=True)
         return df
 
 
     def interp_fx_forward_curve(self, 
-                                dates: pd.DatetimeIndex,
+                                expiry_dates: pd.DatetimeIndex,
                                 flat_extrapolation: bool=True):
+        """
+        Interpolate the FX forward curve to match given expiry_dates.
+        Please note expiry date is 2 business days prior to the spot date
+        """
         
-        unique_dates = dates.drop_duplicates()
+        unique_dates = expiry_dates.drop_duplicates()
         combined_index = self.fx_forward_curve.index.union(unique_dates)
         result = self.fx_forward_curve.reindex(combined_index)
         start_date, end_date = self.fx_forward_curve.index.min(), self.fx_forward_curve.index.max()
@@ -259,7 +275,7 @@ class FXVolatilitySurface:
         else:
             result['fx_forward_rate'] = result['fx_forward_rate'].interpolate(method='time', limit_area='inside')
         
-        result = result.reindex(dates)
+        result = result.reindex(expiry_dates)
         
         return result['fx_forward_rate']
         
@@ -495,7 +511,7 @@ class FXVolatilitySurface:
         σ = self.interp_σ_surface(expiry_datetimeindex, K, cp)
         r_f = self.foreign_zero_curve.zero_rate(expiry_datetimeindex,compounding_frequency='simple').values
         r_d = self.domestic_zero_curve.zero_rate(expiry_datetimeindex,compounding_frequency='simple').values
-        F = self.interp_fx_forward_curve(expiry_datetimeindex, flat_extrapolation=True)
+        F = self.interp_fx_forward_curve(expiry_dates=expiry_datetimeindex, flat_extrapolation=True)
 
         result = gk_price(
             S=self.fx_spot_rate,
