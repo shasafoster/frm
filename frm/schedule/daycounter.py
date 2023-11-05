@@ -34,7 +34,7 @@ class DayCounter:
     VALID_DAY_COUNT_BASIS = VALID_DAY_COUNT_BASIS 
     
     def __post_init__(self):
-        if self.day_count_basis is None: 
+        if self.day_count_basis in [None, np.nan, '']:
             self.day_count_basis = 'act/act' 
         elif self.day_count_basis not in self.VALID_DAY_COUNT_BASIS:
             raise ValueError(f"Invalid day_count_basis. Must be one of {VALID_DAY_COUNT_BASIS}")

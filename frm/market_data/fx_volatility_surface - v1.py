@@ -10,7 +10,7 @@ if __name__ == "__main__":
     os.chdir(pathlib.Path(__file__).parent.parent.parent.resolve())     
     print('__main__ - current working directory:', os.getcwd())
     
-from frm.frm.market_data.fx_volatility_surface_helpers import fx_σ_input_helper, VALID_DELTA_CONVENTIONS
+from frm.frm.market_data.fx_volatility_surface_helpers import fx_σ_input_helper     
 from frm.frm.market_data.ir_zero_curve import ZeroCurve
 from frm.frm.pricing_engine.garman_kohlhagen import gk_price, gk_solve_implied_σ, gk_solve_strike
 from frm.frm.pricing_engine.heston_gk import heston_fit_vanilla_fx_smile, heston1993_price_fx_vanilla_european, heston_carr_madan_fx_vanilla_european
@@ -18,7 +18,7 @@ from frm.frm.pricing_engine.heston_gk import heston_fit_vanilla_fx_smile, heston
 from frm.frm.schedule.tenor import calc_tenor_date, get_spot_offset
 from frm.frm.schedule.daycounter import DayCounter, VALID_DAY_COUNT_BASIS_TYPES
 from frm.frm.schedule.business_day_calendar import get_calendar        
-from frm.frm.utilities.utilities import convert_column_type, generic_market_data_input_cleanup_and_validation    
+from frm.frm.utilities.utilities import convert_column_type    
 
 import numpy as np
 import pandas as pd
@@ -31,7 +31,7 @@ import warnings
 import re
 import matplotlib.pyplot as plt
 
-
+VALID_DELTA_CONVENTIONS = ['regular_spot_delta','regular_forward_delta','premium_adjusted_spot_delta','premium_adjusted_forward_delta'] 
 VALID_FX_SMILE_INTERPOLATION_METHOD = Literal['univariate_spline',
                                               'cubic_spline',
                                               'heston_analytical_1993',
@@ -121,7 +121,7 @@ class FXVolatilitySurface:
             holiday_rolled_offset_date, cleaned_tenor_name, spot_date = result
             
             self.fx_forward_curve['expiry_date'] = holiday_rolled_offset_date
-            self.fx_forward_curve['years_to_expiry'] = self.daycounter.year_fraction(self.curve_date, self.fx_forward_curve['tenor_years_observation'])
+            self.fx_forward_curve['yrs_to_expiry'] = self.daycounter.year_fraction(self.curve_date, self.fx_forward_curve['tenor_years_observation'])
                                     
         self.fx_forward_curve.set_index('expiry_date', inplace=True,drop=True)
             
@@ -132,32 +132,62 @@ class FXVolatilitySurface:
         
         # σ_pillar validation
         if self.σ_pillar is not None:
+            
             σ_pillar = self.σ_pillar
-            σ_pillar_input = σ_pillar.copy()
+            
             σ_pillar['curve_date'] = self.curve_date
             σ_pillar['curve_ccy'] = self.curve_ccy
-            σ_pillar['day_count_basis'] = self.daycounter.day_count_basis
             
-            σ_pillar = generic_market_data_input_cleanup_and_validation(σ_pillar, spot_offset=False)
-            σ_pillar = fx_σ_input_helper(σ_pillar)
             
-            σ_pillar = self.__interp_daily_FXF_and_IR_rates(σ_pillar)                    
-            self.σ_pillar = σ_pillar            
+            results = fx_σ_input_helper(σ_pillar)
             
-            if 'σ_atmf' in self.σ_pillar.keys():
-                pass
-            else:
+            
+            # Convert columns to type float (can be set to type object from splicing or NaNs)
+            for col in self.σ_pillar.columns:
+                if self.σ_pillar[col].apply(isinstance, args=(float,)).all():
+                    self.σ_pillar[col] = pd.to_numeric(self.σ_pillar[col])
+            if 'tenor_date' not in self.σ_pillar.columns:
+                result = calc_tenor_date(self.curve_date, self.σ_pillar['tenor_name'], self.curve_ccy, holiday_calendar=holiday_calendar)
+                holiday_rolled_offset_date, cleaned_tenor_name, spot_date = result            
+                self.σ_pillar['tenor_date'] = holiday_rolled_offset_date
+                self.σ_pillar['tenor_name'] = cleaned_tenor_name
+            self.σ_pillar.set_index('tenor_date', inplace=True,drop=True)       
+            self.σ_pillar.insert(loc=0, column='tenor_years', value=self.daycounter.year_fraction(self.curve_date, self.σ_pillar.index).values)                    
+
+            cols = [v for v in self.σ_pillar.columns if v not in ['tenor_date','tenor_name','tenor_years','Δ_convention']]
+            for i,v in enumerate(cols):
+                pattern1 = r'^σ_(\d{1,2})Δ(call|put)$'
+                pattern2 = r'^σ_(\d{1,2})Δ(bf|rr)$'
+                atm_column_names = ['σ_atmΔneutral','σ_atmf']
+                if (re.match(pattern1, v) and 1 <= int(re.match(pattern1, v).group(1)) <= 99) \
+                    or (re.match(pattern2, v) and 1 <= int(re.match(pattern2, v).group(1)) <= 99) \
+                    or v in atm_column_names:    
+                    pass
+                else:
+                    msg = 'user added column' + "'" + v + "'" + ' does not ' \
+                        + 'match regex pattern ' + "'" + pattern1 + "', or pattern " + "'" + pattern2 + "'," \
+                        + ' and is not in the allowed list (' + ', '.join(atm_column_names) + ')'
+                    raise ValueError(msg)
+            self.σ_pillar = self.__interp_daily_FXF_and_IR_rates(self.σ_pillar.copy())
+            
+            
+            if True:                
                 ###################################################################
                 # 1. Calculate the delta-strike surface from the delta-volatility surface           
                 
-                
+                self.σ_pillar_input_Δ_convention = self.σ_pillar.copy()
                 Δ_K_pillar = self.σ_pillar.copy()
                 Δ_K_pillar.loc[:, Δ_K_pillar.columns.str.contains('σ')] = np.nan
                 Δ_K_pillar.rename(columns=lambda x: x.replace('σ', 'k'), inplace=True)
     
                 helper_cols = ['tenor_date','tenor_name','tenor_years','fx_forward_rate','foreign_ccy_continuously_compounded_zero_rate','domestic_ccy_continuously_compounded_zero_rate','Δ_convention']
-                dict_K_σ = {v.replace('σ', 'k'): v for v in self.σ_pillar.columns if 'σ' in v}
+                dict_K_σ = {v.replace('σ', 'k'): v for v in self.σ_pillar.columns if v not in helper_cols}
                 for date, row in Δ_K_pillar.iterrows():
+                    
+                    
+                    
+                    # Solve strikes 
+                    
                     # Scalars
                     S = self.fx_spot_rate
                     r_f=row['foreign_ccy_continuously_compounded_zero_rate']
@@ -166,8 +196,6 @@ class FXVolatilitySurface:
                     Δ_convention=row['Δ_convention']
                     F=row['fx_forward_rate']  
                     # Arrays
-                    print(dict_K_σ)
-                    
                     cp = [1 if v[-4:] == 'call' else -1 if v[-3:] == 'put' else None for v in dict_K_σ.keys()]
                     Δ = [0.5 if v == 'k_atmΔneutral' else cp[i] * float(v.split('_')[1].split('Δ')[0]) / 100 for i,v in enumerate(dict_K_σ.keys())]
                     σ = self.σ_pillar.loc[date, dict_K_σ.values()].values
@@ -189,9 +217,6 @@ class FXVolatilitySurface:
             df_lower_pillar = pd.merge_asof(df_interp.sort_values('tenor_years'), df_pillar, on='tenor_date', direction='backward', suffixes=('_interp', '_pillar'))
             df_upper_pillar = pd.merge_asof(df_interp.sort_values('tenor_years'), df_pillar, on='tenor_date', direction='forward', suffixes=('_interp', '_pillar'))
                     
-            # cols equals the volatility smile to be interpolated
-            cols = ['σ_25Δput','σ_atmΔneutral','σ_25Δcall'] # tk to be made dynamic
-            
             # Convert to numpy for efficient calculations
             t1 = df_lower_pillar['tenor_years_pillar'].to_numpy()
             t2 = df_upper_pillar['tenor_years_pillar'].to_numpy()
@@ -212,14 +237,15 @@ class FXVolatilitySurface:
 
 
     def __interp_daily_FXF_and_IR_rates(self, df):
+        offset = 1 if 'tenor_name' in df.columns else 0
         
-        df['foreign_ccy_continuously_compounded_zero_rate'] = np.nan
-        df['domestic_ccy_continuously_compounded_zero_rate'] = np.nan
-        df['fx_forward_rate'] = np.nan
+        df.insert(loc=1+offset, column='foreign_ccy_continuously_compounded_zero_rate', value=np.nan)
+        df.insert(loc=2+offset, column='domestic_ccy_continuously_compounded_zero_rate', value=np.nan)
+        df.insert(loc=3+offset, column='fx_forward_rate', value=np.nan)
     
-        df['foreign_ccy_continuously_compounded_zero_rate'] = self.foreign_zero_curve.zero_rate(dates=df['tenor_date'],compounding_frequency='continuously').values       
-        df['domestic_ccy_continuously_compounded_zero_rate'] = self.domestic_zero_curve.zero_rate(dates=df['tenor_date'],compounding_frequency='continuously').values
-        df['fx_forward_rate'] = self.interp_fx_forward_curve(expiry_dates=df['tenor_date'], flat_extrapolation=True)
+        df['foreign_ccy_continuously_compounded_zero_rate'] = self.foreign_zero_curve.zero_rate(dates=df.index,compounding_frequency='continuously').values       
+        df['domestic_ccy_continuously_compounded_zero_rate'] = self.domestic_zero_curve.zero_rate(dates=df.index,compounding_frequency='continuously').values
+        df['fx_forward_rate'] = self.interp_fx_forward_curve(expiry_dates=df.index, flat_extrapolation=True)
         return df
 
 

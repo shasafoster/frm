@@ -16,7 +16,7 @@ from frm.frm.schedule.daycounter import DayCounter, VALID_DAY_COUNT_BASIS_TYPES
 from frm.frm.market_data.iban_ccys import VALID_CCYS
 from frm.frm.schedule.business_day_calendar import get_calendar
 from frm.frm.schedule.tenor import calc_tenor_date
-from frm.frm.schedule.utilities import convert_column_type
+from frm.frm.utilities.utilities import convert_column_type
 
 from scipy.interpolate import CubicSpline 
 import pandas as pd
@@ -39,7 +39,7 @@ class ZeroCurve:
     historical_fixings: InitVar[Optional[pd.DataFrame]] = None
     day_count_basis: InitVar[Optional[VALID_DAY_COUNT_BASIS_TYPES]] = 'act/act'
     zero_data: InitVar[Optional[pd.DataFrame]] = None
-    zero_rate_compounding_frequency: InitVar[VALID_COMPOUNDING_FREQUENCY] = 'continuous'
+    zero_rate_compounding_frequency: InitVar[VALID_COMPOUNDING_FREQUENCY] = 'continuously'
     interpolation_method: VALID_INTERPOLATION_METHOD = 'linear_on_log_of_discount_factors'
     extrapolation_method: VALID_EXTRAPOLATION_METHOD = 'none'
     instruments: InitVar[Optional[dict]] = None
@@ -86,15 +86,15 @@ class ZeroCurve:
             if 'discount_factor' not in zero_data.columns:
                 years = self.daycounter.year_fraction(self.curve_date, zero_data['tenor_date'])
 
-                if zero_rate_compounding_frequency == 'continuous': 
+                if zero_rate_compounding_frequency == 'continuously': 
                     zero_data['discount_factor'] = np.exp(-zero_data['zero_rate'] * years)
                 elif zero_rate_compounding_frequency == 'monthly': 
                     zero_data['discount_factor'] = 1 / (1+zero_data['zero_rate']/12)**(12*years)
                 elif zero_rate_compounding_frequency == 'quarterly': 
                     zero_data['discount_factor'] = 1 / (1+zero_data['zero_rate']/4)**(4*years)
-                elif zero_rate_compounding_frequency == 'semi-annual': 
+                elif zero_rate_compounding_frequency == 'semi-annually': 
                     zero_data['discount_factor'] = 1 / (1+zero_data['zero_rate']/2)**(2*years)
-                elif zero_rate_compounding_frequency == 'annual': 
+                elif zero_rate_compounding_frequency == 'annually': 
                     zero_data['discount_factor'] = 1 / (1+zero_data['zero_rate']/1)**(1*years)
                 else: 
                     raise ValueError("The zero rate compounding frequency '" + zero_rate_compounding_frequency + "' is not supported")
@@ -330,7 +330,7 @@ class ZeroCurve:
         # https://en.wikipedia.org/wiki/Forward_rate
         if compounding_frequency == 'simple':
             forward_fixings = pd.Series(list((1 / years) * (dsc_d1 / dsc_d2 - 1)))
-        elif compounding_frequency == 'yearly':
+        elif compounding_frequency == 'annually':
             forward_fixings = pd.Series(list( (dsc_d1 / dsc_d2) ** (1/years)  - 1 ))
         elif compounding_frequency == 'continuously':
             forward_fixings = pd.Series(list((1 / years) * (np.log(dsc_d1) - np.log(dsc_d2))))
