@@ -19,14 +19,16 @@ def convert_column_type(df: pd.DataFrame):
     return df
 
 
-def copy_errors_to_input(df_processed, df_input):
+def copy_errors_and_warnings_to_input(df_processed, df_input):
     
-    internal_ids = df_processed.loc[df_processed['errors'] != '','internal_id'].to_list()
-    for i in internal_ids:
-        mask_processed = df_processed['internal_id'] == i
-        mask_input = df_input['internal_id'] == i
-        
-        df_input.loc[mask_input,'errors'] = df_processed.loc[mask_processed,'errors'].iloc[0]
+    for v in ['errors','warnings']:
+    
+        internal_ids = df_processed.loc[df_processed[v] != '','internal_id'].to_list()
+        for i in internal_ids:
+            mask_processed = df_processed['internal_id'] == i
+            mask_input = df_input['internal_id'] == i
+            
+            df_input.loc[mask_input,v] = df_processed.loc[mask_processed,v].iloc[0]
         
     return df_input
 
@@ -60,7 +62,6 @@ def move_col_after(df, col_to_move, ref_col):
 
 def generic_market_data_input_cleanup_and_validation(df : pd.DataFrame,
                                                      spot_offset: bool=True):
-    
     df_input = df.copy()
 
     # mandatory column validation  

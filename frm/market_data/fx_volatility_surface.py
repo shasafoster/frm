@@ -133,31 +133,29 @@ class FXVolatilitySurface:
         # σ_pillar validation
         if self.σ_pillar is not None:
             σ_pillar = self.σ_pillar
-            σ_pillar_input = σ_pillar.copy()
             σ_pillar['curve_date'] = self.curve_date
             σ_pillar['curve_ccy'] = self.curve_ccy
             σ_pillar['day_count_basis'] = self.daycounter.day_count_basis
             
             σ_pillar = generic_market_data_input_cleanup_and_validation(σ_pillar, spot_offset=False)
             σ_pillar = fx_σ_input_helper(σ_pillar)
-            
-            σ_pillar = self.__interp_daily_FXF_and_IR_rates(σ_pillar)                    
+            σ_pillar.set_index('tenor_date', drop=True, inplace=True)
+                    
+            σ_pillar = self.__interp_daily_FXF_and_IR_rates(σ_pillar)   
+                 
             self.σ_pillar = σ_pillar            
             
             if 'σ_atmf' in self.σ_pillar.keys():
-                pass
+                self.K_pillar = σ_pillar['fx_forward_rate']
             else:
                 ###################################################################
-                # 1. Calculate the delta-strike surface from the delta-volatility surface           
-                
-                
-                Δ_K_pillar = self.σ_pillar.copy()
-                Δ_K_pillar.loc[:, Δ_K_pillar.columns.str.contains('σ')] = np.nan
-                Δ_K_pillar.rename(columns=lambda x: x.replace('σ', 'k'), inplace=True)
+                # Calculate the delta-strike surface from the delta-volatility surface           
+                K_pillar = self.σ_pillar.copy()
+                K_pillar.loc[:, K_pillar.columns.str.contains('σ')] = np.nan
+                K_pillar.rename(columns=lambda x: x.replace('σ', 'k'), inplace=True)
     
-                helper_cols = ['tenor_date','tenor_name','tenor_years','fx_forward_rate','foreign_ccy_continuously_compounded_zero_rate','domestic_ccy_continuously_compounded_zero_rate','Δ_convention']
                 dict_K_σ = {v.replace('σ', 'k'): v for v in self.σ_pillar.columns if 'σ' in v}
-                for date, row in Δ_K_pillar.iterrows():
+                for date, row in K_pillar.iterrows():
                     # Scalars
                     S = self.fx_spot_rate
                     r_f=row['foreign_ccy_continuously_compounded_zero_rate']
@@ -165,18 +163,15 @@ class FXVolatilitySurface:
                     tau=row['tenor_years']                
                     Δ_convention=row['Δ_convention']
                     F=row['fx_forward_rate']  
-                    # Arrays
-                    print(dict_K_σ)
-                    
+                    # Arrays                 
                     cp = [1 if v[-4:] == 'call' else -1 if v[-3:] == 'put' else None for v in dict_K_σ.keys()]
                     Δ = [0.5 if v == 'k_atmΔneutral' else cp[i] * float(v.split('_')[1].split('Δ')[0]) / 100 for i,v in enumerate(dict_K_σ.keys())]
                     σ = self.σ_pillar.loc[date, dict_K_σ.values()].values
                                         
                     K = gk_solve_strike(S=S,tau=tau,r_f=r_f,r_d=r_d,σ=σ,Δ=Δ,Δ_convention=Δ_convention,F=F)
-                    Δ_K_pillar.loc[date,dict_K_σ.keys()] = K
+                    K_pillar.loc[date,dict_K_σ.keys()] = K
                                                 
-  
-                self.Δ_K_pillar = Δ_K_pillar
+                self.K_pillar = K_pillar
 
             ###################################################################
             # Interpolate the term structure of volatility to get a daily volatility smile            
@@ -217,9 +212,9 @@ class FXVolatilitySurface:
         df['domestic_ccy_continuously_compounded_zero_rate'] = np.nan
         df['fx_forward_rate'] = np.nan
     
-        df['foreign_ccy_continuously_compounded_zero_rate'] = self.foreign_zero_curve.zero_rate(dates=df['tenor_date'],compounding_frequency='continuously').values       
-        df['domestic_ccy_continuously_compounded_zero_rate'] = self.domestic_zero_curve.zero_rate(dates=df['tenor_date'],compounding_frequency='continuously').values
-        df['fx_forward_rate'] = self.interp_fx_forward_curve(expiry_dates=df['tenor_date'], flat_extrapolation=True)
+        df['foreign_ccy_continuously_compounded_zero_rate'] = self.foreign_zero_curve.zero_rate(dates=df.index,compounding_frequency='continuously').values       
+        df['domestic_ccy_continuously_compounded_zero_rate'] = self.domestic_zero_curve.zero_rate(dates=df.index,compounding_frequency='continuously').values
+        df['fx_forward_rate'] = self.interp_fx_forward_curve(expiry_dates=df.index, flat_extrapolation=True).values
         return df
 
 
@@ -237,7 +232,10 @@ class FXVolatilitySurface:
         start_date, end_date = self.fx_forward_curve.index.min(), self.fx_forward_curve.index.max()
         
         if flat_extrapolation:
-            result['fx_forward_rate'] = result['fx_forward_rate'].interpolate(method='time', limit_area='inside').ffill().bfill()
+            try:
+                result['fx_forward_rate'] = result['fx_forward_rate'].interpolate(method='time', limit_area='inside').ffill().bfill()
+            except:
+                pass
             # Find out of range dates and warn
             out_of_range_dates = unique_dates[(unique_dates < start_date) | (unique_dates > end_date)]
             for date in out_of_range_dates:

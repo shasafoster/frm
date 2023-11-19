@@ -87,6 +87,8 @@ def get_holidays(ccy,
         log_idx, t = log(log_idx, t, 'read in pickled holidays')
         return ccy_holidays_dict[ccy]    
     else:
+        print(ccy, ' is not in ccy_holidays_dict.pkl')
+        
         if ccy.upper() in ccy_country_mapping.keys():
             market_or_country = ccy_country_mapping[ccy.upper()]
             
