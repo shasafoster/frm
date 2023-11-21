@@ -13,7 +13,7 @@ Interest rate swaps
 - pricing
 - schedule construction (including detailed stub logic) 
 - iterative single currency bootstrapping
-- fixed rate / spread solvers
+- fixed rate / spread par solvers
 
 Vanilla European FX options
 - pricing + greeks (under Garman Kolhagen)
