@@ -16,7 +16,7 @@ Interest rate swaps
 - fixed rate / spread par solvers
 
 Vanilla European FX options
-- pricing + greeks (under Garman Kolhagen)
+- pricing + greeks (under Garman-Kohlhagen)
 - volatility surface construction (smile construction via Heston or splines)  
 
 
