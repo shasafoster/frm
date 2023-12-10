@@ -203,6 +203,7 @@ class FXVolatilitySurface:
             df_interp[cols] = σ_t            
             df_interp['Δ_convention'] = 'regular_forward_Δ' # need to add a section to calculate forward delta from spot delta
             df_interp.set_index('tenor_date', inplace=True,drop=True)    
+            
             self.Δ_σ_daily = self.__interp_daily_FXF_and_IR_rates(df_interp)
 
 
@@ -385,6 +386,7 @@ class FXVolatilitySurface:
         assert dates.shape == cp.shape
         
         df = self.Δ_σ_daily.loc[pd.DatetimeIndex(dates),:].copy()
+        
         cols_to_drop = [col for col in df.columns if 'σ' in col]
         df.drop(columns=cols_to_drop, inplace=True)
         df['K'] = K
@@ -476,7 +478,11 @@ class FXVolatilitySurface:
         assert expiry_datetimeindex.shape == K.shape
         assert expiry_datetimeindex.shape == cp.shape
 
-        σ = self.interp_σ_surface(expiry_datetimeindex, K, cp)
+        mask = np.logical_and.reduce([expiry_datetimeindex >= self.σ_pillar.index.min(), expiry_datetimeindex <= self.σ_pillar.index.max()])
+        σ = np.full(expiry_datetimeindex.shape, np.nan)
+        if mask.any():
+            σ[mask] = self.interp_σ_surface(expiry_datetimeindex[mask], K, cp)
+            
         r_f = self.foreign_zero_curve.zero_rate(expiry_datetimeindex,compounding_frequency='continuously').values
         r_d = self.domestic_zero_curve.zero_rate(expiry_datetimeindex,compounding_frequency='continuously').values
         F = self.interp_fx_forward_curve(expiry_dates=expiry_datetimeindex, flat_extrapolation=True)
