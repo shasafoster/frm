@@ -89,6 +89,8 @@ def heston_fit_vanilla_fx_smile(
     
         Returns:
         float: Sum of squared errors between model and market implied volatilities.
+
+        Converted from MATLAB to Python by Shasa Foster (2023.09.02)
         """
 
         vv, theta, rho = param
@@ -212,6 +214,8 @@ def heston_1993_fx_vanilla_european_integral(φ, m, S, k, v0, vv, r_d, r_f, tau,
     [1] S.Heston, (1993) A Closed-Form Solution for Options with Stochastic Volatility with Applications to Bond and Currency Options
     [2] H.Albrecher, P.Mayer, W.Schoutens, J.Tistaert (2006) The little Heston trap, Wilmott Magazine, January: 83–92.
     [3] A.Janek, T.Kluge, R.Weron, U.Wystup (2010) FX smile in the Heston model.
+
+    Converted from MATLAB to Python by Shasa Foster (2023.09.02)
     """
     
     # x per equation (11) from Heston, 1993
@@ -316,6 +320,7 @@ def heston_carr_madan_fx_vanilla_european(S, tau, r_f, r_d, cp, K, v0, vv, kappa
      Written by Agnieszka Janek (2010.07.23)
      Revised by Rafal Weron (2010.10.08)
      Revised by Agnieszka Janek and Rafal Weron (2010.10.21, 2010.12.27)
+     Converted from MATLAB to Python by Shasa Foster (2023.09.02)
     """    
     
     if cp == 1:
