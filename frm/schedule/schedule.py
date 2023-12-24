@@ -370,3 +370,20 @@ def backward_date_generation(start_date: pd.Timestamp,
 
 
 
+def create_date_grid(curve_date, end_date, sampling_frequency):
+    
+    if sampling_frequency == '1d':
+        date_grid = forward_date_generation(curve_date, end_date, 1, 'days')
+    elif sampling_frequency == '1w':
+        date_grid = forward_date_generation(curve_date, end_date, 1, 'weeks')
+    elif sampling_frequency == '1m':
+        date_grid = forward_date_generation(curve_date, end_date, 1, 'months')
+    elif sampling_frequency == '3m':
+        date_grid = forward_date_generation(curve_date, end_date, 3, 'months')    
+    elif sampling_frequency == '6m':
+         date_grid = forward_date_generation(curve_date, end_date, 6, 'months')   
+    elif sampling_frequency == '12m':
+         date_grid = forward_date_generation(curve_date, end_date, 12, 'months')       
+         
+    return pd.DatetimeIndex(date_grid[1])
+

@@ -32,6 +32,32 @@ import matplotlib.pyplot as plt
 
 VALID_DELTA_CONVENTIONS = ['regular_spot_delta','regular_forward_delta','premium_adjusted_spot_delta','premium_adjusted_forward_delta'] 
 
+
+def interp_fx_forward_curve(fx_forward_curve: pd.DataFrame, 
+                            expiry_dates: pd.DatetimeIndex,
+                            flat_extrapolation: bool=True):
+    unique_dates = expiry_dates.drop_duplicates()
+    combined_index = fx_forward_curve.index.union(unique_dates)
+    result = fx_forward_curve.reindex(combined_index).copy()
+    start_date, end_date = fx_forward_curve.index.min(), fx_forward_curve.index.max()
+    
+    if flat_extrapolation:
+        try:                    
+            result['fx_forward_rate'] = result['fx_forward_rate'].interpolate(method='time', limit_area='inside').ffill().bfill()
+        except:
+            pass
+        # Find out of range dates and warn
+        out_of_range_dates = unique_dates[(unique_dates < start_date) | (unique_dates > end_date)]
+        for date in out_of_range_dates:
+            warnings.warn(f"Date {date} is outside the range {start_date} - {end_date}, flat extrapolation applied.")
+    else:
+        result['fx_forward_rate'] = result['fx_forward_rate'].interpolate(method='time', limit_area='inside')
+    
+    result = result.reindex(expiry_dates)
+    
+    return result['fx_forward_rate']
+    
+
 def fx_σ_input_helper(df):
     
     df_input = df.copy()

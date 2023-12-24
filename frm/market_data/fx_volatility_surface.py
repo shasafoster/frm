@@ -10,7 +10,7 @@ if __name__ == "__main__":
     os.chdir(pathlib.Path(__file__).parent.parent.parent.resolve())     
     print('__main__ - current working directory:', os.getcwd())
     
-from frm.frm.market_data.fx_volatility_surface_helpers import fx_σ_input_helper, VALID_DELTA_CONVENTIONS
+from frm.frm.market_data.fx_volatility_surface_helpers import fx_σ_input_helper, VALID_DELTA_CONVENTIONS, interp_fx_forward_curve
 from frm.frm.market_data.ir_zero_curve import ZeroCurve
 from frm.frm.pricing_engine.garman_kohlhagen import gk_price, gk_solve_implied_σ, gk_solve_strike
 from frm.frm.pricing_engine.heston_gk import heston_fit_vanilla_fx_smile, heston1993_price_fx_vanilla_european, heston_carr_madan_fx_vanilla_european
@@ -106,7 +106,7 @@ class FXVolatilitySurface:
         assert 'fx_forward_rate' in self.fx_forward_curve.columns 
         self.fx_forward_curve = convert_column_type(self.fx_forward_curve)
         assert ('tenor_name' in self.fx_forward_curve.columns) or ('expiry_date' in self.fx_forward_curve.columns and 'delivery_date' in self.fx_forward_curve.columns)
-        if 'expiry_date' not in self.fx_forward_curve.columns and 'delivery_date' not in self.fx_forward_curve.columns:
+        if 'expiry_date' != self.fx_forward_curve.index.name and 'delivery_date' not in self.fx_forward_curve.columns:
             
             result = calc_tenor_date(self.curve_date, self.fx_forward_curve['tenor_name'], self.curve_ccy, holiday_calendar=holiday_calendar, spot_offset=True)
             holiday_rolled_offset_date, cleaned_tenor_name, spot_date = result
@@ -123,7 +123,7 @@ class FXVolatilitySurface:
             self.fx_forward_curve['expiry_date'] = holiday_rolled_offset_date
             self.fx_forward_curve['years_to_expiry'] = self.daycounter.year_fraction(self.curve_date, self.fx_forward_curve['tenor_years_observation'])
                                     
-        self.fx_forward_curve.set_index('expiry_date', inplace=True,drop=True)
+            self.fx_forward_curve.set_index('expiry_date', inplace=True,drop=True)
             
         if self.curve_date not in self.fx_forward_curve.index:
             raise ValueError("The curve date (" + self.curve_date.strftime('%Y-%m-%d') + ') fx rate (i.e the fx spot rate) is in missing in fx_forward_curve')
@@ -224,32 +224,12 @@ class FXVolatilitySurface:
                                 flat_extrapolation: bool=True):
         """
         Interpolate the FX forward curve to match given expiry_dates.
-        Please note expiry date is 2 business days prior to the spot date
+        Please note expiry date is 2 business days prior to the delivery date
         """
         
-        unique_dates = expiry_dates.drop_duplicates()
-        combined_index = self.fx_forward_curve.index.union(unique_dates)
-        result = self.fx_forward_curve.reindex(combined_index)
-        start_date, end_date = self.fx_forward_curve.index.min(), self.fx_forward_curve.index.max()
+        return interp_fx_forward_curve(self.fx_forward_curve, expiry_dates, flat_extrapolation)
         
-        if flat_extrapolation:
-            try:
-                result['fx_forward_rate'] = result['fx_forward_rate'].interpolate(method='time', limit_area='inside').ffill().bfill()
-            except:
-                pass
-            # Find out of range dates and warn
-            out_of_range_dates = unique_dates[(unique_dates < start_date) | (unique_dates > end_date)]
-            for date in out_of_range_dates:
-                warnings.warn(f"Date {date} is outside the range {start_date} - {end_date}, flat extrapolation applied.")
-        else:
-            result['fx_forward_rate'] = result['fx_forward_rate'].interpolate(method='time', limit_area='inside')
-        
-        result = result.reindex(expiry_dates)
-        
-        return result['fx_forward_rate']
-        
-        
-                
+
     def forward_volatility(self, 
                            t1: Union[float, np.array], 
                            σ_t1: Union[float, np.array], 
@@ -455,11 +435,11 @@ class FXVolatilitySurface:
                 v0, vv, kappa, theta, rho, lambda_, IV, SSE = self.K_σ_daily_smile_func[date]
                 
                 if self.smile_interpolation_method == 'heston_analytical_1993':
-                    X = heston1993_price_fx_vanilla_european(S, tau, r_f, r_d, cp, K_target, v0, vv, kappa, theta, rho, lambda_)
+                    X = heston1993_price_fx_vanilla_european(S, tau, r_f, r_d, cp, K_target, v0, vv, kappa, theta, rho, lambda_)['option_value']
                 elif self.smile_interpolation_method == 'heston_carr_madan_gauss_kronrod_quadrature':     
-                    X = heston_carr_madan_fx_vanilla_european(S, tau, r_f, r_d, cp, K_target, v0, vv, kappa, theta, rho, integration_method=0)
+                    X = heston_carr_madan_fx_vanilla_european(S, tau, r_f, r_d, cp, K_target, v0, vv, kappa, theta, rho, integration_method=0)['option_value']
                 elif self.smile_interpolation_method == 'heston_carr_madan_fft_w_simpsons':
-                    X = heston_carr_madan_fx_vanilla_european(S, tau, r_f, r_d, cp, K_target, v0, vv, kappa, theta, rho, integration_method=1)
+                    X = heston_carr_madan_fx_vanilla_european(S, tau, r_f, r_d, cp, K_target, v0, vv, kappa, theta, rho, integration_method=1)['option_value']
                 
                 implied_σ = gk_solve_implied_σ(S=S, tau=tau, r_f=r_f, r_d=r_d, cp=cp, K=K_target, X=X, σ_guess=v0) 
                 result.append(implied_σ)            
@@ -470,7 +450,8 @@ class FXVolatilitySurface:
                                   expiry_datetimeindex,        
                                   K, 
                                   cp,
-                                  analytical_greeks_flag):
+                                  analytical_greeks_flag,
+                                  intrinsic_time_split_flag):
                       
         K = np.atleast_1d(K)
         cp = np.atleast_1d(cp)
@@ -487,7 +468,7 @@ class FXVolatilitySurface:
         r_d = self.domestic_zero_curve.zero_rate(expiry_datetimeindex,compounding_frequency='continuously').values
         F = self.interp_fx_forward_curve(expiry_dates=expiry_datetimeindex, flat_extrapolation=True)
 
-        result = gk_price(
+        results = gk_price(
             S=self.fx_spot_rate,
             tau=self.daycounter.year_fraction(self.curve_date, expiry_datetimeindex),
             r_f=r_f,
@@ -496,13 +477,13 @@ class FXVolatilitySurface:
             K=K,
             σ=σ,
             F=F,
-            analytical_greeks_flag=analytical_greeks_flag
+            analytical_greeks_flag=analytical_greeks_flag,
+            intrinsic_time_split_flag=intrinsic_time_split_flag
         )    
+        
+        results['market_data_inputs'] = pd.DataFrame({'σ': σ, 'r_f':r_f, 'r_d':r_d, 'F':F})
 
-        if analytical_greeks_flag:
-            return result[0], result[1], pd.DataFrame({'σ': σ, 'r_f':r_f, 'r_d':r_d, 'F':F})
-
-        return result
+        return results
         
 
 
