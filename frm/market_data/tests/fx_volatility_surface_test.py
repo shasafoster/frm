@@ -7,17 +7,18 @@ https://www.linkedin.com/in/shasafoster
 if __name__ == "__main__":
     import os
     import pathlib
-    os.chdir(pathlib.Path(__file__).parent.parent.parent.resolve())     
+    os.chdir(pathlib.Path(__file__).parent.parent.parent.parent.parent.resolve())     
     print('__main__ - current working directory:', os.getcwd())
     
-from frm.market_data.ir_zero_curve import ZeroCurve
-from frm.pricing_engine.garman_kohlhagen import gk_price, gk_solve_implied_σ, gk_solve_strike
-from frm.pricing_engine.heston_gk import heston_fit_vanilla_fx_smile, heston1993_price_fx_vanilla_european, heston_carr_madan_fx_vanilla_european
+from frm.frm.market_data.ir_zero_curve import ZeroCurve
+from frm.frm.pricing_engine.garman_kohlhagen import gk_price, gk_solve_implied_σ, gk_solve_strike
+from frm.frm.pricing_engine.heston_garman_kohlhagen import heston_fit_vanilla_fx_smile, heston1993_price_fx_vanilla_european, heston_carr_madan_fx_vanilla_european
+from frm.frm.market_data.fx_volatility_surface import FXVolatilitySurface
 
-from frm.schedule.tenor import calc_tenor_date
-from frm.schedule.daycounter import DayCounter, VALID_DAY_COUNT_BASIS
-from frm.schedule.business_day_calendar import get_calendar        
-from frm.schedule.utilities import convert_column_type    
+from frm.frm.schedule.tenor import calc_tenor_date
+from frm.frm.schedule.daycounter import DayCounter, VALID_DAY_COUNT_BASIS
+from frm.frm.schedule.business_day_calendar import get_calendar        
+from frm.frm.utilities.utilities import convert_column_type    
 
 import numpy as np
 import pandas as pd
@@ -29,9 +30,6 @@ from typing import Optional, Union, Literal
 import warnings
 import re
 import matplotlib.pyplot as plt
-
-
-
 
 curve_date = pd.Timestamp(2023,6,30) 
 curve_ccy = 'audusd'
@@ -74,9 +72,9 @@ del tenor_name, r_d, r_f, foreign_zero_data, domestic_zero_data
     [0.16703, 0.14603, 0.13573, 0.12888, 0.12360, 0.11909, 0.10750, 0.10369, 0.10407, 0.10478, 0.10615, 0.10877, 0.11528],
     [0.17042, 0.14966, 0.13948, 0.13267, 0.12739, 0.12283, 0.11100, 0.10683, 0.10711, 0.10774, 0.10904, 0.11157, 0.11787],
 ])
-Δ_σ_pillar = pd.DataFrame(σ,columns=σ_y)
-Δ_σ_pillar.insert(loc=0, column='tenor_name', value=σ_x)
-Δ_σ_pillar.insert(loc=1, column='Δ_convention', value=Δ_convention)
+σ_pillar = pd.DataFrame(σ,columns=σ_y)
+σ_pillar.insert(loc=0, column='tenor_name', value=σ_x)
+σ_pillar.insert(loc=1, column='Δ_convention', value=Δ_convention)
 
 K = [
     [0.6453, 0.6495, 0.6523, 0.6544, 0.6562, 0.6578, 0.6631, 0.6683, 0.6698, 0.6714, 0.6733, 0.6757, 0.6793],
@@ -104,27 +102,94 @@ del σ_x, σ_y, σ, K_x, K_y, K
         
         
 
-# curve_date = pd.Timestamp(2023,6,30)
-# curve_ccy = 'audusd'
+curve_date = pd.Timestamp(2023,6,30)
+curve_ccy = 'audusd'
 
-# smile_interpolation_method = 'heston_carr_madan_gauss_kronrod_quadrature'
-# #smile_interpolation_method = 'cubic_spline'
+smile_interpolation_method = 'heston_carr_madan_gauss_kronrod_quadrature'
+#smile_interpolation_method = 'cubic_spline'
 
 
-# vs = FXVolatilitySurface(
-#     curve_date=curve_date,
-#     curve_ccy=curve_ccy,
-#     fx_forward_curve=fx_forward_curve,
-#     foreign_zero_curve=zc_f,
-#     domestic_zero_curve=zc_d,
-#     Δ_σ_pillar=Δ_σ_pillar,
-#     smile_interpolation_method=smile_interpolation_method)
+vs = FXVolatilitySurface(
+    curve_date=curve_date,
+    curve_ccy=curve_ccy,
+    fx_forward_curve=fx_forward_curve,
+    foreign_zero_curve=zc_f,
+    domestic_zero_curve=zc_d,
+    σ_pillar=σ_pillar,
+    smile_interpolation_method=smile_interpolation_method)
 
-# if 'heston' in smile_interpolation_method:
-#     #vs.fit_and_plot_smile()
-#     pass
+if 'heston' in smile_interpolation_method:
+    vs.fit_and_plot_smile()
+    pass
 
-# del fx_forward_curve, zc_f, zc_d, Δ_σ_pillar, Δ_K_pillar, Δ_convention
+del fx_forward_curve, zc_f, zc_d, σ_pillar, Δ_K_pillar, Δ_convention
+
+#%%
+
+results = vs.simulate_fx_rate_path()
+
+
+#%%
+from frm.frm.pricing_engine.monte_carlo_generic import generate_rand_nbs
+from frm.frm.pricing_engine.geometric_brownian_motion import simulate_gbm_path
+
+date_grid = vs.σ_pillar.index
+tau = vs.daycounter.year_fraction(vs.curve_date,date_grid).values
+tau = np.insert(tau, 0, 0)
+dt = tau[1:] - tau[:-1] 
+
+fx_forward_rates_t2 = vs.interp_fx_forward_curve(date_grid).values
+fx_forward_rates_t1 = np.zeros(shape=fx_forward_rates_t2.shape)
+fx_forward_rates_t1[0] = vs.fx_spot_rate
+fx_forward_rates_t1[1:] = fx_forward_rates_t2[:-1].copy()
+period_drift = np.log(fx_forward_rates_t2 / fx_forward_rates_t1) / dt
+
+mask = np.logical_and.reduce([date_grid >= vs.σ_pillar.index.min(), date_grid <= vs.σ_pillar.index.max()])
+σ_atm = np.full(date_grid.shape, np.nan)
+if mask.any():
+    σ_atm[mask] = vs.Δ_σ_daily['σ_atmΔneutral'][date_grid[mask]]
+
+t1 = tau[:-1]
+t2 = tau[1:]
+σ_atm_t1 = np.insert(σ_atm[:-1], 0, σ_atm[0])
+σ_atm_t2 = σ_atm
+σ_forward = vs.forward_volatility(t1, σ_atm_t1, t2, σ_atm_t2)
+σ_forward[0] = σ_atm[0]
+
+df_gbm_monte_carlo_inputs = pd.DataFrame()
+df_gbm_monte_carlo_inputs['dates'] = np.insert(date_grid.values, 0, vs.curve_date)
+df_gbm_monte_carlo_inputs['tau'] = tau
+df_gbm_monte_carlo_inputs['dt'] = np.insert(dt, 0, 0)
+df_gbm_monte_carlo_inputs['fx_forward_rates'] = np.insert(fx_forward_rates_t2, 0, vs.fx_spot_rate)
+df_gbm_monte_carlo_inputs['drift'] = np.insert(period_drift, 0, np.nan)
+df_gbm_monte_carlo_inputs['atm_volatility'] = np.insert(σ_atm, 0, σ_atm[0])
+df_gbm_monte_carlo_inputs['forward_atm_volatility'] = np.insert(σ_forward, 0, np.nan)
+
+
+#%%
+
+method = 'geometric_brownian_motion'
+
+if method == 'geometric_brownian_motion':
+    nb_of_periods = len(date_grid)
+    rand_nbs = generate_rand_nbs(nb_of_periods=nb_of_periods,
+                                 nb_of_simulations=None,
+                                 )
+
+    
+    initial_px = vs.fx_spot_rate
+    period_drift = period_drift
+    period_forward_volatility = σ_forward
+    period_length = dt        
+
+
+    results = simulate_gbm_path(initial_px=initial_px,
+                      period_drift=period_drift,
+                      period_forward_volatility=period_forward_volatility,
+                      period_length=period_length,
+                      rand_nbs=rand_nbs)
+    
+    results_avg = results.mean(axis=0)
 
 #%%
 

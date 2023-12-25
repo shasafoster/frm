@@ -87,13 +87,7 @@ def clean_tenor(tenor: str) -> str:
    
 
 @np.vectorize
-def tenor_name_to_date_offset(curve_date: np.datetime64,
-                              spot_date: np.datetime64,
-                              tenor_name: str) -> np.datetime64:    
-    # offset from 
-    # (i) the curve_date for the ON and TN tenors and from;
-    # (ii) the spot date for all other tenors    
-    
+def tenor_name_to_date_offset(tenor_name: str) -> pd.DateOffset:    
     if not isinstance(tenor_name, str):
         logging.error("function input 'tenor' must be a string")
         raise TypeError("function input 'tenor' must be a string")      
@@ -130,12 +124,24 @@ def tenor_name_to_date_offset(curve_date: np.datetime64,
             logging.error("invalid 'tenor' value: " + tenor_name)      
             raise ValueError("invalid 'tenor' value: " + tenor_name)
         
+    return offset
+
+@np.vectorize
+def offset_market_data_date(curve_date: np.datetime64,
+                spot_date: np.datetime64,
+                tenor_name: str) -> np.datetime64:    
+    
+    # offset from 
+    # (i) the curve_date for the ON and TN tenors and from;
+    # (ii) the spot date for all other tenors   
+    
+    date_offset = tenor_name_to_date_offset(tenor_name)
+    
     if tenor_name in {'on','tn'}:
-        result = curve_date + offset 
+        return curve_date + date_offset.item() 
     else:
-        result = spot_date + offset
-        
-    return np.datetime64(result, 'D')
+        return spot_date + date_offset.item()
+
 
 def calc_tenor_date(curve_date: pd.Timestamp,
                     tenor_name: Union[str, np.ndarray], 
@@ -148,9 +154,6 @@ def calc_tenor_date(curve_date: pd.Timestamp,
     
     curve_date = np.datetime64(curve_date.date())
     
-    if curve_ccy == 'oeuaoeuoueoeu':
-        pass
-    
     if spot_offset:
         spot_date = np.busday_offset(curve_date, offsets=get_spot_offset(curve_ccy), roll='following', busdaycal=holiday_calendar)
     else: 
@@ -160,9 +163,9 @@ def calc_tenor_date(curve_date: pd.Timestamp,
     if cleaned_tenor_name.size == 1:
         cleaned_tenor_name = cleaned_tenor_name.item()
     
-    offset_date = tenor_name_to_date_offset(curve_date, spot_date, cleaned_tenor_name)
+    offset_date = offset_market_data_date(curve_date, spot_date, cleaned_tenor_name)
     
-    holiday_rolled_offset_date = np.busday_offset(offset_date, offsets=0, roll='following', busdaycal=holiday_calendar)
+    holiday_rolled_offset_date = np.busday_offset(offset_date.astype('datetime64[D]'), offsets=0, roll='following', busdaycal=holiday_calendar)
     
     if holiday_rolled_offset_date.shape == ():
         holiday_rolled_offset_date = pd.Timestamp(holiday_rolled_offset_date.item()) # For scalar

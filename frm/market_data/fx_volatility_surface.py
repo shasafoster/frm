@@ -7,18 +7,22 @@ https://www.linkedin.com/in/shasafoster
 if __name__ == "__main__":
     import os
     import pathlib
-    os.chdir(pathlib.Path(__file__).parent.parent.parent.resolve())     
+    os.chdir(pathlib.Path(__file__).parent.parent.parent.parent.resolve())     
     print('__main__ - current working directory:', os.getcwd())
     
 from frm.frm.market_data.fx_volatility_surface_helpers import fx_σ_input_helper, VALID_DELTA_CONVENTIONS, interp_fx_forward_curve
 from frm.frm.market_data.ir_zero_curve import ZeroCurve
 from frm.frm.pricing_engine.garman_kohlhagen import gk_price, gk_solve_implied_σ, gk_solve_strike
-from frm.frm.pricing_engine.heston_gk import heston_fit_vanilla_fx_smile, heston1993_price_fx_vanilla_european, heston_carr_madan_fx_vanilla_european
+from frm.frm.pricing_engine.heston_garman_kohlhagen import heston_fit_vanilla_fx_smile, heston1993_price_fx_vanilla_european, heston_carr_madan_fx_vanilla_european
+from frm.frm.pricing_engine.monte_carlo_generic import generate_rand_nbs
+from frm.frm.pricing_engine.geometric_brownian_motion import simulate_gbm_path
 
 from frm.frm.schedule.tenor import calc_tenor_date, get_spot_offset
 from frm.frm.schedule.daycounter import DayCounter, VALID_DAY_COUNT_BASIS_TYPES
 from frm.frm.schedule.business_day_calendar import get_calendar        
 from frm.frm.utilities.utilities import convert_column_type, generic_market_data_input_cleanup_and_validation    
+
+#%%
 
 import numpy as np
 import pandas as pd
@@ -108,21 +112,18 @@ class FXVolatilitySurface:
         assert ('tenor_name' in self.fx_forward_curve.columns) or ('expiry_date' in self.fx_forward_curve.columns and 'delivery_date' in self.fx_forward_curve.columns)
         if 'expiry_date' != self.fx_forward_curve.index.name and 'delivery_date' not in self.fx_forward_curve.columns:
             
+            # Calculate and set the delivery date
             result = calc_tenor_date(self.curve_date, self.fx_forward_curve['tenor_name'], self.curve_ccy, holiday_calendar=holiday_calendar, spot_offset=True)
-            holiday_rolled_offset_date, cleaned_tenor_name, spot_date = result
+            delivery_date, cleaned_tenor_name, spot_date = result
             self.fx_forward_curve['tenor_name'] = cleaned_tenor_name
-            self.fx_forward_curve['delivery_date'] = holiday_rolled_offset_date
-            self.fx_forward_curve['years_to_delivery'] = self.daycounter.year_fraction(self.curve_date, self.fx_forward_curve['tenor_years_delivery'])            
+            self.fx_forward_curve['delivery_date'] = delivery_date
+            self.fx_forward_curve['years_to_delivery'] = self.daycounter.year_fraction(self.curve_date, self.fx_forward_curve['delivery_date'])            
 
+            # Calculate and set the expiry date
             spot_offset = -1 * get_spot_offset(curve_ccy=self.curve_ccy)
-            holiday_rolled_offset_date = np.busday_offset(holiday_rolled_offset_date, offsets=spot_offset, roll='preceeding', busdaycal=holiday_calendar)
-                
-            result = calc_tenor_date(self.curve_date, self.fx_forward_curve['tenor_name'], self.curve_ccy, holiday_calendar=holiday_calendar, spot_offset=True)
-            holiday_rolled_offset_date, cleaned_tenor_name, spot_date = result
-            
-            self.fx_forward_curve['expiry_date'] = holiday_rolled_offset_date
-            self.fx_forward_curve['years_to_expiry'] = self.daycounter.year_fraction(self.curve_date, self.fx_forward_curve['tenor_years_observation'])
-                                    
+            expiry_date = np.busday_offset(delivery_date.values.astype('datetime64[D]'), offsets=spot_offset, roll='preceding', busdaycal=holiday_calendar)
+            self.fx_forward_curve['expiry_date'] = expiry_date
+            self.fx_forward_curve['years_to_expiry'] = self.daycounter.year_fraction(self.curve_date, self.fx_forward_curve['expiry_date'])
             self.fx_forward_curve.set_index('expiry_date', inplace=True,drop=True)
             
         if self.curve_date not in self.fx_forward_curve.index:
@@ -484,8 +485,72 @@ class FXVolatilitySurface:
         results['market_data_inputs'] = pd.DataFrame({'σ': σ, 'r_f':r_f, 'r_d':r_d, 'F':F})
 
         return results
+    
+    
+    def simulate_fx_rate_path(self,
+                              date_grid=None,
+                              nb_of_simulations=None,
+                              flag_apply_antithetic_variates=None,
+                              method: str='geometric_brownian_motion'):
         
+        results = dict()
+        
+        if method == 'geometric_brownian_motion':
+            
+            if date_grid is None:
+                # create the date_grid based on the volatility input tenors
+                date_grid = self.σ_pillar.index
+            
+            tau = self.daycounter.year_fraction(self.curve_date,date_grid).values
+            tau = np.insert(tau, 0, 0)
+            dt = tau[1:] - tau[:-1] 
+            
+            fx_forward_rates_t2 = self.interp_fx_forward_curve(date_grid).values
+            fx_forward_rates_t1 = np.zeros(shape=fx_forward_rates_t2.shape)
+            fx_forward_rates_t1[0] = self.fx_spot_rate
+            fx_forward_rates_t1[1:] = fx_forward_rates_t2[:-1].copy()
+            period_drift = np.log(fx_forward_rates_t2 / fx_forward_rates_t1) / dt
 
+            mask = np.logical_and.reduce([date_grid >= self.σ_pillar.index.min(), date_grid <= self.σ_pillar.index.max()])
+            σ_atm = np.full(date_grid.shape, np.nan)
+            if mask.any():
+                σ_atm[mask] = self.Δ_σ_daily['σ_atmΔneutral'][date_grid[mask]]
 
+            t1 = tau[:-1]
+            t2 = tau[1:]
+            σ_atm_t1 = np.insert(σ_atm[:-1], 0, σ_atm[0])
+            σ_atm_t2 = σ_atm
+            σ_forward = self.forward_volatility(t1, σ_atm_t1, t2, σ_atm_t2)
+            σ_forward[0] = σ_atm[0]
 
+            # Setup data frame with the key market data inputs for easier review
+            df_gbm_monte_carlo_market_data_inputs = pd.DataFrame()
+            df_gbm_monte_carlo_market_data_inputs['dates'] = np.insert(date_grid.values, 0, self.curve_date)
+            df_gbm_monte_carlo_market_data_inputs['tau'] = tau
+            df_gbm_monte_carlo_market_data_inputs['dt'] = np.insert(dt, 0, 0)
+            df_gbm_monte_carlo_market_data_inputs['fx_forward_rates'] = np.insert(fx_forward_rates_t2, 0, self.fx_spot_rate)
+            df_gbm_monte_carlo_market_data_inputs['drift'] = np.insert(period_drift, 0, np.nan)
+            df_gbm_monte_carlo_market_data_inputs['atm_volatility'] = np.insert(σ_atm, 0, σ_atm[0])
+            df_gbm_monte_carlo_market_data_inputs['forward_atm_volatility'] = np.insert(σ_forward, 0, np.nan)        
+            results['gbm_monte_carlo_market_data_inputs'] = df_gbm_monte_carlo_market_data_inputs
+
+            nb_of_periods = len(date_grid)
+            rand_nbs = generate_rand_nbs(nb_of_periods=nb_of_periods,
+                                         nb_of_simulations=nb_of_simulations,
+                                         flag_apply_antithetic_variates=flag_apply_antithetic_variates)
+        
+            fx_rate_simulation_paths = simulate_gbm_path(initial_px=self.fx_spot_rate,
+                                                         period_drift=period_drift,
+                                                         period_forward_volatility=σ_forward,
+                                                         period_length=dt,
+                                                         rand_nbs=rand_nbs)
+            results['fx_rate_simulation_paths'] = fx_rate_simulation_paths
+            
+            return results
+        
+            
+        
+        
+                          
+        
 
