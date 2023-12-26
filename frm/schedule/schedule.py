@@ -369,21 +369,91 @@ def backward_date_generation(start_date: pd.Timestamp,
     return list(reversed(d1_arr)),list(reversed(d2_arr))
 
 
+def create_date_grid_for_fx_exposures(curve_date: pd.Timestamp, 
+                                      settlement_dates: np.array, 
+                                      sampling_freq: str=None,
+                                      date_grid_pillar: pd.DatetimeIndex=None,
+                                      payments_on_value_date_have_value: bool=False,
+                                      include_last_day_of_value: bool=False,
+                                      include_day_after_last_day_of_value: bool=False) -> pd.DatetimeIndex:
+    """
+    Defines a date grid for calculating exposures
+    Please note, for each trade, this defines the settlement date grid, hence the expiry
+    date grid needs to be solved based on the delay of the market.
+    For FX derivatives this is relively simple as market data inputs can be interploted from
+    (i) expiry or (ii) settle dates.
 
-def create_date_grid(curve_date, end_date, sampling_frequency):
+    Parameters
+    ----------
+    curve_date : pd.Timestamp
+        DESCRIPTION.
+    settlement_dates : np.array
+        DESCRIPTION.
+    sampling_freq : str, optional
+        DESCRIPTION. The default is None.
+    date_grid_pillar : pd.DatetimeIndex, optional
+        DESCRIPTION. The default is None.
+    include_payments_on_value_date : bool, optional
+        DESCRIPTION. The default is False.
+    include_last_day_of_value : bool, optional
+        DESCRIPTION. The default is False.
+    include_day_after_last_day_of_value : bool, optional
+        DESCRIPTION. The default is False.
+
+    Returns
+    -------
+    date_grid : TYPE
+        DESCRIPTION.
+
+    """
+        
+    # Challenge is that exposures are defined using the rate-fixing - i.e the expiry date
+    # The expiry dates are what we need to specify for our FX option valuation or FX rate simulation
+    # The trade technically still has value until some time on day of delivery/settlement.
+    # Hence the date grid should be constructed on a delivery/settlement basis. 
+    # There is a pototo/potata view on if a cashflow has value on the settlement date. 
+    # Our default view is no, it should be in accounts receivable, but this can be toggled. 
     
-    if sampling_frequency == '1d':
-        date_grid = forward_date_generation(curve_date, end_date, 1, 'days')
-    elif sampling_frequency == '1w':
-        date_grid = forward_date_generation(curve_date, end_date, 1, 'weeks')
-    elif sampling_frequency == '1m':
-        date_grid = forward_date_generation(curve_date, end_date, 1, 'months')
-    elif sampling_frequency == '3m':
-        date_grid = forward_date_generation(curve_date, end_date, 3, 'months')    
-    elif sampling_frequency == '6m':
-         date_grid = forward_date_generation(curve_date, end_date, 6, 'months')   
-    elif sampling_frequency == '12m':
-         date_grid = forward_date_generation(curve_date, end_date, 12, 'months')       
-         
-    return pd.DatetimeIndex(date_grid[1])
+    settlement_dates = settlement_dates.drop_duplicates()
+    max_settlement_date = settlement_dates.max()
+    
+    if sampling_freq is not None:    
+        if sampling_freq == '1d':
+            date_grid = forward_date_generation(curve_date, max_settlement_date, 1, 'days')
+        elif sampling_freq == '1w':
+            date_grid = forward_date_generation(curve_date, max_settlement_date, 1, 'weeks')
+        elif sampling_freq == '1m':
+            date_grid = forward_date_generation(curve_date, max_settlement_date, 1, 'months')
+        elif sampling_freq == '3m':
+            date_grid = forward_date_generation(curve_date, max_settlement_date, 3, 'months')    
+        elif sampling_freq == '6m':
+             date_grid = forward_date_generation(curve_date, max_settlement_date, 6, 'months')   
+        elif sampling_freq == '12m':
+             date_grid = forward_date_generation(curve_date, max_settlement_date, 12, 'months') 
+             
+        date_grid = pd.DatetimeIndex(date_grid[1])
+        
+    elif date_grid_pillar is not None:
+        assert isinstance(date_grid_pillar, pd.DatetimeIndex) 
+        date_grid = date_grid_pillar
+    else:
+        raise ValueError("Either 'sampling_freq' or date_grid_pillar' must be specified")
+
+    if include_last_day_of_value:
+        if payments_on_value_date_have_value:
+            last_day_of_value = settlement_dates
+        else: 
+            last_day_of_value = settlement_dates - pd.DateOffset(days=1)
+        date_grid = pd.DatetimeIndex(np.concatenate(date_grid.values, last_day_of_value))
+
+    elif include_day_after_last_day_of_value:
+        if payments_on_value_date_have_value:
+            last_day_of_value = settlement_dates + pd.DateOffset(days=1)
+        else: 
+            last_day_of_value = settlement_dates 
+        date_grid = pd.DatetimeIndex(np.concatenate(date_grid.values, last_day_of_value))
+
+    date_grid.drop_duplicates(inplace=True)
+    date_grid.sort()
+    return date_grid
 
