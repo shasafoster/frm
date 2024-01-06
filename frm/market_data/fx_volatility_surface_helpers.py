@@ -36,10 +36,13 @@ VALID_DELTA_CONVENTIONS = ['regular_spot_delta','regular_forward_delta','premium
 def interp_fx_forward_curve(fx_forward_curve: pd.DataFrame, 
                             expiry_dates: pd.DatetimeIndex,
                             flat_extrapolation: bool=True):
+    # TO DO - need to rework this to ensure expiry vs settlement date is accurate
+    
     unique_dates = expiry_dates.drop_duplicates()
     combined_index = fx_forward_curve.index.union(unique_dates)
     result = fx_forward_curve.reindex(combined_index).copy()
     start_date, end_date = fx_forward_curve.index.min(), fx_forward_curve.index.max()
+    
     
     if flat_extrapolation:
         try:                    

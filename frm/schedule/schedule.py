@@ -370,7 +370,7 @@ def backward_date_generation(start_date: pd.Timestamp,
 
 
 def create_date_grid_for_fx_exposures(curve_date: pd.Timestamp, 
-                                      settlement_dates: np.array, 
+                                      delivery_dates: np.array, 
                                       sampling_freq: str=None,
                                       date_grid_pillar: pd.DatetimeIndex=None,
                                       payments_on_value_date_have_value: bool=False,
@@ -387,7 +387,7 @@ def create_date_grid_for_fx_exposures(curve_date: pd.Timestamp,
     ----------
     curve_date : pd.Timestamp
         DESCRIPTION.
-    settlement_dates : np.array
+    delivery_dates : np.array
         DESCRIPTION.
     sampling_freq : str, optional
         DESCRIPTION. The default is None.
@@ -414,8 +414,8 @@ def create_date_grid_for_fx_exposures(curve_date: pd.Timestamp,
     # There is a pototo/potata view on if a cashflow has value on the settlement date. 
     # Our default view is no, it should be in accounts receivable, but this can be toggled. 
     
-    settlement_dates = settlement_dates.drop_duplicates()
-    max_settlement_date = settlement_dates.max()
+    delivery_dates = np.unique(delivery_dates) 
+    max_settlement_date = delivery_dates.max()
     
     if sampling_freq is not None:    
         if sampling_freq == '1d':
@@ -441,19 +441,18 @@ def create_date_grid_for_fx_exposures(curve_date: pd.Timestamp,
 
     if include_last_day_of_value:
         if payments_on_value_date_have_value:
-            last_day_of_value = settlement_dates
+            last_day_of_value = delivery_dates
         else: 
-            last_day_of_value = settlement_dates - pd.DateOffset(days=1)
+            last_day_of_value = delivery_dates - pd.DateOffset(days=1)
         date_grid = pd.DatetimeIndex(np.concatenate(date_grid.values, last_day_of_value))
 
     elif include_day_after_last_day_of_value:
         if payments_on_value_date_have_value:
-            last_day_of_value = settlement_dates + pd.DateOffset(days=1)
+            last_day_of_value = delivery_dates + pd.DateOffset(days=1)
         else: 
-            last_day_of_value = settlement_dates 
+            last_day_of_value = delivery_dates 
         date_grid = pd.DatetimeIndex(np.concatenate(date_grid.values, last_day_of_value))
 
-    date_grid.drop_duplicates(inplace=True)
-    date_grid.sort()
+    date_grid = date_grid.drop_duplicates().sort_values()
     return date_grid
 

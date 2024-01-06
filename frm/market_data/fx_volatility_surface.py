@@ -209,7 +209,9 @@ class FXVolatilitySurface:
 
 
     def __interp_daily_FXF_and_IR_rates(self, df):
-        
+        # to do - need to rework so index is 0,1,2,3... and
+        # 'expiry_date' and 'delivery_date' are two new columns.
+
         df['foreign_ccy_continuously_compounded_zero_rate'] = np.nan
         df['domestic_ccy_continuously_compounded_zero_rate'] = np.nan
         df['fx_forward_rate'] = np.nan
@@ -223,6 +225,9 @@ class FXVolatilitySurface:
     def interp_fx_forward_curve(self, 
                                 expiry_dates: pd.DatetimeIndex,
                                 flat_extrapolation: bool=True):
+        # to do - need to rework so index is 0,1,2,3... and
+        # 'expiry_date' and 'delivery_date' are two new columns.
+        
         """
         Interpolate the FX forward curve to match given expiry_dates.
         Please note expiry date is 2 business days prior to the delivery date
@@ -243,9 +248,9 @@ class FXVolatilitySurface:
     
         Parameters:
         - t1 (float): Time to first maturity
-        - σ_t1 (float): At-the-money volatility at time t1
+        - σ_t1 (float): At-the-money volatility at time (in years) to expiry date 1
         - t2 (float): Time to second maturity
-        - σ_t2 (float): At-the-money volatility at time t2
+        - σ_t2 (float): At-the-money volatility at time (in years) to expiry date 2
     
         Returns:
         - np.array: Forward volatility from time t1 to t2
@@ -253,6 +258,8 @@ class FXVolatilitySurface:
         tau = t2 - t1
         if np.any(tau == 0):
             warnings.warn("t2 and t1 are equal. NaN will be returned.")
+        elif np.any(tau < 0):
+            raise ValueErwarnings.warn("t2 is less than t1. Please swap ")
     
         result = (σ_t2**2 * t2 - σ_t1**2 * t1) / tau
         if np.any(result < 0):
