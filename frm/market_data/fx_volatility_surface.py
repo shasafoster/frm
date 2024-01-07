@@ -46,9 +46,6 @@ VALID_FX_SMILE_INTERPOLATION_METHOD = Literal['univariate_spline',
                                               'svi_sabr']
 
 
-
-
-
 @dataclass
 class FXVolatilitySurface:
     curve_date: pd.Timestamp
@@ -110,7 +107,7 @@ class FXVolatilitySurface:
         assert 'fx_forward_rate' in self.fx_forward_curve.columns 
         self.fx_forward_curve = convert_column_type(self.fx_forward_curve)
         assert ('tenor_name' in self.fx_forward_curve.columns) or ('expiry_date' in self.fx_forward_curve.columns and 'delivery_date' in self.fx_forward_curve.columns)
-        if 'expiry_date' != self.fx_forward_curve.index.name and 'delivery_date' not in self.fx_forward_curve.columns:
+        if 'expiry_date' not in self.fx_forward_curve.columns and 'delivery_date' not in self.fx_forward_curve.columns:
             
             # Calculate and set the delivery date
             result = calc_tenor_date(self.curve_date, self.fx_forward_curve['tenor_name'], self.curve_ccy, holiday_calendar=holiday_calendar, spot_offset=True)
@@ -124,12 +121,12 @@ class FXVolatilitySurface:
             expiry_date = np.busday_offset(delivery_date.values.astype('datetime64[D]'), offsets=spot_offset, roll='preceding', busdaycal=holiday_calendar)
             self.fx_forward_curve['expiry_date'] = expiry_date
             self.fx_forward_curve['years_to_expiry'] = self.daycounter.year_fraction(self.curve_date, self.fx_forward_curve['expiry_date'])
-            self.fx_forward_curve.set_index('expiry_date', inplace=True,drop=True)
-            
-        if self.curve_date not in self.fx_forward_curve.index:
+
+        if self.curve_date not in self.fx_forward_curve['expiry_date'].values:
             raise ValueError("The curve date (" + self.curve_date.strftime('%Y-%m-%d') + ') fx rate (i.e the fx spot rate) is in missing in fx_forward_curve')
-        
-        self.fx_spot_rate = self.fx_forward_curve.loc[self.curve_date,'fx_forward_rate']
+        else:
+            mask = self.fx_forward_curve['expiry_date'] == self.curve_date
+            self.fx_spot_rate = self.fx_forward_curve.loc[mask,'fx_forward_rate'].iloc[0]
         
         # σ_pillar validation
         if self.σ_pillar is not None:
@@ -218,23 +215,9 @@ class FXVolatilitySurface:
     
         df['foreign_ccy_continuously_compounded_zero_rate'] = self.foreign_zero_curve.zero_rate(dates=df.index,compounding_frequency='continuously').values       
         df['domestic_ccy_continuously_compounded_zero_rate'] = self.domestic_zero_curve.zero_rate(dates=df.index,compounding_frequency='continuously').values
-        df['fx_forward_rate'] = self.interp_fx_forward_curve(expiry_dates=df.index, flat_extrapolation=True).values
+        df['fx_forward_rate'] = interp_fx_forward_curve(self.fx_forward_curve, dates=df.index, date_type='expiry_date', flat_extrapolation=True).values
         return df
 
-
-    def interp_fx_forward_curve(self, 
-                                expiry_dates: pd.DatetimeIndex,
-                                flat_extrapolation: bool=True):
-        # to do - need to rework so index is 0,1,2,3... and
-        # 'expiry_date' and 'delivery_date' are two new columns.
-        
-        """
-        Interpolate the FX forward curve to match given expiry_dates.
-        Please note expiry date is 2 business days prior to the delivery date
-        """
-        
-        return interp_fx_forward_curve(self.fx_forward_curve, expiry_dates, flat_extrapolation)
-        
 
     def forward_volatility(self, 
                            t1: Union[float, np.array], 
@@ -259,7 +242,7 @@ class FXVolatilitySurface:
         if np.any(tau == 0):
             warnings.warn("t2 and t1 are equal. NaN will be returned.")
         elif np.any(tau < 0):
-            raise ValueErwarnings.warn("t2 is less than t1. Please swap ")
+            raise ValueError("t2 is less than t1. Please swap ")
     
         result = (σ_t2**2 * t2 - σ_t1**2 * t1) / tau
         if np.any(result < 0):
@@ -474,7 +457,7 @@ class FXVolatilitySurface:
             
         r_f = self.foreign_zero_curve.zero_rate(expiry_datetimeindex,compounding_frequency='continuously').values
         r_d = self.domestic_zero_curve.zero_rate(expiry_datetimeindex,compounding_frequency='continuously').values
-        F = self.interp_fx_forward_curve(expiry_dates=expiry_datetimeindex, flat_extrapolation=True)
+        F = interp_fx_forward_curve(self.fx_forward_curve, dates=expiry_datetimeindex, date_type='expiry_date', flat_extrapolation=True)
 
         results = gk_price(
             S=self.fx_spot_rate,
@@ -505,51 +488,60 @@ class FXVolatilitySurface:
         if method == 'geometric_brownian_motion':
             
             if date_grid is None:
-                # create the date_grid based on the volatility input tenors
-                date_grid = self.σ_pillar.index
+                date_grid = self.σ_pillar.index # create the date_grid based on the volatility input tenors
+ 
+            if self.curve_date not in date_grid:
+                date_grid = pd.DatetimeIndex([self.curve_date]).append(date_grid)
             
+            date_grid = date_grid.unique().sort_values(ascending=True)
             tau = self.daycounter.year_fraction(self.curve_date,date_grid).values
-            tau = np.insert(tau, 0, 0)
             dt = tau[1:] - tau[:-1] 
+            dt = np.insert(dt, 0, 0)
             
-            fx_forward_rates_t2 = self.interp_fx_forward_curve(date_grid).values
+            fx_forward_rates_t2 = interp_fx_forward_curve(self.fx_forward_curve, dates=date_grid, date_type='delivery_date').values
             fx_forward_rates_t1 = np.zeros(shape=fx_forward_rates_t2.shape)
             fx_forward_rates_t1[0] = self.fx_spot_rate
             fx_forward_rates_t1[1:] = fx_forward_rates_t2[:-1].copy()
             period_drift = np.log(fx_forward_rates_t2 / fx_forward_rates_t1) / dt
+            period_drift[0] = np.nan
 
+            # tk need to update this to do with delivery dates no index's
             mask = np.logical_and.reduce([date_grid >= self.σ_pillar.index.min(), date_grid <= self.σ_pillar.index.max()])
             σ_atm = np.full(date_grid.shape, np.nan)
             if mask.any():
                 σ_atm[mask] = self.Δ_σ_daily['σ_atmΔneutral'][date_grid[mask]]
+                
+            # Apply flat extrapolation for dates outside the volatility range
+            σ_atm[date_grid < self.σ_pillar.index.min()] = self.Δ_σ_daily['σ_atmΔneutral'][date_grid[mask]][0]
+            σ_atm[date_grid > self.σ_pillar.index.max()] = self.Δ_σ_daily['σ_atmΔneutral'][date_grid[mask]][-1]
 
             t1 = tau[:-1]
             t2 = tau[1:]
-            σ_atm_t1 = np.insert(σ_atm[:-1], 0, σ_atm[0])
-            σ_atm_t2 = σ_atm
+            σ_atm_t1 = σ_atm[:-1].copy()
+            σ_atm_t2 = σ_atm[1:].copy()
             σ_forward = self.forward_volatility(t1, σ_atm_t1, t2, σ_atm_t2)
-            σ_forward[0] = σ_atm[0]
+
 
             # Setup data frame with the key market data inputs for easier review
             df_gbm_monte_carlo_market_data_inputs = pd.DataFrame()
-            df_gbm_monte_carlo_market_data_inputs['dates'] = np.insert(date_grid.values, 0, self.curve_date)
+            df_gbm_monte_carlo_market_data_inputs['dates'] = date_grid.values
             df_gbm_monte_carlo_market_data_inputs['tau'] = tau
-            df_gbm_monte_carlo_market_data_inputs['dt'] = np.insert(dt, 0, 0)
-            df_gbm_monte_carlo_market_data_inputs['fx_forward_rates'] = np.insert(fx_forward_rates_t2, 0, self.fx_spot_rate)
-            df_gbm_monte_carlo_market_data_inputs['drift'] = np.insert(period_drift, 0, np.nan)
-            df_gbm_monte_carlo_market_data_inputs['atm_volatility'] = np.insert(σ_atm, 0, σ_atm[0])
+            df_gbm_monte_carlo_market_data_inputs['dt'] = dt
+            df_gbm_monte_carlo_market_data_inputs['fx_forward_rates'] = fx_forward_rates_t2
+            df_gbm_monte_carlo_market_data_inputs['drift'] = period_drift
+            df_gbm_monte_carlo_market_data_inputs['atm_volatility'] = σ_atm
             df_gbm_monte_carlo_market_data_inputs['forward_atm_volatility'] = np.insert(σ_forward, 0, np.nan)        
             results['gbm_monte_carlo_market_data_inputs'] = df_gbm_monte_carlo_market_data_inputs
 
-            nb_of_periods = len(date_grid)
+            nb_of_periods = len(date_grid) - 1
             rand_nbs = generate_rand_nbs(nb_of_periods=nb_of_periods,
                                          nb_of_simulations=nb_of_simulations,
                                          flag_apply_antithetic_variates=flag_apply_antithetic_variates)
         
             fx_rate_simulation_paths = simulate_gbm_path(initial_px=self.fx_spot_rate,
-                                                         period_drift=period_drift,
+                                                         period_drift=period_drift[1:],
                                                          period_forward_volatility=σ_forward,
-                                                         period_length=dt,
+                                                         period_length=dt[1:],
                                                          rand_nbs=rand_nbs)
             results['fx_rate_simulation_paths'] = fx_rate_simulation_paths
             

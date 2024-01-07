@@ -431,7 +431,7 @@ def create_date_grid_for_fx_exposures(curve_date: pd.Timestamp,
         elif sampling_freq == '12m':
              date_grid = forward_date_generation(curve_date, max_settlement_date, 12, 'months') 
              
-        date_grid = pd.DatetimeIndex(date_grid[1])
+        date_grid = pd.DatetimeIndex([curve_date]).append(pd.DatetimeIndex(date_grid[1]))
         
     elif date_grid_pillar is not None:
         assert isinstance(date_grid_pillar, pd.DatetimeIndex) 

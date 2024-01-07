@@ -47,7 +47,7 @@ def generate_rand_nbs(nb_of_periods: int,
     """
     
     if nb_of_simulations is None:
-        nb_of_simulations = 100 * 1000
+        nb_of_simulations = 1000 # tk need to change this to 100k 
         
     if flag_apply_antithetic_variates is None:
         flag_apply_antithetic_variates = True
