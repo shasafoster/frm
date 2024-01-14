@@ -23,6 +23,21 @@ from numba import jit
 from typing import Tuple
 import warnings
 
+VALID_HESTON_PRICING_METHODS = [
+    'heston_analytical_1993',
+    'heston_carr_madan_gauss_kronrod_quadrature',
+    'heston_carr_madan_fft_w_simpsons',
+]
+
+def validate_input(var, var_name, validation_fn):
+    if np.isscalar(var):
+        if not validation_fn(var):
+            raise ValueError(f"'{var_name}' has invalid values: {var}")
+    else:
+        if not np.all(validation_fn(var)):
+            raise ValueError(f"'{var_name}' has invalid values: {var}")
+
+
 
 def heston_fit_vanilla_fx_smile(
         Δ: np.array, 
@@ -70,7 +85,7 @@ def heston_fit_vanilla_fx_smile(
     The function initially estimates strikes using the Garman-Kohlhagen model. 
     It then optimizes the Heston parameters to minimize the sum of squared errors between market and model-implied volatilities.
     """
-    
+        
     def heston_vanilla_sse(param, v0, kappa, S, tau, r_f, r_d, cp, K, σ_market):           
         """
         Compute the sum of squared errors (SSE) between market and model implied volatilities.
@@ -97,6 +112,7 @@ def heston_fit_vanilla_fx_smile(
         if vv < 0.0 or theta < 0.0 or abs(rho) > 1.0:
             warnings.warn("Invalid value for vv, theta or rho encountered")
             return np.inf
+                
         P = np.zeros(nb_strikes)
         IV = np.zeros(nb_strikes)
         
@@ -109,7 +125,7 @@ def heston_fit_vanilla_fx_smile(
             elif pricing_method == 'heston_carr_madan_fft_w_simpsons':
                 P[i] = heston_carr_madan_fx_vanilla_european(S, tau, r_f, r_d, cp[i], K[i], v0, vv, kappa, theta, rho, integration_method=1)
             else:
-                raise ValueError
+                raise ValueError("invalid 'pricing_method' value: ", pricing_method)
             # The paper Pricing European Options by Stable Fourier-Cosine Series Expansions details this clearly
             #elif pricing_method == 'heston_cos':
             #    P[i] = heston_cos_vanilla_european(cp[i], S, strikes[i], tau, r_d, r_f, v0, vv, kappa, theta, rho)
@@ -121,10 +137,19 @@ def heston_fit_vanilla_fx_smile(
 
         return np.sum((σ_market - IV)**2)
 
+
+    # Input validation
+    validate_input(tau, 'tau', lambda x: x > 0 and not np.isnan(x))
+    validate_input(S, 'S', lambda x: x > 0 and not np.isnan(x))
+    validate_input(r_f, 'r_f', lambda x: not np.isnan(x))
+    validate_input(r_d, 'r_d', lambda x: not np.isnan(x))
+    validate_input(cp, 'cp', lambda x: np.isin(x, [-1, 1]))
+    if pricing_method not in VALID_HESTON_PRICING_METHODS:
+        raise ValueError(f"'pricing_method' is invalid: {pricing_method}")
+
     # Calculate strikes for market deltas
     strikes = gk_solve_strike(S=S,tau=tau,r_f=r_f,r_d=r_d,σ=σ_market,Δ=Δ,Δ_convention=Δ_convention)
-    
-    
+
     nb_strikes = len(strikes)
     
     # Set the initial variance, v0, to the implied ATM market volatility
@@ -166,7 +191,7 @@ def heston_fit_vanilla_fx_smile(
         elif pricing_method == 'heston_carr_madan_fft_w_simpsons':
             P[i] = heston_carr_madan_fx_vanilla_european(S, tau, r_f, r_d, cp[i], strikes[i], v0, vv, kappa, theta, rho, integration_method=1)
         else:
-            raise ValueError
+            raise ValueError(f"'pricing_method' is invalid: {pricing_method}")
             
         # The paper Pricing European Options by Stable Fourier-Cosine Series Expansions details this clearly
         #elif pricing_method == 'cos':

@@ -9,12 +9,14 @@ if __name__ == "__main__":
     import pathlib
     import sys
     
-    os.chdir(pathlib.Path(__file__).parent.parent.parent.parent.resolve()) 
+    os.chdir(pathlib.Path(__file__).parent.parent.parent.parent.parent.resolve()) 
     sys.path.append(os.getcwd())
     print('__main__ - current working directory:', os.getcwd())
 
-        
-from frm.pricing_engine.heston_gk import heston1993_price_fx_vanilla_european, heston_fit_vanilla_fx_smile, heston_cos_vanilla_european, heston_carr_madan_fx_vanilla_european
+#%%
+
+
+from frm.frm.pricing_engine.heston_garman_kohlhagen import heston1993_price_fx_vanilla_european, heston_fit_vanilla_fx_smile, heston_cos_vanilla_european, heston_carr_madan_fx_vanilla_european
 
 import numpy as np
 import matplotlib.pyplot as plt

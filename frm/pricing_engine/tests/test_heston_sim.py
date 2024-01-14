@@ -7,22 +7,19 @@ https://www.linkedin.com/in/shasafoster
 if __name__ == "__main__":
     import os
     import pathlib
-    import sys
-    
-    os.chdir(pathlib.Path(__file__).parent.parent.parent.parent.resolve()) 
-    sys.path.append(os.getcwd())
+    os.chdir(pathlib.Path(__file__).parent.parent.parent.parent.parent.resolve())     
     print('__main__ - current working directory:', os.getcwd())
 
-
+#%%
 from frm.pricing_engine.heston import simulate_heston
-from frm.pricing_engine.gbm import simulate_gbm
+#from frm.pricing_engine.gbm import simulate_gbm
 
 import numpy as np
 from scipy.stats import norm
 import matplotlib.pyplot as plt
 
 
-
+#%%
 # Sample use
 #result = simGBM(1, 0.84, 0.02, np.sqrt(0.1), 1/100, np.random.normal(0, 1, 100), 1)
 
@@ -152,7 +149,7 @@ time = np.linspace(0, days, days) / 365
 
 
 # GBM
-y = simulate_gbm(x0=spot, mu=mu, σ=np.sqrt(theta), T=T, dt=1/days, rand_nbs=rand_nbs[:, 0], method=0)
+#y = simulate_gbm(x0=spot, mu=mu, σ=np.sqrt(theta), T=T, dt=1/days, rand_nbs=rand_nbs[:, 0], method=0)
 
 # Heston spot and volatility processes
 x = simulate_heston(spot, mu, v0, vv, kappa, theta, rho, T, 1 / days, rand_nbs=rand_nbs, method='quadratic_exponential')
@@ -160,7 +157,7 @@ x = simulate_heston(spot, mu, v0, vv, kappa, theta, rho, T, 1 / days, rand_nbs=r
 # Plotting
 plt.figure(1)
 
-plt.plot(time, y[1:], 'r--', label='GBM')
+#plt.plot(time, y[1:], 'r--', label='GBM')
 plt.plot(time, x[1:, 0], 'b', label='Heston')
 plt.xlabel('Time [years]')
 plt.ylabel('FX rate')

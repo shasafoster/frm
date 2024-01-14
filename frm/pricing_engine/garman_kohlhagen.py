@@ -62,7 +62,7 @@ def gk_price(S: float,
         F = np.atleast_1d(F).astype(float)
         assert (F > 1e-8).all() 
         
-        # Use market forward rate and imply basis-adjusted domestic interest rate
+        # Use market forward rate and imply basis-adjusted domestic interest rate        
         r_d_basis_adj = np.log(F / S) / tau + r_f # from F = S * exp((r_d - r_f) * tau)
         d1 = (np.log(F / K) + (0.5 * σ**2) * tau) / (σ * np.sqrt(tau))
         d2 = d1 - σ * np.sqrt(tau)    

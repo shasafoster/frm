@@ -7,23 +7,34 @@ https://www.linkedin.com/in/shasafoster
 import numpy as np
 from scipy.stats import norm
 
-def normalcorr(C, no):
+def normalcorr(C: np.array, 
+               rand_nbs: np.array):
     """
     Generate correlated pseudo random normal variates using the Cholesky factorization.
     
     Parameters:
     C (np.ndarray): Correlation matrix.
-    no (np.ndarray): Matrix of normally distributed pseudorandom numbers.
+    rand_nbs (np.ndarray): Matrix of normally distributed pseudorandom numbers.
     
     Returns:
     np.ndarray: Correlated pseudo random normal variates.
     """    
     
     M = np.linalg.cholesky(C).T
-    return (M @ no.T).T
+    return (M @ rand_nbs.T).T
 
 
-def simulate_heston(s0, mu, v0, vv, kappa, theta, rho, T, dt, rand_nbs=None, method='quadratic_exponential'):
+def simulate_heston(s0: float, 
+                    mu: float, 
+                    v0: float, 
+                    vv: float, 
+                    kappa: float, 
+                    theta: float, 
+                    rho: float, 
+                    tau: float, 
+                    dt: float, 
+                    rand_nbs: np.array=None, 
+                    method: str='quadratic_exponential'):
     """
      Simulate trajectories of the spot price and volatility processes in the Heston model.
      
@@ -47,13 +58,13 @@ def simulate_heston(s0, mu, v0, vv, kappa, theta, rho, T, dt, rand_nbs=None, met
     np.random.seed(0)
         
     if rand_nbs is None:
-        rand_nbs = np.random.normal(loc=0, scale=1, size=(int(T / dt), 2))
+        rand_nbs = np.random.normal(loc=0, scale=1, size=(int(tau / dt), 2))
 
     
-    if len(rand_nbs[:, 0]) != int(T / dt):
-        raise ValueError('Size of rand_nbs is inappropriate. Length of rand_nbs[:, 0] should be equal to T/dt.')
+    if len(rand_nbs[:, 0]) != int(tau / dt):
+        raise ValueError('Size of rand_nbs is inappropriate. Length of rand_nbs[:, 0] should be equal to tau/dt.')
     
-    t = np.arange(0, np.ceil(T / dt) + 1)
+    t = np.arange(0, np.ceil(tau / dt) + 1)
     sizet = len(t)
     x = np.zeros((sizet, 2))
     

@@ -426,11 +426,11 @@ class FXVolatilitySurface:
                 v0, vv, kappa, theta, rho, lambda_, IV, SSE = self.K_σ_daily_smile_func[date]
                 
                 if self.smile_interpolation_method == 'heston_analytical_1993':
-                    X = heston1993_price_fx_vanilla_european(S, tau, r_f, r_d, cp, K_target, v0, vv, kappa, theta, rho, lambda_)['option_value']
+                    X = heston1993_price_fx_vanilla_european(S, tau, r_f, r_d, cp, K_target, v0, vv, kappa, theta, rho, lambda_)
                 elif self.smile_interpolation_method == 'heston_carr_madan_gauss_kronrod_quadrature':     
-                    X = heston_carr_madan_fx_vanilla_european(S, tau, r_f, r_d, cp, K_target, v0, vv, kappa, theta, rho, integration_method=0)['option_value']
+                    X = heston_carr_madan_fx_vanilla_european(S, tau, r_f, r_d, cp, K_target, v0, vv, kappa, theta, rho, integration_method=0)
                 elif self.smile_interpolation_method == 'heston_carr_madan_fft_w_simpsons':
-                    X = heston_carr_madan_fx_vanilla_european(S, tau, r_f, r_d, cp, K_target, v0, vv, kappa, theta, rho, integration_method=1)['option_value']
+                    X = heston_carr_madan_fx_vanilla_european(S, tau, r_f, r_d, cp, K_target, v0, vv, kappa, theta, rho, integration_method=1)
                 
                 implied_σ = gk_solve_implied_σ(S=S, tau=tau, r_f=r_f, r_d=r_d, cp=cp, K=K_target, X=X, σ_guess=v0) 
                 result.append(implied_σ)            

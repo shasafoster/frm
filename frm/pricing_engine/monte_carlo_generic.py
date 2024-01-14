@@ -11,7 +11,7 @@ if __name__ == "__main__":
     print('__main__ - current working directory:', os.getcwd())
     
 import numpy as np
-np.random.seed(0)
+
 
 
 def generate_rand_nbs(nb_of_periods: int,
@@ -45,6 +45,8 @@ def generate_rand_nbs(nb_of_periods: int,
       specified `nb_of_simulations`.
     - The generated random numbers follow a standard normal distribution (mean 0, standard deviation 1).
     """
+    
+    np.random.seed(0)
     
     if nb_of_simulations is None:
         nb_of_simulations = 1000 # tk need to change this to 100k 
