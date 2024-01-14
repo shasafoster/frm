@@ -66,8 +66,7 @@ def heston_fit_vanilla_fx_smile(
     - Tuple: Initial volatility (v0), vol of vol (vv), mean reversion (kappa), long-run mean (theta), market price of volatility risk (lambda_), correlation (rho), vector of implied volatilities (IV), sum of squared errors (SSE)
 
     References:
-    [1] Janek, A., Kluge, T., Weron, R., Wystup, U. (2010). "FX smile in the Heston model"
-    
+    [1] Janek, A., Kluge, T., Weron, R., Wystup, U. (2010). "FX smile in the Heston model"    
     Converted from MATLAB to Python by Shasa Foster (2023.09.02)
 
     The Heston SDE is:

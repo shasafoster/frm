@@ -65,6 +65,10 @@ def simulate_heston_single(s0: float,
           {'quadratic_exponential,'euler_with_absorption_of_volatility_process','euler_with_reflection_of_volatility_process'}
       Returns:
       np.ndarray: 2-column array containing the simulated trajectories of the spot price and volatility.
+      
+      References:
+      [1] Janek, A., Kluge, T., Weron, R., Wystup, U. (2010). "FX smile in the Heston model"
+      Converted from MATLAB to Python by Shasa Foster (2023.09.02)
       """    
      
     dt = tau / nb_timesteps
@@ -151,7 +155,6 @@ def simulate_heston(s0: float,
      np.ndarray: 2-column array containing the simulated trajectories of the spot price and volatility.
      """    
      
-
     np.random.seed(0)
     
     nb_timesteps = rand_nbs.shape[0]
@@ -224,8 +227,6 @@ def simulate_heston(s0: float,
 
 #%%
 
-
-
 if __name__ == '__main__':
     
     # This is a check to demonstate the vectorised function gives the same result as the non vectorised function
@@ -244,7 +245,7 @@ if __name__ == '__main__':
     
     rand_nbs = generate_rand_nbs(nb_timesteps=nb_timesteps,
                                  nb_rand_vars=2,
-                                 nb_simulations=1000 * 1000,
+                                 nb_simulations=1 * 1000,
                                  flag_apply_antithetic_variates=False)
    
     
@@ -263,7 +264,7 @@ if __name__ == '__main__':
     
     t2 = time.time()
 
-    if False:
+    if True:
         for i in range(rand_nbs.shape[2]):
             
             print(i, '/', rand_nbs.shape[2])
