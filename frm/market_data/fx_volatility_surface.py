@@ -16,6 +16,7 @@ from frm.frm.pricing_engine.garman_kohlhagen import gk_price, gk_solve_implied_�
 from frm.frm.pricing_engine.heston_garman_kohlhagen import heston_fit_vanilla_fx_smile, heston1993_price_fx_vanilla_european, heston_carr_madan_fx_vanilla_european
 from frm.frm.pricing_engine.monte_carlo_generic import generate_rand_nbs
 from frm.frm.pricing_engine.geometric_brownian_motion import simulate_gbm_path
+from frm.frm.pricing_engine.heston import simulate_heston
 
 from frm.frm.schedule.tenor import calc_tenor_date, get_spot_offset
 from frm.frm.schedule.daycounter import DayCounter, VALID_DAY_COUNT_BASIS_TYPES
@@ -66,7 +67,7 @@ class FXVolatilitySurface:
     
     # volatility definitions
     σ_pillar: pd.DataFrame=None
-    smile_interpolation_method: Optional[VALID_FX_SMILE_INTERPOLATION_METHOD] = 'cubic_spline'
+    smile_interpolation_method: Optional[VALID_FX_SMILE_INTERPOLATION_METHOD] = 'heston_carr_madan_gauss_kronrod_quadrature'
     spot_date: Optional[pd.Timestamp] = None
     
     #atmΔ: pd.DataFrame=None
@@ -516,6 +517,10 @@ class FXVolatilitySurface:
         assert expiry_dates.shape == K.shape
         assert expiry_dates.shape == cp.shape
     
+        # Interpolate the volatility smile for the given expiries
+        self.interp_σ_smile_from_pillar_points(expiry_dates)
+    
+    
         df = self.Δ_σ_daily.loc[expiry_dates,:].copy()
         
         cols_to_drop = [col for col in df.columns if 'σ' in col]
@@ -654,7 +659,6 @@ class FXVolatilitySurface:
             σ_atm_t2 = σ_atm[1:].copy()
             σ_forward = self.forward_volatility(t1, σ_atm_t1, t2, σ_atm_t2)
 
-
             # Setup data frame with the key market data inputs for easier review
             df_gbm_monte_carlo_market_data_inputs = pd.DataFrame()
             df_gbm_monte_carlo_market_data_inputs['dates'] = date_grid.values
@@ -683,19 +687,55 @@ class FXVolatilitySurface:
         
         elif method == 'heston':
             
+            # Interpolate the volatility smile for the given expiries 
+            self.interp_σ_smile_from_pillar_points(expiry_dates=date_grid) # this function should be able to be called by delivery and expiry
+
+            # Date grid is defined as the delivery date.
+            # Need to update entire volatility surface with two indexe's, expiry and delivery date
             
-            simulate_heston(s0: float, 
-                            mu: float, 
-                            v0: float, 
-                            vv: float, 
-                            kappa: float, 
-                            theta: float, 
-                            rho: float, 
-                            tau: float, 
-                            rand_nbs: np.array,
-                            method: str='quadratic_exponential'):
+            # It doesn't really make sense to simulate a rate path with just a Heston model. 
+            # The standard heston model, is best for for pricing exotics / options where the only input is the termiminal fx rate
+            # Need the Heston model to be linked to the term structure - i.e Local Stochastic volatility model
             
-        
+            results = {}
+            
+            for i,delivery_date in enumerate(date_grid):
+                
+                print(i, delivery_date)
+                    
+                tau = self.daycounter.year_fraction(self.curve_date,delivery_date)
+                fx_forward_rate = interp_fx_forward_curve(self.fx_forward_curve, dates=pd.DatetimeIndex([delivery_date]), date_type='delivery_date').values
+                mu = np.log(fx_forward_rate/self.fx_spot_rate) / tau
+            
+                v0 = self.K_σ_daily_smile_func[delivery_date]['v0']
+                vv = self.K_σ_daily_smile_func[delivery_date]['vv']
+                kappa = self.K_σ_daily_smile_func[delivery_date]['kappa']
+                theta = self.K_σ_daily_smile_func[delivery_date]['theta']
+                rho = self.K_σ_daily_smile_func[delivery_date]['rho']
+                lambda_ = self.K_σ_daily_smile_func[delivery_date]['lambda_']  
+                
+                rand_nbs = generate_rand_nbs(nb_timesteps=100,
+                                             nb_rand_vars=2,
+                                             nb_simulations=10*1000,
+                                             flag_apply_antithetic_variates=False)
+                
+                sim_results = simulate_heston(s0=self.fx_spot_rate,
+                                mu=mu,
+                                v0=v0,
+                                vv=vv,
+                                kappa=kappa,
+                                theta=theta,
+                                rho=rho,
+                                tau=tau,
+                                rand_nbs=rand_nbs,
+                                method='quadratic_exponential')
+                
+                results[delivery_date] = sim_results
+                
+            return results
+
+
+
         
                           
         
