@@ -240,8 +240,6 @@ class Leg:
     def set_forward_curve(self, zero_crv):   
         self.fwd_crv = zero_crv
              
-                
-             
     def price_cap_floor(self, d1, d2, K, σ):
         
         T = self.daycounter(d1,d2)

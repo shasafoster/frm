@@ -1,8 +1,4 @@
 # -*- coding: utf-8 -*-
-"""
-@author: Shasa Foster
-https://www.linkedin.com/in/shasafoster
-"""
 
 if __name__ == "__main__":
     import os

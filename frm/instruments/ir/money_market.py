@@ -21,10 +21,10 @@ import pandas as pd
 class Deposit():
         
     def __init__(self,  effective_date: pd.Timestamp, 
-                        interest_rate: float,
+                        contractual_interest_rate_naac: float,
                         maturity_date: pd.Timestamp=None, 
                         tenor_name: str=np.nan,
-                        day_count_basis: str='ACT/ACT',
+                        day_count_basis: str='act/act',
                         local_currency_holidays=None,
                         city_holidays=None,
                         holiday_calendar=None
@@ -34,15 +34,15 @@ class Deposit():
             holiday_calendar = get_calendar(local_currency_holidays, city_holidays)     
     
         if pd.isnull(maturity_date):
-            maturity_date, cleaned_tenor_name, _ = calc_tenor_date(effective_date, tenor_name, holiday_calendar=holiday_calendar, curve_ccy=local_currency_holidays)
+            maturity_date, tenor_name, _ = calc_tenor_date(effective_date, tenor_name, holiday_calendar=holiday_calendar, curve_ccy=local_currency_holidays)
         
         assert effective_date < maturity_date
         
         self.effective_date = effective_date
         self.maturity_date = maturity_date
         self.daycounter = DayCounter(day_count_basis)
-        self.interest_rate = interest_rate
-        self.tenor_name = cleaned_tenor_name
+        self.contractual_interest_rate_naac = contractual_interest_rate_naac
+        self.tenor_name = tenor_name
         
     def implied_discount_factor(self):
         yrs = self.daycounter.year_fraction(self.effective_date, self.maturity_date)

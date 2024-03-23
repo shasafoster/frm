@@ -218,7 +218,6 @@ class ZeroCurve:
                         if solve_dsc_crv:
                             swap.set_discount_curve(zero_curve)
 
-                        
                         pricing = swap.price()
                         return pricing['price']
                     

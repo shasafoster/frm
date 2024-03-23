@@ -1,8 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-@author: Shasa Foster
-https://www.linkedin.com/in/shasafoster
-"""
+
 
 if __name__ == "__main__":
     import os
@@ -27,6 +24,7 @@ VALID_HESTON_PRICING_METHODS = [
     'heston_analytical_1993',
     'heston_carr_madan_gauss_kronrod_quadrature',
     'heston_carr_madan_fft_w_simpsons',
+    'heston_cosine'
 ]
 
 def validate_input(var, var_name, validation_fn):
@@ -43,7 +41,7 @@ def heston_fit_vanilla_fx_smile(
         Δ: np.array, 
         Δ_convention: str, 
         σ_market: np.array, 
-        S: float, 
+        S0: float, 
         r_f: float, 
         r_d: float, 
         tau: float, 
@@ -56,7 +54,7 @@ def heston_fit_vanilla_fx_smile(
     - Δ (np.array): Vector of spot delta values
     - Δ_convention (str): Delta convention ('prem-adj' or 'prem-adj-fwd')
     - σ_market (np.array): Vector of market implied volatilities
-    - S (float): Spot price
+    - S0 (float): Spot price
     - r_f (float): Foreign interest rate
     - r_d (float): Domestic interest rate
     - tau (float): Time to maturity in years
@@ -85,7 +83,7 @@ def heston_fit_vanilla_fx_smile(
     It then optimizes the Heston parameters to minimize the sum of squared errors between market and model-implied volatilities.
     """
         
-    def heston_vanilla_sse(param, v0, kappa, S, tau, r_f, r_d, cp, K, σ_market):           
+    def heston_vanilla_sse(param, v0, kappa, S0, tau, r_f, r_d, cp, K, σ_market):           
         """
         Compute the sum of squared errors (SSE) between market and model implied volatilities.
     
@@ -117,29 +115,28 @@ def heston_fit_vanilla_fx_smile(
         
         for i in range(nb_strikes):
             if pricing_method == 'heston_analytical_1993':
-                # P[i] = heston1993_price_fx_vanilla_european(cp[i], S, K[i], tau, r_d, r_f, v0, vv, kappa, theta, rho, lambda_)
-                P[i] = heston1993_price_fx_vanilla_european(S, tau, r_f, r_d, cp[i], K[i], v0, vv, kappa, theta, rho, lambda_)
+                P[i] = heston1993_price_fx_vanilla_european(S0, tau, r_f, r_d, cp[i], K[i], v0, vv, kappa, theta, rho, lambda_)
             elif pricing_method == 'heston_carr_madan_gauss_kronrod_quadrature':
-                P[i] = heston_carr_madan_fx_vanilla_european(S, tau, r_f, r_d, cp[i], K[i], v0, vv, kappa, theta, rho, integration_method=0)
+                P[i] = heston_carr_madan_fx_vanilla_european(S0, tau, r_f, r_d, cp[i], K[i], v0, vv, kappa, theta, rho, integration_method=0)
             elif pricing_method == 'heston_carr_madan_fft_w_simpsons':
-                P[i] = heston_carr_madan_fx_vanilla_european(S, tau, r_f, r_d, cp[i], K[i], v0, vv, kappa, theta, rho, integration_method=1)
-            else:
-                raise ValueError("invalid 'pricing_method' value: ", pricing_method)
+                P[i] = heston_carr_madan_fx_vanilla_european(S0, tau, r_f, r_d, cp[i], K[i], v0, vv, kappa, theta, rho, integration_method=1)
+            #else:
+            #    raise ValueError("invalid 'pricing_method' value: ", pricing_method)
             # The paper Pricing European Options by Stable Fourier-Cosine Series Expansions details this clearly
-            #elif pricing_method == 'heston_cos':
-            #    P[i] = heston_cos_vanilla_european(cp[i], S, strikes[i], tau, r_d, r_f, v0, vv, kappa, theta, rho)
+            elif pricing_method == 'heston_cosine':
+                P[i] = heston_cos_vanilla_european(S0, tau, r_f, r_d, cp[i], K[i], v0, vv, kappa, theta, rho)
 
             if P[i] < 0.0:
                 IV[i] = -1.0
             else:
-                IV[i] = gk_solve_implied_σ(S=S, tau=tau, r_f=r_f, r_d=r_d, cp=cp[i], K=strikes[i], X=P[i], σ_guess=σ_market[i])
+                IV[i] = gk_solve_implied_σ(S0=S0, tau=tau, r_f=r_f, r_d=r_d, cp=cp[i], K=strikes[i], X=P[i], σ_guess=σ_market[i])
 
         return np.sum((σ_market - IV)**2)
 
 
     # Input validation
     validate_input(tau, 'tau', lambda x: x > 0 and not np.isnan(x))
-    validate_input(S, 'S', lambda x: x > 0 and not np.isnan(x))
+    validate_input(S0, 'S0', lambda x: x > 0 and not np.isnan(x))
     validate_input(r_f, 'r_f', lambda x: not np.isnan(x))
     validate_input(r_d, 'r_d', lambda x: not np.isnan(x))
     validate_input(cp, 'cp', lambda x: np.isin(x, [-1, 1]))
@@ -147,7 +144,7 @@ def heston_fit_vanilla_fx_smile(
         raise ValueError(f"'pricing_method' is invalid: {pricing_method}")
 
     # Calculate strikes for market deltas
-    strikes = gk_solve_strike(S=S,tau=tau,r_f=r_f,r_d=r_d,σ=σ_market,Δ=Δ,Δ_convention=Δ_convention)
+    strikes = gk_solve_strike(S0=S0,tau=tau,r_f=r_f,r_d=r_d,σ=σ_market,Δ=Δ,Δ_convention=Δ_convention)
 
     nb_strikes = len(strikes)
     
@@ -170,7 +167,7 @@ def heston_fit_vanilla_fx_smile(
     # Set initial values for vv, theta, rho (the parameters we are solving for)
     initparam = [2 * np.sqrt(v0), 2 * v0, 0]
 
-    res = minimize(lambda param: heston_vanilla_sse(param, v0, kappa, S, tau, r_f, r_d, cp, strikes, σ_market), initparam)
+    res = minimize(lambda param: heston_vanilla_sse(param, v0, kappa, S0, tau, r_f, r_d, cp, strikes, σ_market), initparam)
     vv, theta, rho = res.x
     
     if 2 * kappa * theta - vv**2 <= 0.0:
@@ -184,21 +181,22 @@ def heston_fit_vanilla_fx_smile(
     # Integral required for each strike hence can't be vectorised
     for i in range(nb_strikes):
         if pricing_method == 'heston_analytical_1993':
-            P[i] = heston1993_price_fx_vanilla_european(S, tau, r_f, r_d, cp[i], strikes[i], v0, vv, kappa, theta, rho, lambda_)
+            P[i] = heston1993_price_fx_vanilla_european(S0, tau, r_f, r_d, cp[i], strikes[i], v0, vv, kappa, theta, rho, lambda_)
         elif pricing_method == 'heston_carr_madan_gauss_kronrod_quadrature':
-            P[i] = heston_carr_madan_fx_vanilla_european(S, tau, r_f, r_d, cp[i], strikes[i], v0, vv, kappa, theta, rho, integration_method=0)
+            P[i] = heston_carr_madan_fx_vanilla_european(S0, tau, r_f, r_d, cp[i], strikes[i], v0, vv, kappa, theta, rho, integration_method=0)
         elif pricing_method == 'heston_carr_madan_fft_w_simpsons':
-            P[i] = heston_carr_madan_fx_vanilla_european(S, tau, r_f, r_d, cp[i], strikes[i], v0, vv, kappa, theta, rho, integration_method=1)
+            P[i] = heston_carr_madan_fx_vanilla_european(S0, tau, r_f, r_d, cp[i], strikes[i], v0, vv, kappa, theta, rho, integration_method=1)
+        elif pricing_method == 'heston_cosine':
+            # The paper Pricing European Options by Stable Fourier-Cosine Series Expansions details this clearly
+            P[i] = heston_cos_vanilla_european(S0, tau, r_f, r_d, cp[i], strikes[i], v0, vv, kappa, theta, rho)    
+                   
         else:
-            raise ValueError(f"'pricing_method' is invalid: {pricing_method}")
-            
-        # The paper Pricing European Options by Stable Fourier-Cosine Series Expansions details this clearly
-        #elif pricing_method == 'cos':
-        #    P[i] = heston_cos_vanilla_european(cp[i], S, strikes[i], tau, r_d, r_f, v0, vv, kappa, theta, rho)       
-         
-        IV[i] = gk_solve_implied_σ(S=S, tau=tau, r_f=r_f, r_d=r_d, cp=cp[i], K=strikes[i], X=P[i], σ_guess=σ_market[i])
+            raise ValueError(f"'pricing_method' is invalid: {pricing_method}")        
+        
+        
+        IV[i] = gk_solve_implied_σ(S0=S0, tau=tau, r_f=r_f, r_d=r_d, cp=cp[i], K=strikes[i], X=P[i], σ_guess=σ_market[i])
  
-    SSE = heston_vanilla_sse(res.x, v0, kappa, S, tau, r_f, r_d, cp, strikes, σ_market)      
+    SSE = heston_vanilla_sse(res.x, v0, kappa, S0, tau, r_f, r_d, cp, strikes, σ_market)      
     
     
     if SSE == np.inf:
@@ -271,8 +269,7 @@ def heston_1993_fx_vanilla_european_integral(φ, m, S, k, v0, vv, r_d, r_f, tau,
     return F
 
 
-def heston1993_price_fx_vanilla_european(S, tau, r_f, r_d, cp, K, v0, vv, kappa, theta, rho, lambda_):
-    # heston1993_price_fx_vanilla_european(cp, s, k, tau, r_d, r_f, v0, vv, kappa, theta, rho, lambda_):
+def heston1993_price_fx_vanilla_european(S0, tau, r_f, r_d, cp, K, v0, vv, kappa, theta, rho, lambda_):
     """
     Calculate the price of a European Vanilla FX option using the analytical Heston 1993 formulae
     The 2nd form of the Heston Characteristic function, detailed in Albrecher 2006 is used as it is more numerically stable.
@@ -308,18 +305,18 @@ def heston1993_price_fx_vanilla_european(S, tau, r_f, r_d, cp, K, v0, vv, kappa,
     """
 
     # Equation (18) from Heston, 1993
-    P1 = 0.5 + 1/np.pi * quad(lambda φ: heston_1993_fx_vanilla_european_integral(φ, 1, S, K, v0, vv, r_d, r_f, tau, kappa, theta, lambda_, rho), 0, np.inf, epsrel=1e-8)[0]
-    P2 = 0.5 + 1/np.pi * quad(lambda φ: heston_1993_fx_vanilla_european_integral(φ, 2, S, K, v0, vv, r_d, r_f, tau, kappa, theta, lambda_, rho), 0, np.inf, epsrel=1e-8)[0]
+    P1 = 0.5 + 1/np.pi * quad(lambda φ: heston_1993_fx_vanilla_european_integral(φ, 1, S0, K, v0, vv, r_d, r_f, tau, kappa, theta, lambda_, rho), 0, np.inf, epsrel=1e-8)[0]
+    P2 = 0.5 + 1/np.pi * quad(lambda φ: heston_1993_fx_vanilla_european_integral(φ, 2, S0, K, v0, vv, r_d, r_f, tau, kappa, theta, lambda_, rho), 0, np.inf, epsrel=1e-8)[0]
 
     Pplus = (1 - cp) / 2 + cp * P1   # Pplus = N(d1)
     Pminus = (1 - cp) / 2 + cp * P2  # Pminus = N(d2)
 
     # tk is this for spot or forward Δ, matlab code assumed spot delta input?
-    X = cp * (S * np.exp(-r_f * tau) * Pplus - K * np.exp(-r_d * tau) * Pminus) 
+    X = cp * (S0 * np.exp(-r_f * tau) * Pplus - K * np.exp(-r_d * tau) * Pminus) 
     
     return X
 
-#%%  Heston model using Carr-Madan via 
+#%%  Heston model using Carr-Madan via: 
 # (method=0) Gauss-Kronrod quadrature
 # (method=1) Fast Fourier Transform + Simpson method 
 
@@ -393,7 +390,7 @@ def get_simpson_weights(n):
 @jit(nopython=True)
 def heston_fft_fx_vanilla_european_integral(v, cp, s0, k, T, r_d, r_f, kappa, theta, vv, rho, v0, alpha):
     """
-    Auxiliary function for HESTONFFTVANILLA.
+    Auxiliary function for heston_carr_madan_fx_vanilla_european.
 
     Parameters:
         v: Evaluation points for auxiliary function.
@@ -426,7 +423,7 @@ def char_func(u, s0, k, tau, r_d, r_f, kappa, theta, vv, rho, v0):
     
     Parameters:
     u (float or np.array): The argument of the characteristic function.
-    s0 (float): Initial stock price.
+    s0 (float): Initial spot price (in # of domestic currency units per 1 foreign currency unit)
     k (float): Strike price.
     tau (float): Time to maturity.
     r_d (float): Domestic risk-free interest rate.
@@ -456,34 +453,10 @@ def char_func(u, s0, k, tau, r_d, r_f, kappa, theta, vv, rho, v0):
     return d, g, A, B, C, np.exp(A + B + C)
 
 
-#%%
+#%% COS method
 
-def chf_heston_model(r_d, r_f, tau, v0, vv, kappa, theta, rho):
-    """
-    Characteristic function for the Heston model.
+def heston_cos_vanilla_european(S0, tau, r_f, r_d, cp, K, v0, vv, kappa, theta, rho, N=160, L=3):
     
-    Parameters:
-    - r (float): Risk-free interest rate
-    - tau (float): Time to maturity
-    - v0 (float): Initial volatility
-    - vv (float): Volatility of volatility
-    - kappa (float): rate of mean reversion towards the long-term mean of variance process
-    - theta (float): long-term mean of the variance process
-    - rho (float): Correlation between price and volatility
-    
-    Returns:
-    - function: Characteristic function taking φ (complex) as input and returning complex value
-    """    
-    
-    D1 = lambda φ: np.sqrt((kappa - vv * rho * 1j * φ) ** 2 + (φ ** 2 + 1j * φ) * vv ** 2)
-    g = lambda φ: (kappa - vv * rho * 1j * φ - D1(φ)) / (kappa - vv * rho * 1j * φ + D1(φ))
-    C = lambda φ: (1 - np.exp(-D1(φ) * tau)) / (vv ** 2 * (1 - g(φ) * np.exp(-D1(φ) * tau)))
-    A = lambda φ: (r_d - r_f) * 1j * φ * tau + kappa * theta * tau / vv ** 2 * (kappa - vv * rho * 1j * φ - D1(φ)) \
-                   - 2 * kappa * theta / vv ** 2 * np.log((1 - g(φ) * np.exp(-D1(φ) * tau)) / (1 - g(φ)))
-    return lambda φ: np.exp(A(φ) + C(φ) * v0)
-
-
-def heston_cos_vanilla_european(cp, S0, K, tau, r_d, r_f, v0, vv, kappa, theta, rho, N=150, L=3):
     """
     Computes the call or put option prices using the COS method.
     
@@ -493,12 +466,15 @@ def heston_cos_vanilla_european(cp, S0, K, tau, r_d, r_f, v0, vv, kappa, theta, 
     - r (float): Interest rate
     - tau (float): Time to maturity
     - K (list or np.array): List of strike prices
-    - N (int): Number of expansion terms (<150 should be sufficient per Fang, 2008)
+    - N (int): Number of expansion terms (<160 should be sufficient per Fang, 2008)
     - L (float): Size of truncation domain
     
     Returns:
     - np.array: Option prices
-    """    
+
+    References:
+    [1] Fang, Fang & Oosterlee, Cornelis. (2008). A Novel Pricing Method for European Options Based on Fourier-Cosine Series Expansions. SIAM J. Scientific Computing. 31. 826-848. 10.1137/080718061. 
+    """  
 
     def chi_psi(a, b, c, d, k):
         """
@@ -540,12 +516,6 @@ def heston_cos_vanilla_european(cp, S0, K, tau, r_d, r_f, v0, vv, kappa, theta, 
         prefactor = 2 / (b - a)
         return prefactor * (chi - psi) if cp == 1 else prefactor * (-chi + psi)
 
-    # print('v0',v0)
-    # print('vv',vv)
-    # print('kappa',kappa)
-    # print('theta',theta)
-    # print('rho',rho)
-
     if K is not np.array:
         if np.isscalar(K):
             K = np.array([K]).reshape(1, 1)
@@ -559,15 +529,44 @@ def heston_cos_vanilla_european(cp, S0, K, tau, r_d, r_f, v0, vv, kappa, theta, 
     
     # Summation from k = 0 to k = N-1
     k = np.linspace(0, N-1, N).reshape(-1, 1)
-    u = k * np.pi / (b - a)
+    u = (k * np.pi / (b - a))
     
     H_k = call_put_coefficients(cp, a, b, k)
 
     mat = np.exp(1j * np.outer((x0 - a) , u))
-    chf = chf_heston_model(r_d, r_f, tau, v0, vv, kappa, theta, rho)
+    chf = chf_heston_cosine_model(r_f, r_d, tau, v0, vv, kappa, theta, rho)
     temp = chf(u) * H_k
-    temp[0] = 0.5 * temp[0]
+    temp[0] = 0.5 * temp[0] # Per page 3/21 of [1], "where Σ′ indicates that the first term in the summation is weighted by one-half" 
     return np.exp(-r_d * tau) * K * np.real(mat.dot(temp))
 
 
+def chf_heston_cosine_model(r_f, r_d, tau, v0, vv, kappa, theta, rho):
+    """
+    Characteristic function for the Heston model.
+    
+    Parameters:
+    - r_f (float): Risk-free domestic (foreign) currency interest rate        
+    - r_d (float): Risk-free domestic (quote) currency interest rate
+    - tau (float): Time to maturity
+    - v0 (float): Initial volatility
+    - vv (float): Volatility of volatility
+    - kappa (float): rate of mean reversion towards the long-term mean of variance process
+    - theta (float): long-term mean of the variance process
+    - rho (float): Correlation between price and volatility
+    
+    Returns:
+    - function: Characteristic function taking φ (complex) as input and returning complex value
+    """    
+    
+    D1 = lambda φ: np.sqrt((kappa - vv * rho * 1j * φ) ** 2 + (φ ** 2 + 1j * φ) * vv ** 2)
+    g = lambda φ: (kappa - vv * rho * 1j * φ - D1(φ)) / (kappa - vv * rho * 1j * φ + D1(φ))
+    C = lambda φ: (1 - np.exp(-D1(φ) * tau)) / (vv ** 2 * (1 - g(φ) * np.exp(-D1(φ) * tau)))
+    A = lambda φ: (r_d - r_f) * 1j * φ * tau + kappa * theta * tau / vv ** 2 * (kappa - vv * rho * 1j * φ - D1(φ)) \
+                   - 2 * kappa * theta / vv ** 2 * np.log((1 - g(φ) * np.exp(-D1(φ) * tau)) / (1 - g(φ)))
+    return lambda φ: np.exp(A(φ) + C(φ) * v0)
 
+
+
+
+
+    

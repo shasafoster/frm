@@ -1,13 +1,10 @@
 # -*- coding: utf-8 -*-
-"""
-@author: Shasa Foster
-https://www.linkedin.com/in/shasafoster
-"""
+
 
 if __name__ == "__main__":
     import os
     import pathlib
-    os.chdir(pathlib.Path(__file__).parent.parent.parent.resolve())     
+    os.chdir(pathlib.Path(__file__).parent.parent.parent.parent.resolve())     
     print('__main__ - current working directory:', os.getcwd())
 
 import holidays
@@ -16,7 +13,7 @@ import numpy as np
 import datetime as dt
 import time
 import pickle
-from frm.frm.market_data.iban_ccys import VALID_CCYS
+#from frm.frm.market_data.iban_ccys import VALID_CCYS
 
 def log(log_idx, t1, msg):
     t2 = time.time()
@@ -32,7 +29,7 @@ ccy_country_mapping = {
     'EUR': 'EUREX',  # Euro - EUREX
     'JPY': 'JPX',  # Japanese Yen - Tokyo Stock Exchange
     'GBP': 'LSE',  # British Pound - London Stock Exchange
-    'AUD': 'ASX',  # Australian Dollar - Australian Securities Exchange
+    #'AUD': 'ASX',  # Australian Dollar - Australian Securities Exchange
     'CAD': 'TSX',  # Canadian Dollar - Toronto Stock Exchange
     'CHF': 'SIX',  # Swiss Franc - SIX Swiss Exchange
     'NZD': 'XNZE',  # New Zealand Dollar - New Zealand Stock Exchange
@@ -42,6 +39,7 @@ ccy_country_mapping = {
     'NOK': 'OSE',  # Norwegian Krone - Olso Stock Exchange
     
     # Otherwise use country holidays from 'holidays'
+    'AUD': ('Australia','NSW'),
     'MXN': 'Mexico', # Mexican Peso - Mexican Stock Exchange
     'SGD': 'Singapore',  # Singapore Dollar
     'KRW': 'SouthKorea',  # South Korean Won
@@ -68,6 +66,14 @@ ccy_country_mapping = {
     # Add more currencies here...
 }
 
+# https://legislation.nsw.gov.au/view/html/inforce/current/act-2008-049#pt.3A
+# the first Monday in August (Bank Holiday).
+custom_holidays = {
+    
+    
+    }
+
+
 def get_holidays(ccy,
                  start_date=None, 
                  end_date=None):
@@ -80,21 +86,25 @@ def get_holidays(ccy,
     if end_date == None:
         end_date = dt.datetime(2100, 1, 1)    
     
-    with open('./frm/frm/schedule/ccy_holidays_dict.pkl', 'rb') as f:
-        ccy_holidays_dict = pickle.load(f)    
-
-    if ccy.upper() in ccy_holidays_dict.keys():
-        log_idx, t = log(log_idx, t, 'read in pickled holidays')
-        return ccy_holidays_dict[ccy]    
-    else:
-        print(ccy, ' is not in ccy_holidays_dict.pkl')
-        
-        if ccy.upper() in ccy_country_mapping.keys():
-            market_or_country = ccy_country_mapping[ccy.upper()]
+    try:
+        with open('./frm/frm/schedule/ccy_holidays_dict.pkl', 'rb') as f:
+            ccy_holidays_dict = pickle.load(f)  
             
-            if market_or_country in mcal.get_calendar_names():
+            if ccy.upper() in ccy_holidays_dict.keys():
+                log_idx, t = log(log_idx, t, 'read in pickled holidays')
+                return ccy_holidays_dict[ccy]  
+            else:
+                print(ccy, ' is not in ccy_holidays_dict.pkl')
+            
+    except FileNotFoundError:
+        pass
+
+        if ccy.upper() in ccy_country_mapping.keys():
+            holiday_index = ccy_country_mapping[ccy.upper()]
+            
+            if holiday_index in mcal.get_calendar_names():
                 # Get calendar for the market
-                cal = mcal.get_calendar(market_or_country)
+                cal = mcal.get_calendar(holiday_index)
                 # Get market schedule
                 market_schedule = cal.schedule(start_date=start_date, end_date=end_date)
                 valid_days_np  = np.array(market_schedule.index.values.astype('datetime64[D]'), dtype='datetime64[D]')
@@ -105,11 +115,19 @@ def get_holidays(ccy,
                 return holidays_np 
             else:
                 # If the market is not in the pandas_market_calendars package, get the country holidays
-                try:
-                    country_holidays = holidays.CountryHoliday(market_or_country, years=list(range(start_date.year, end_date.year+1)))
-                except:
-                    country_holidays = holidays.CountryHoliday(market_or_country)
+                
+                if isinstance(holiday_index, tuple):
+                    country, prov = holiday_index[0], holiday_index[1]
                     
+                elif isinstance(holiday_index, str):
+                    country = holiday_index
+                    prov = None
+                
+                try:
+                    country_holidays = holidays.CountryHoliday(country=country, prov=prov, years=list(range(start_date.year, end_date.year+1)))
+                except:
+                    country_holidays = holidays.CountryHoliday(country=country, prov=prov)
+                
                 # Convert to numpy datetime64[D] format and return busdaycalendar
                 holidays_np = np.array(list(country_holidays.keys()))
                 log_idx, t = log(log_idx, t, 'get holidays for ' + ccy + ' from holidays.CountryHoliday()')
@@ -224,6 +242,7 @@ if __name__ == "__main__":
     log_idx = 1
     t = time.time()
     cal = get_calendar(['USD'])
+    dict_holidays = {ccy : pd.DataFrame(get_holidays(ccy)) for ccy in ['AUD']}
     #dict_holidays = {ccy : pd.DataFrame(get_holidays(ccy)) for ccy in ['USD','AUD','JPY','NZD','EUR','GBP','CNY']}
     
     

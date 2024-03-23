@@ -1,8 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-@author: Shasa Foster
-https://www.linkedin.com/in/shasafoster
-"""
+
 
 if __name__ == "__main__":
     import os
@@ -17,6 +14,7 @@ import numpy as np
 import pandas as pd
 from pandas import DateOffset
 from typing import Union
+import datetime as dt
   
 
 def get_spot_offset(curve_ccy: str=None) -> int:
@@ -137,11 +135,17 @@ def offset_market_data_date(curve_date: np.datetime64,
     
     date_offset = tenor_name_to_date_offset(tenor_name)
     
-    if tenor_name in {'on','tn'}:
+    if tenor_name in {'on'}:
         return curve_date + date_offset.item() 
     else:
         return spot_date + date_offset.item()
 
+@np.vectorize
+def get_tenor_effective_date(tenor_name, curve_date, spot_date):
+    if tenor_name in {'on'}:
+        return curve_date 
+    else:
+        return spot_date 
 
 def calc_tenor_date(curve_date: pd.Timestamp,
                     tenor_name: Union[str, np.ndarray], 
@@ -152,8 +156,11 @@ def calc_tenor_date(curve_date: pd.Timestamp,
     if holiday_calendar == None or pd.isna(holiday_calendar):
         holiday_calendar = np.busdaycalendar()
     
-    curve_date = np.datetime64(curve_date.date())
-    
+    if type(curve_date) == dt.date:
+        curve_date = np.datetime64(curve_date)
+    else:
+        curve_date = np.datetime64(curve_date.date())
+            
     if spot_offset:
         spot_date = np.busday_offset(curve_date, offsets=get_spot_offset(curve_ccy), roll='following', busdaycal=holiday_calendar)
     else: 
@@ -171,6 +178,7 @@ def calc_tenor_date(curve_date: pd.Timestamp,
         holiday_rolled_offset_date = pd.Timestamp(holiday_rolled_offset_date.item()) # For scalar
     else:
         holiday_rolled_offset_date = pd.DatetimeIndex(holiday_rolled_offset_date) # For array
+    
     
     
     return holiday_rolled_offset_date, cleaned_tenor_name, pd.Timestamp(spot_date)  
