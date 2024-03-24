@@ -90,86 +90,46 @@ pricing_method_cos = 'heston_cosine'
 # print(f"Elapsed time: {end_time - start_time:.2f} seconds")
 
 
-#%%%
 
-i = 0
+i = 2
 rf = r_f[i] # 0.01131
 rd = r_d[i] # 0.0070075
 K = np.array([1.03413767, 1.15064198, 1.28873193, 1.466967  , 1.6959051 ])
 cp = [-1, -1, 1, 1, 1]
 
 # Inputs
-v0 = 0.014820628
+v0 = 0.1217400016428454
 vv = 0.293475456
 kappa = 1.5
 theta = 0.017132031
 rho = 0.232453505225961
 
 S0 = 1.2779
-tau = 2
+tau = 0.5
+
+
 
 print('Heston1993', heston1993_price_fx_vanilla_european(S0, tau, rf, rd, cp[i], K[i], v0, vv, kappa, theta, rho, 0))
 print('CM_GQ:', heston_carr_madan_fx_vanilla_european(S0, tau, rf, rd, cp[i], K[i], v0, vv, kappa, theta, rho, integration_method=0))
 print('CM_FFT:', heston_carr_madan_fx_vanilla_european(S0, tau, rf, rd, cp[i], K[i], v0, vv, kappa, theta, rho, integration_method=1))
-print('COS:', heston_cos_vanilla_european(S0, tau, rf, rd, cp[i], K[i], v0, vv, kappa, theta, rho, N=160, L=3))
-print('COS2:', heston_cos_vanilla_european2(S0, tau, rf, rd, cp[i], K[i], v0, vv, kappa, theta, rho, N=160, L=3))
+print('COS:', heston_cos_vanilla_european(S0, tau, rf, rd, cp[i], K[i], v0, vv, kappa, theta, rho, N=160, L=10))
+print('COS2:', heston_cos_vanilla_european2(S0, tau, rf, rd, cp[i], K[i], v0, vv, kappa, theta, rho, N=160, L=10))
 
-print(K[i]/S)
-print(np.log(K[i]/S))
+
+#heston1993_price_fx_vanilla_european(s0=1.2, tau=2, r_f=0.001, r_d=0.0011, cp=1, K=1, v0=0.1, vv=0.0001, kappa=0, theta=0.1**2, rho=0, lambda_=0)
+
+#Heston1993 0.010856228973634544
+#CM_GQ: 0.010856228973635803
+#CM_FFT: 0.010921155228074013
+#chf version 1 <function chf_heston_cosine_model.<locals>.<lambda> at 0x000002B192032200>
+#COS: [[0.01669337]]
+#COS2: [0.00124444]
+
+#print(K[i]/S)
+#print(np.log(K[i]/S))
 
 #%%
 
-
-
-# In[6]: COS with Fang & Oosterlee (2008) Version of Heston's Characteristic Function
-
-# r      = rd                  # assumption Risk-free rate
-# mu     = r #annualisedMean  # Mean rate of drift
-# sigma  = v0 # Initial Vola of underyling at time 0; also called u0 or a
-# S0     = S       # Today's stock price
-# tau    = tau           # Time to expiry in years
-# q      = 0                  # Divindend Yield
-# lm     = kappa             # The speed of mean reversion
-# v_bar  = theta  # Mean level of variance of the underlying
-# volvol =  vv            # Volatility of the volatiltiy process
-# rho    = rho            # Covariance between the log stock and the variance process
-
-# # Truncation Range
-# L       = 120
-# a, b    = func.truncationRange(L, mu, tau, sigma, v_bar, lm, rho, volvol)
-# bma     = b-a
-
-# # Number of Points
-# N       = 15
-# k       = np.arange(np.power(2,N))
-
-# # Input for the Characterstic Function Phi
-# u       = k * np.pi/bma
-
-# K = [strikes[i]]
-
-# #  In[4]: COS-FFT Value Function for Put
-# UkPut  = 2 / bma * ( func.cosSer1(a,b,a,0,k) - func.cosSerExp(a,b,a,0,k) )
-# UkCall = 2 / bma * ( func.cosSerExp(a,b,0,b,k) - func.cosSer1(a,b,0,b,k) )
-
-# charactersticFunctionHFO = func.charFuncHestonFO(mu, r, u, tau, sigma, v_bar, lm, rho, volvol)
-
-# C_COS_HFO = np.zeros((np.size(K)))
-# P_COS_HFO = np.zeros((np.size(K)))
-# C_COS_PCP = np.zeros((np.size(K)))
-
-# for m in range(0, np.size(K)):
-#     x  = np.log(S0/K[m])
-#     addIntegratedTerm = np.exp(1j * k * np.pi * (x-a)/bma)
-#     Fk = np.real(charactersticFunctionHFO * addIntegratedTerm)
-#     Fk[0] = 0.5 * Fk[0]						
-#     C_COS_HFO[m] = K[m] * np.sum(np.multiply(Fk, UkCall)) * np.exp(-r * tau)
-#     P_COS_HFO[m] = K[m] * np.sum(np.multiply(Fk, UkPut)) * np.exp(-r * tau)
-#     C_COS_PCP[m] = P_COS_HFO[m] + S0 * np.exp(-q * tau) - K[m] * np.exp(-r * tau)
-
-# print(C_COS_HFO)
-# print(P_COS_HFO)
-# print(C_COS_PCP)
 
 
 

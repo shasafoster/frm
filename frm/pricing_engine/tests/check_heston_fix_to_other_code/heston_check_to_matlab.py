@@ -8,7 +8,7 @@ if __name__ == "__main__":
     import pathlib
     import sys
     
-    os.chdir(pathlib.Path(__file__).parent.parent.parent.parent.parent.resolve()) 
+    os.chdir(pathlib.Path(__file__).parent.parent.parent.parent.parent.parent.resolve()) 
     sys.path.append(os.getcwd())
     print('__main__ - current working directory:', os.getcwd())
 
@@ -18,7 +18,6 @@ import matplotlib.pyplot as plt
 from scipy.stats import norm
 from time import time
 import pandas as pd
-
 
 
 # Initialize
@@ -57,7 +56,7 @@ for i, σ_market in enumerate(σ_market_set):
         #delta_spot = np.exp(-r_f[i] * tau[i]) * delta
         v0, vv, kappa, theta, rho, lambda_, IV, SSE = heston_fit_vanilla_fx_smile(Δ, Δ_convention, σ_market, S, r_f[i], r_d[i], tau[i], cp, pricing_method=pricing_method)        
         results_gk.append([v0, vv, kappa, theta, rho, lambda_, IV, SSE])
-       
+
         # Displaying output
         print(f'=== {tenors[i]} calibration results ===')
         print(f'v0, vv, kappa, theta, rho: {v0, vv, kappa, theta, rho}')
