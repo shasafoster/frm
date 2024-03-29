@@ -12,7 +12,7 @@ if __name__ == "__main__":
     sys.path.append(os.getcwd())
     print('__main__ - current working directory:', os.getcwd())
 
-from frm.frm.pricing_engine.heston_garman_kohlhagen import heston1993_price_fx_vanilla_european, heston_fit_vanilla_fx_smile, heston_cos_vanilla_european, heston_carr_madan_fx_vanilla_european
+from frm.frm.pricing_engine.heston_garman_kohlhagen import heston1993_price_fx_vanilla_european, heston_fit_vanilla_fx_smile
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import norm
@@ -47,8 +47,10 @@ results_gk = []
 results_cos = []
 
 #pricing_method = 'heston_analytical_1993'
-pricing_method = 'heston_carr_madan_gauss_kronrod_quadrature'
+#pricing_method = 'heston_carr_madan_gauss_kronrod_quadrature'
 #pricing_method = 'heston_carr_madan_fft_w_simpsons'
+pricing_method = 'heston_cosine'
+
 
 # Main loop for various smiles
 for i, σ_market in enumerate(σ_market_set):
