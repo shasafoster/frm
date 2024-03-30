@@ -35,7 +35,6 @@ def validate_input(var, var_name, validation_fn):
             raise ValueError(f"'{var_name}' has invalid values: {var}")
 
 
-
 def heston_fit_vanilla_fx_smile(
         Δ: np.array, 
         Δ_convention: str, 
@@ -124,6 +123,7 @@ def heston_fit_vanilla_fx_smile(
                 else:
                     raise ValueError("Invalid 'pricing_method:", pricing_method)
             
+        for i in range(nb_strikes):
             if P[i] < 0.0:
                 IV[i] = -1.0
             else:
@@ -177,7 +177,7 @@ def heston_fit_vanilla_fx_smile(
     IV = np.zeros(nb_strikes)
     
     if pricing_method == 'heston_cosine':
-        P = heston_cosine_price_fx_vanilla_european(S0=S0, tau=tau, r_f=r_f, r_d=r_d, cp=cp, strikes=strikes, var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho)
+        P = heston_cosine_price_fx_vanilla_european(S0=S0, tau=tau, r_f=r_f, r_d=r_d, cp=cp, K=strikes, var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho)
     else:
         # Integral required for each strike hence can't be vectorised
         for i in range(nb_strikes):
@@ -392,7 +392,7 @@ def get_simpson_weights(n):
     return weights / 3
 
 
-#@jit(nopython=True)
+@jit(nopython=True)
 def heston_fft_fx_vanilla_european_integral(v, cp, log_S0, log_K, tau, r_f, r_d, var0, vv, kappa, theta, rho, alpha):
     """
     Auxiliary function for heston_carr_madan_fx_vanilla_european.
@@ -422,7 +422,7 @@ def heston_fft_fx_vanilla_european_integral(v, cp, log_S0, log_K, tau, r_f, r_d,
     return np.real(np.exp(-1j * v * log_K) * ftt_func)
 
 
-#@jit
+@jit
 def chf_heston_albrecher2007(u, log_S0, tau, r_f, r_d, var0, vv, kappa, theta, rho):
     """
     Compute the characteristic function for the Heston model.

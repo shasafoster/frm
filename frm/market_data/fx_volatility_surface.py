@@ -37,14 +37,13 @@ import re
 import matplotlib.pyplot as plt
 
 
+# Models TBC: sabr, svi_sabr, vanna_volga, sv_local_vol, jump_diffusion
 VALID_FX_SMILE_INTERPOLATION_METHOD = Literal['univariate_spline',
                                               'cubic_spline',
                                               'heston_analytical_1993',
                                               'heston_carr_madan_gauss_kronrod_quadrature',
                                               'heston_carr_madan_fft_w_simpsons',
-                                              'vanna_volga',
-                                              'sabr',
-                                              'svi_sabr']
+                                              'heston_cosine']
 
 
 @dataclass
@@ -67,7 +66,7 @@ class FXVolatilitySurface:
     
     # volatility definitions
     σ_pillar: pd.DataFrame=None
-    smile_interpolation_method: Optional[VALID_FX_SMILE_INTERPOLATION_METHOD] = 'heston_carr_madan_gauss_kronrod_quadrature'
+    smile_interpolation_method: Optional[VALID_FX_SMILE_INTERPOLATION_METHOD] = 'heston_cosine'
     spot_date: Optional[pd.Timestamp] = None
     
     #atmΔ: pd.DataFrame=None
