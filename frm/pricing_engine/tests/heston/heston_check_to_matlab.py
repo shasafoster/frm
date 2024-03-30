@@ -23,12 +23,14 @@ import pandas as pd
 # Initialize
 standalone = 0  # set to 0 to make plots as seen in STF2
 delta_plt = np.array([0.1, 0.25, 0.5, 0.75, 0.9]) # forward deltas
-Δ = np.array([-0.1, -0.25, 0.5, 0.25, 0.1])
+#Δ = np.array([-0.1, -0.25, 0.5, 0.25, 0.1])
+Δ = np.array([0.1, 0.25, 0.5, -0.25, -0.1])
 r_d = np.array([0.31100, 0.32875, 0.49781, 0.70075, 1.08, 1.08]) * 0.01
 r_f = np.array([0.58, 0.631, 0.884, 1.131, 1.399, 1.399]) * 0.01
 tau = np.array([7 / 365, 1 / 12, 3 / 12, 6 / 12, 1, 2])
 S = 1.2779
-cp = np.array([-1, -1, 1, 1, 1])
+#cp = np.array([-1, -1, 1, 1, 1])
+cp = np.array([1, 1, 1, -1, -1])
 Δ_convention = 'regular_forward_Δ'
 
 tenors = ['1W','1M','3M','6M','1Y','2Y']
@@ -47,22 +49,22 @@ results_gk = []
 results_cos = []
 
 #pricing_method = 'heston_analytical_1993'
-#pricing_method = 'heston_carr_madan_gauss_kronrod_quadrature'
+pricing_method = 'heston_carr_madan_gauss_kronrod_quadrature'
 #pricing_method = 'heston_carr_madan_fft_w_simpsons'
-pricing_method = 'heston_cosine'
+#pricing_method = 'heston_cosine'
 
 
 # Main loop for various smiles
 for i, σ_market in enumerate(σ_market_set):
-    if i > -5:
+    if i == 0:
         #delta_spot = np.exp(-r_f[i] * tau[i]) * delta
-        v0, vv, kappa, theta, rho, lambda_, IV, SSE = heston_fit_vanilla_fx_smile(Δ, Δ_convention, σ_market, S, r_f[i], r_d[i], tau[i], cp, pricing_method=pricing_method)        
-        results_gk.append([v0, vv, kappa, theta, rho, lambda_, IV, SSE])
+        var0, vv, kappa, theta, rho, lambda_, IV, SSE = heston_fit_vanilla_fx_smile(Δ, Δ_convention, σ_market, S, r_f[i], r_d[i], tau[i], cp, pricing_method=pricing_method)        
+        results_gk.append([tenors[i], var0, vv, kappa, theta, rho, lambda_, IV, SSE])
 
         # Displaying output
         print(f'=== {tenors[i]} calibration results ===')
-        print(f'v0, vv, kappa, theta, rho: {v0, vv, kappa, theta, rho}')
-        #print(f'[IV (10, 25, ATM, 75, 90), SSE] * 100%: {IV*100, SSE*100}')
+        print(f'v0, vv, kappa, theta, rho: {var0, vv, kappa, theta, rho}')
+        print(f'[IV (10, 25, ATM, 75, 90), SSE] * 100%: {IV*100, SSE*100}')
         
         # Plotting
         plt.figure(i+1)

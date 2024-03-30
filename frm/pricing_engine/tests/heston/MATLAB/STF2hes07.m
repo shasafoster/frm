@@ -52,6 +52,8 @@ ylabel ('Implied volatility [%]');
 set(gca,'XTick', [10 25 50 75 90]);
 hold off
 
+%%
+
 % 1M smile ----------------------------------------------------------
 marketvols = marketvols1m;
 % Calculate spot delta

@@ -90,7 +90,7 @@ def heston_fit_vanilla_fx_smile(
         param (list): [vol of vol (vv), long-run variance (theta), correlation (rho)]
         var0 (float): Initial variance.
         kappa (float): Mean reversion speed to the long-run variance
-        s0 (float): Spot price.
+        S0 (float): Spot price.
         tau (float): Time to maturity in years.
         r_f (float): Foreign interest rate (annualized).        
         r_d (float): Domestic interest rate (annualized).
@@ -111,16 +111,16 @@ def heston_fit_vanilla_fx_smile(
         IV = np.zeros(nb_strikes)
         
         if pricing_method == 'heston_cosine':
-            P = heston_cosine_price_fx_vanilla_european(S0, tau, r_f, r_d, cp, strikes, var0, vv, kappa, theta, rho)
+            P = heston_cosine_price_fx_vanilla_european(S0=S0, tau=tau, r_f=r_f, r_d=r_d, cp=cp, K=strikes, var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho)
         else:
             # Integral required for each strike hence can't be vectorised
             for i in range(nb_strikes):        
                 if pricing_method == 'heston_analytical_1993':
-                    P[i] = heston1993_price_fx_vanilla_european(S0, tau, r_f, r_d, cp[i], K[i], var0, vv, kappa, theta, rho, lambda_)
+                    P[i] = heston1993_price_fx_vanilla_european(S0=S0, tau=tau, r_f=r_f, r_d=r_d, cp=cp[i], K=K[i], var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho, lambda_=lambda_)
                 elif pricing_method == 'heston_carr_madan_gauss_kronrod_quadrature':
-                    P[i] = heston_carr_madan_price_fx_vanilla_european(S0, tau, r_f, r_d, cp[i], K[i], var0, vv, kappa, theta, rho, integration_method=0)
+                    P[i] = heston_carr_madan_price_fx_vanilla_european(S0=S0, tau=tau, r_f=r_f, r_d=r_d, cp=cp[i], K=K[i], var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho, integration_method=0)
                 elif pricing_method == 'heston_carr_madan_fft_w_simpsons':
-                    P[i] = heston_carr_madan_price_fx_vanilla_european(S0, tau, r_f, r_d, cp[i], K[i], var0, vv, kappa, theta, rho, integration_method=1)
+                    P[i] = heston_carr_madan_price_fx_vanilla_european(S0=S0, tau=tau, r_f=r_f, r_d=r_d, cp=cp[i], K=K[i], var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho, integration_method=1)
                 else:
                     raise ValueError("Invalid 'pricing_method:", pricing_method)
             
@@ -165,7 +165,7 @@ def heston_fit_vanilla_fx_smile(
     # Set initial values for vv, theta, rho (the parameters we are solving for)
     initparam = [2 * np.sqrt(var0), 2*var0, 0]
 
-    res = scipy.optimize.minimize(lambda param: heston_vanilla_sse(param, var0, kappa, S0, tau, r_f, r_d, cp, strikes, σ_market), initparam)
+    res = scipy.optimize.minimize(lambda param: heston_vanilla_sse(param, var0=var0, kappa=kappa, S0=S0, tau=tau, r_f=r_f, r_d=r_d, cp=cp, K=strikes, σ_market=σ_market), initparam)
     vv, theta, rho = res.x
     
     if 2 * kappa * theta - vv**2 <= 0.0:
@@ -177,23 +177,23 @@ def heston_fit_vanilla_fx_smile(
     IV = np.zeros(nb_strikes)
     
     if pricing_method == 'heston_cosine':
-        P = heston_cosine_price_fx_vanilla_european(S0, tau, r_f, r_d, cp, strikes, var0, vv, kappa, theta, rho)
+        P = heston_cosine_price_fx_vanilla_european(S0=S0, tau=tau, r_f=r_f, r_d=r_d, cp=cp, strikes=strikes, var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho)
     else:
         # Integral required for each strike hence can't be vectorised
         for i in range(nb_strikes):
             if pricing_method == 'heston_analytical_1993':
-                P[i] = heston1993_price_fx_vanilla_european(S0, tau, r_f, r_d, cp[i], strikes[i], var0, vv, kappa, theta, rho, lambda_)
+                P[i] = heston1993_price_fx_vanilla_european(S0=S0, tau=tau, r_f=r_f, r_d=r_d, cp=cp[i], K=strikes[i], var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho, lambda_=lambda_)
             elif pricing_method == 'heston_carr_madan_gauss_kronrod_quadrature':
-                P[i] = heston_carr_madan_price_fx_vanilla_european(S0, tau, r_f, r_d, cp[i], strikes[i], var0, vv, kappa, theta, rho, integration_method=0)
+                P[i] = heston_carr_madan_price_fx_vanilla_european(S0=S0, tau=tau, r_f=r_f, r_d=r_d, cp=cp[i], K=strikes[i], var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho, integration_method=0)
             elif pricing_method == 'heston_carr_madan_fft_w_simpsons':
-                P[i] = heston_carr_madan_price_fx_vanilla_european(S0, tau, r_f, r_d, cp[i], strikes[i], var0, vv, kappa, theta, rho, integration_method=1)
+                P[i] = heston_carr_madan_price_fx_vanilla_european(S0=S0, tau=tau, r_f=r_f, r_d=r_d, cp=cp[i], K=strikes[i], var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho, integration_method=1)
             else:
                 raise ValueError("Invalid 'pricing_method:", pricing_method)
 
     for i in range(nb_strikes):    
         IV[i] = gk_solve_implied_σ(S0=S0, tau=tau, r_f=r_f, r_d=r_d, cp=cp[i], K=strikes[i], X=P[i], σ_guess=σ_market[i])
  
-    SSE = heston_vanilla_sse(res.x, var0, kappa, S0, tau, r_f, r_d, cp, strikes, σ_market)      
+    SSE = heston_vanilla_sse(res.x, var0=var0, kappa=kappa, S0=S0, tau=tau, r_f=r_f, r_d=r_d, cp=cp, K=strikes, σ_market=σ_market)      
     
     if SSE == np.inf:
         warnings.warn("Calibration failed, SSE==inf")
@@ -204,7 +204,7 @@ def heston_fit_vanilla_fx_smile(
 #%% Heston 1993 analytical pricing implementation (2nd version of the Characteristic function)
 
 @jit(nopython=True)
-def heston_1993_fx_vanilla_european_integral(φ, m, s0, K, tau, r_f, r_d, var0, vv, kappa, theta, rho, lambda_):
+def heston_1993_fx_vanilla_european_integral(φ, m, S0, K, tau, r_f, r_d, var0, vv, kappa, theta, rho, lambda_):
     """
     Defines the integral for pricing an FX Vanilla European option per the analytic Heston 1993 formula
     This implementation uses the 2nd form of the Heston Characteristic function, detailed in Albrecher 2006 is used as it is more numerically stable.
@@ -213,7 +213,7 @@ def heston_1993_fx_vanilla_european_integral(φ, m, s0, K, tau, r_f, r_d, var0, 
     Parameters:
     φ (complex): Point at which the auxiliary function is evaluated.
     m (int): Index for specific calculation (either 1 or 2).
-    s0 (float): Spot price of the underlying.
+    S0 (float): Spot price of the underlying, specified in # of units of domestic per 1 unit of foreign currency
     K (float): Strike price.
     var0 (float): Initial variance.
     vv (float): Volatility of volatility.
@@ -239,14 +239,13 @@ def heston_1993_fx_vanilla_european_integral(φ, m, s0, K, tau, r_f, r_d, var0, 
     mu = r_d - r_f
     
     # x per equation (11) from Heston, 1993
-    x = np.log(s0) 
+    x = np.log(S0) 
     # a, u, b per equation (12) from Heston, 1993
     a = kappa * theta 
     u = [0.5, -0.5] 
     b = [kappa + lambda_ - rho * vv, kappa + lambda_] 
     
     σ = vv # In Heston, 1993, the volatility of the volatility is defined as σ 
-    
     
     # d is per per equation (17) from Heston, 1993
     d = np.sqrt((rho *σ*φ*1j - b[m-1])**2 - σ**2 * (2*u[m-1]*φ*1j - φ**2))
@@ -269,20 +268,24 @@ def heston_1993_fx_vanilla_european_integral(φ, m, s0, K, tau, r_f, r_d, var0, 
     return F
 
 
-def heston1993_price_fx_vanilla_european(s0, tau, r_f, r_d, cp, K, var0, vv, kappa, theta, rho, lambda_):
+def heston1993_price_fx_vanilla_european(S0, tau, r_f, r_d, cp, K, var0, vv, kappa, theta, rho, lambda_):
     """
     Calculate the price of a European Vanilla FX option using the analytical Heston 1993 formulae
     The 2nd form of the Heston Characteristic function, detailed in Albrecher 2006 is used as it is more numerically stable.
     
     Parameters:
-    cp (int): Call (1) or Put (-1) option.
-    s0 (float): Spot price.
+    S0 (float): FX spot price, specified in # of units of domestic per 1 unit of foreign currency
+    tau (float): Time to expiry in years.
+    r_d (float): Domestic interest rate.
+    r_f (float): Foreign interest rate.    
+    
+        cp (int): Call (1) or Put (-1) option.
+
     k (float): Strike price.
     var0 (float): Initial variance.
     vv (float): Volatility of volatility.
-    r_d (float): Domestic interest rate.
-    r_f (float): Foreign interest rate.
-    tau (float): Time to maturity in years.
+
+
     kappa (float): Mean reversion speed to the long-run variance
     theta (float): Long-run variance.
     lambda_ (float): Market price of volatility risk.
@@ -305,14 +308,14 @@ def heston1993_price_fx_vanilla_european(s0, tau, r_f, r_d, cp, K, var0, vv, kap
     """
 
     # Equation (18) from Heston, 1993
-    P1 = 0.5 + 1/np.pi * scipy.integrate.quad(lambda φ: heston_1993_fx_vanilla_european_integral(φ=φ, m=1, s0=s0, K=K, tau=tau, r_f=r_f, r_d=r_d, var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho, lambda_=lambda_), 0, np.inf, epsrel=1e-8)[0]
-    P2 = 0.5 + 1/np.pi * scipy.integrate.quad(lambda φ: heston_1993_fx_vanilla_european_integral(φ=φ, m=2, s0=s0, K=K, tau=tau, r_f=r_f, r_d=r_d, var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho, lambda_=lambda_), 0, np.inf, epsrel=1e-8)[0]
+    P1 = 0.5 + 1/np.pi * scipy.integrate.quad(lambda φ: heston_1993_fx_vanilla_european_integral(φ=φ, m=1, S0=S0, K=K, tau=tau, r_f=r_f, r_d=r_d, var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho, lambda_=lambda_), 0, np.inf, epsrel=1e-8)[0]
+    P2 = 0.5 + 1/np.pi * scipy.integrate.quad(lambda φ: heston_1993_fx_vanilla_european_integral(φ=φ, m=2, S0=S0, K=K, tau=tau, r_f=r_f, r_d=r_d, var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho, lambda_=lambda_), 0, np.inf, epsrel=1e-8)[0]
 
     Pplus = (1 - cp) / 2 + cp * P1   # Pplus = N(d1)
     Pminus = (1 - cp) / 2 + cp * P2  # Pminus = N(d2)
 
     # tk is this for spot or forward Δ, matlab code assumed spot delta input?
-    X = cp * (s0 * np.exp(-r_f * tau) * Pplus - K * np.exp(-r_d * tau) * Pminus) 
+    X = cp * (S0 * np.exp(-r_f * tau) * Pplus - K * np.exp(-r_d * tau) * Pminus) 
     
     return X
 
@@ -320,7 +323,7 @@ def heston1993_price_fx_vanilla_european(s0, tau, r_f, r_d, cp, K, var0, vv, kap
 # (method=0) Gauss-Kronrod quadrature
 # (method=1) Fast Fourier Transform + Simpson method 
 
-def heston_carr_madan_price_fx_vanilla_european(S, tau, r_f, r_d, cp, K, var0, vv, kappa, theta, rho, integration_method=0):    
+def heston_carr_madan_price_fx_vanilla_european(S0, tau, r_f, r_d, cp, K, var0, vv, kappa, theta, rho, integration_method=0):    
     """
      Calculate European FX option price using the Heston model via Carr-Madan approach.
      
@@ -351,12 +354,12 @@ def heston_carr_madan_price_fx_vanilla_european(S, tau, r_f, r_d, cp, K, var0, v
     else:
         raise ValueError
     
-    log_s0 = np.log(S)
+    log_S0 = np.log(S0)
     log_K = np.log(K)
     
     if integration_method == 0:
         # Integrate using adaptive Gauss-Kronrod quadrature
-        result, _ = scipy.integrate.quad(heston_fft_fx_vanilla_european_integral, 0, np.inf, args=(cp, log_s0, log_K, tau, r_f, r_d, var0, vv, kappa, theta, rho, alpha))
+        result, _ = scipy.integrate.quad(heston_fft_fx_vanilla_european_integral, 0, np.inf, args=(cp, log_S0, log_K, tau, r_f, r_d, var0, vv, kappa, theta, rho, alpha))
         y = np.exp(-cp * log_K * alpha) * result / np.pi
     elif integration_method == 1:
         # Fast Fourier Transform with Simpson's rule (as suggested in [2])
@@ -369,7 +372,7 @@ def heston_carr_madan_price_fx_vanilla_european(S, tau, r_f, r_d, cp, K, var0, v
         ku = -b + lambda_ * np.array(range(0,N)) # Equation (19) per Carr-Madan, 1998
         
         u = v - (cp * alpha + 1) * 1j
-        chf = chf_heston_albrecher2007(u=u, log_s0=log_s0, tau=tau, r_f=r_f, r_d=r_d, var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho)
+        chf = chf_heston_albrecher2007(u=u, log_S0=log_S0, tau=tau, r_f=r_f, r_d=r_d, var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho)
         F = chf * np.exp(-r_d * tau) / (alpha**2 + cp * alpha - v**2 + 1j * (cp * 2 * alpha + 1) * v)
         
         # Use Simpson's approximation to calculate FFT (see [2])
@@ -389,15 +392,15 @@ def get_simpson_weights(n):
     return weights / 3
 
 
-@jit(nopython=True)
-def heston_fft_fx_vanilla_european_integral(v, cp, log_s0, log_K, tau, r_f, r_d, var0, vv, kappa, theta, rho, alpha):
+#@jit(nopython=True)
+def heston_fft_fx_vanilla_european_integral(v, cp, log_S0, log_K, tau, r_f, r_d, var0, vv, kappa, theta, rho, alpha):
     """
     Auxiliary function for heston_carr_madan_fx_vanilla_european.
 
     Parameters:
         v: Evaluation points for auxiliary function.
         cp: Option type (1 for call, -1 for put).
-        log_s0 (float): Natural Log of the initial spot price (in # of domestic currency units per 1 foreign currency unit)
+        log_S0 (float): Natural Log of the initial spot price (in # of domestic currency units per 1 foreign currency unit)
         log_K: Natural log of strike price (in # of domestic currency units per 1 foreign currency unit)
         tau (float): Time to maturity (in years)
         r_f (float): Foreign risk-free interest rate.
@@ -414,19 +417,19 @@ def heston_fft_fx_vanilla_european_integral(v, cp, log_s0, log_K, tau, r_f, r_d,
     """
     
     u = v - (cp * alpha + 1) * 1j
-    chf = chf_heston_albrecher2007(u=u, log_s0=log_s0, tau=tau, r_f=r_f, r_d=r_d, var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho)
+    chf = chf_heston_albrecher2007(u=u, log_S0=log_S0, tau=tau, r_f=r_f, r_d=r_d, var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho)
     ftt_func = chf * np.exp(-r_d * tau) / (alpha**2 + cp * alpha - v ** 2 + 1j * (cp * 2 * alpha + 1) * v)
     return np.real(np.exp(-1j * v * log_K) * ftt_func)
 
 
-@jit
-def chf_heston_albrecher2007(u, log_s0, tau, r_f, r_d, var0, vv, kappa, theta, rho):
+#@jit
+def chf_heston_albrecher2007(u, log_S0, tau, r_f, r_d, var0, vv, kappa, theta, rho):
     """
     Compute the characteristic function for the Heston model.
     
     Parameters:
     u (float or np.array): The argument of the characteristic function.
-    log_s0 (float): Natural Log of the initial spot price (in # of domestic currency units per 1 foreign currency unit)
+    log_S0 (float): Natural Log of the initial spot price (in # of domestic currency units per 1 foreign currency unit)
     tau (float): Time to maturity (in years)
     r_f (float): Foreign risk-free interest rate.
     r_d (float): Domestic risk-free interest rate.
@@ -465,7 +468,7 @@ def chf_heston_albrecher2007(u, log_s0, tau, r_f, r_d, var0, vv, kappa, theta, r
       / (k - rho * λ * 1j * u + d)
       
     # 1st inner exponential term on line 1 of 3, in equation (2) in [2]      
-    A = 1j * u * (log_s0 + (r - q) * tau)
+    A = 1j * u * (log_S0 + (r - q) * tau)
     
     # 2nd inner exponential term on line 2 of 3, in equation (2) in [2]
     B = η*k*(λ**-2) * ((k - rho*λ*1j*u - d) * tau - 2 * np.log((1 - g2*np.exp(-d*tau)) / (1 - g2)))
@@ -475,7 +478,7 @@ def chf_heston_albrecher2007(u, log_s0, tau, r_f, r_d, var0, vv, kappa, theta, r
     
     return np.exp(A + B + C)
 
-@jit
+# Note this function (chf_heston_fang2008) is NOT speed up by use of numba/jit
 def chf_heston_fang2008(u, tau, r_f, r_d, var0, vv, kappa, theta, rho):
     """
     Compute the characteristic function for the Heston model per Fang 2008
@@ -493,7 +496,8 @@ def chf_heston_fang2008(u, tau, r_f, r_d, var0, vv, kappa, theta, rho):
 
     Returns:
         charFunc (float or np.array): Value of the characteristic function at u.
-    
+        
+    References
     [1] Fang, Fang & Oosterlee, Cornelis. (2008). A Novel Pricing Method for European Options Based on Fourier-Cosine Series Expansions. SIAM J. Scientific Computing. 31. 826-848. 10.1137/080718061. 
     [2] Albrecher, Hansjoerg & Mayer, Philipp & Schoutens, Wim & Tistaert, Jurgen. (2007). The Little Heston Trap. Wilmott. 83-92
     """    
@@ -510,9 +514,12 @@ def chf_heston_fang2008(u, tau, r_f, r_d, var0, vv, kappa, theta, rho):
     W = λ - 1j*rho*η*ω # helper term to make simpler code (not in [3])
     D = np.sqrt( W**2 + (ω**2 + 1j*ω) * (η**2))
     G2 = (W - D) / (W + D) # G2 is more stable per [2]
-    inner_exp_1 = 1j*ω*mu*tau + (u0/(η**2)) * ((1-np.exp(-D*tau))/(1 - G2*np.exp(-D*tau))) * (W-D)
-    inner_exp_2 = (λ*u_bar)/(η**2) * ((tau * (W - D)) - 2*np.log( (1-G2*np.exp(-D*tau)) / (1-G2) ))
-    chf = np.exp(inner_exp_1) * np.exp(inner_exp_2)
+    exp_D_tau = np.exp(-D*tau)
+    
+    inner_exp_1 = 1j*ω*mu*tau + (u0/(η**2)) * ((1-exp_D_tau)/(1 - G2*exp_D_tau)) * (W-D)
+    inner_exp_2 = (λ*u_bar)/(η**2) * ((tau * (W - D)) - 2*np.log( (1-G2*exp_D_tau) / (1-G2) ))
+    
+    chf = np.exp(inner_exp_1 + inner_exp_2)
     
     return chf
 
@@ -566,19 +573,24 @@ def calculate_Uk_european_options(cp, a, b, k):
         return Uk_put
 
 
-def heston_cosine_price_fx_vanilla_european(s0, tau, r_f, r_d, cp, K, var0, vv, kappa, theta, rho, N=160, L=10, calculate_via_put_call_parity=True):
+def heston_cosine_price_fx_vanilla_european(S0, tau, r_f, r_d, cp, K, var0, vv, kappa, theta, rho, N=160, L=10, calculate_via_put_call_parity=True):
     
     """
     Computes the call or put option prices using the COS method.
     
     Parameters:
+    - S0 (float): Initial FX spot price
+    - tau (float): time to expiry
+    - r_f (float): Foreign risk-free interest rate.
+    - r_d (float): Domestic risk-free interest rate.
     - cp (int): 1 for call and -1 for put
-    - s0 (float): Initial stock price
+    - S0 (float): Initial stock price
     - r (float): Interest rate
     - tau (float): Time to maturity
     - K (list or np.array): List of strike prices
     - N (int): Number of expansion terms (<160 should be sufficient per Fang, 2008)
-    - L (float): Size of truncation domain
+    - L (float): Size of truncation domain (for N=160, set L=10 per Fang, 2008)
+    - calculate_via_put_call_parity (boolean)
     
     Returns:
     - np.array: Option prices
@@ -587,7 +599,13 @@ def heston_cosine_price_fx_vanilla_european(s0, tau, r_f, r_d, cp, K, var0, vv, 
     [1] Fang, Fang & Oosterlee, Cornelis. (2008). A Novel Pricing Method for European Options Based on Fourier-Cosine Series Expansions. SIAM J. Scientific Computing. 31. 826-848. 10.1137/080718061. 
     """     
 
-    x0 = np.log(s0 / K) # Per [1] in section 3.1 on page 6 of 21
+    cp = np.atleast_1d(cp).astype(float)
+    K = np.atleast_1d(K).astype(float)
+    assert cp.shape == K.shape
+    
+    result = np.full(K.shape, np.nan)
+
+    x0 = np.log(S0 / K) # Per [1] in section 3.1 on page 6 of 21
 
     if True:
         # Apply the truncation method per appendix 11 of [1] 
@@ -609,27 +627,32 @@ def heston_cosine_price_fx_vanilla_european(s0, tau, r_f, r_d, cp, K, var0, vv, 
     k = np.arange(N)
     
     u = (k*np.pi)/(b-a)
-    
     chf = chf_heston_fang2008(u=u, tau=tau, r_f=r_f, r_d=r_d, var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho)
+    Fk = np.real(chf[:, np.newaxis]  * np.exp(1j * k[:, np.newaxis] * np.pi * (x0 - a)/(b-a))) 
+    Fk[0] = 0.5 * Fk[0] # Per page 3/21 of [1], "where Σ′ indicates that the first term in the summation is weighted by one-half"        
     
-    Uk_call = calculate_Uk_european_options(cp=1, a=a, b=b, k=k) # Per equation 29 of [1] (page 8 of 21)
-    Uk_put = calculate_Uk_european_options(cp=-1, a=a, b=b, k=k) # Per equation 29 of [1] (page 8 of 21)
     
-    Fk = np.real(chf  * np.exp(1j * k * np.pi * (x0 - a)/(b-a))) 
-    Fk[0] = 0.5 * Fk[0] # Per page 3/21 of [1], "where Σ′ indicates that the first term in the summation is weighted by one-half"    
+    if calculate_via_put_call_parity or (cp == -1).any():
+        Uk_put = calculate_Uk_european_options(cp=-1, a=a, b=b, k=k)[:, np.newaxis] # Per equation 29 of [1] (page 8 of 21)
     
-    # Note for the equations below, K can adjusted to be a vector, per equation 34 of [1] (page 8 of 21)
-    if cp == -1 or calculate_via_put_call_parity:
-        put_px = K * np.sum(np.multiply(Fk, Uk_put)) * np.exp(-r_d * tau) 
-    if cp == 1 and calculate_via_put_call_parity:
-        call_px = put_px + s0 * np.exp(-r_f * tau) - K * np.exp(-r_d * tau) # Method by put-call parity is more stable
-    elif cp == 1 and not calculate_via_put_call_parity:
-        call_px = K * np.sum(np.multiply(Fk, Uk_call)) * np.exp(-r_d * tau) 
+    if not calculate_via_put_call_parity and (cp == 1).any():
+        Uk_call = calculate_Uk_european_options(cp=1, a=a, b=b, k=k)[:, np.newaxis] # Per equation 29 of [1] (page 8 of 21)
+        
+    if calculate_via_put_call_parity:
+        # Method by put-call parity is more stable
+        put_px = K * np.multiply(Fk, Uk_put).sum(axis=0) * np.exp(-r_d * tau) 
+        call_px = put_px + S0 * np.exp(-r_f * tau) - K * np.exp(-r_d * tau)
+    else:
+        if (cp == 1).any():
+            call_px = K * np.multiply(Fk, Uk_call).sum(axis=0) * np.exp(-r_d * tau)      
+        if (cp == -1).any():
+            put_px = K * np.multiply(Fk, Uk_put).sum(axis=0) * np.exp(-r_d * tau) 
     
-    if cp == 1:
-        return call_px
-    elif cp == -1:
-        return put_px
+    result[cp == 1] = call_px[cp == 1]
+    result[cp == -1] = put_px[cp == -1]
+    
+    return result
+    
 
 
 

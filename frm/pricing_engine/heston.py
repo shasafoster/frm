@@ -49,7 +49,7 @@ def simulate_heston_single(s0: float,
      
       Parameters:
       s0 (float): initial spot price.
-      mu (float): drift.
+      mu (float): drift (r-q)
       v0 (float): initial volatility.
       vv (float): volatility of volatility.
       kappa (float): speed of mean reversion for volatility.

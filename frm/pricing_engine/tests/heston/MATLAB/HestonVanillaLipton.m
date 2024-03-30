@@ -20,7 +20,7 @@ function P = HestonVanillaLipton(phi,S,K,T,r,rf,kappa,theta,sigma,rho,v0)
 %       Springer-Verlag, forthcoming in 2011.}   
 %   [2] A.Lipton (2001) Mathematical methods for foreign exchange, World
 %       Scientific, 375-387
-%   [3] A.Lipton (2002) The vol smile problem, Risk, February, 61–65.
+%   [3] A. Lipton (2002) The vol smile problem, Risk, February, 61–65.
 %   [4] M.Schmelzle (2010) Option Pricing Formulae using Fourier Transform: 
 %       Theory and Application, Working Paper
   
