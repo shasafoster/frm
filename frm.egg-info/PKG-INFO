@@ -2,8 +2,8 @@ Metadata-Version: 2.1
 Name: frm
 Version: 0.0.1
 Summary: A python package for quantitative finance and derivative pricing
-Author-email: Shasa Foster   <shasa.foster.frm@gmail.com>
-Project-URL: Homepage, https://github.com/shasafoster/frm
+Author-email: <frm.calcs@gmail.com>
+Project-URL: Homepage, https://github.com/frmcalcs/frm
 Project-URL: Website, https://www.frmcalcs.com/app_frm/
 Classifier: Programming Language :: Python :: 3
 Classifier: License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0)

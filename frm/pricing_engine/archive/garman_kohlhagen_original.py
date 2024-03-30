@@ -1,7 +1,4 @@
 # -*- coding: utf-8 -*-
-"""
-@author: Shasa Foster
-"""
 
 import numpy as np
 from scipy.stats import norm

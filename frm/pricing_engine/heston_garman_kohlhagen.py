@@ -63,7 +63,6 @@ def heston_fit_vanilla_fx_smile(
 
     References:
     [1] Janek, A., Kluge, T., Weron, R., Wystup, U. (2010). "FX smile in the Heston model"    
-    Converted from MATLAB to Python by Shasa Foster (2023.09.02)
 
     The Heston SDE is:
         dS(t) = µ*S*dt + σ(t)*S*dW1(t)
@@ -232,8 +231,6 @@ def heston_1993_fx_vanilla_european_integral(φ, m, S0, K, tau, r_f, r_d, var0, 
     [1] S.Heston, (1993) A Closed-Form Solution for Options with Stochastic Volatility with Applications to Bond and Currency Options
     [2] H.Albrecher, P.Mayer, W.Schoutens, J.Tistaert (2006) The little Heston trap, Wilmott Magazine, January: 83–92.
     [3] A.Janek, T.Kluge, R.Weron, U.Wystup (2010) FX smile in the Heston model.
-
-    Converted from MATLAB to Python by Shasa Foster (2023.09.02)
     """
     
     mu = r_d - r_f
@@ -304,7 +301,6 @@ def heston1993_price_fx_vanilla_european(S0, tau, r_f, r_d, cp, K, var0, vv, kap
     
     Written by Agnieszka Janek and Rafal Weron (2010.07.07)
     Revised by Rafal Weron (2010.10.08, 2010.12.27)
-    Converted from MATLAB to Python by Shasa Foster (2023.09.02)
     """
 
     # Equation (18) from Heston, 1993
@@ -344,7 +340,6 @@ def heston_carr_madan_price_fx_vanilla_european(S0, tau, r_f, r_d, cp, K, var0, 
      Written by Agnieszka Janek (2010.07.23)
      Revised by Rafal Weron (2010.10.08)
      Revised by Agnieszka Janek and Rafal Weron (2010.10.21, 2010.12.27)
-     Converted from MATLAB to Python by Shasa Foster (2023.09.02)
     """    
     
     if cp == 1:

@@ -1,13 +1,10 @@
 # -*- coding: utf-8 -*-
-"""
-@author: Shasa Foster
-https://www.linkedin.com/in/shasafoster
-"""
+
 
 import os
 import pathlib
 
-os.chdir(pathlib.Path(__file__).parent.parent.resolve()) # path to /shasa
+os.chdir(pathlib.Path(__file__).parent.parent.resolve()) 
 
 from schedule.daycounter import DayCounter, VALID_DAY_COUNT_BASIS
 from schedule.schedule import payment_schedule, VALID_DAY_ROLL, VALID_PAYMENT_TYPE, VALID_PAYMENT_FREQUENCY, VALID_STUB, VALID_STUB_GENERAL, VALID_ROLL_CONVENTION

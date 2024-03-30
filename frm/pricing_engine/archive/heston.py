@@ -1,8 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-@author: Shasa Foster
-https://www.linkedin.com/in/shasafoster
-"""
+
 
 if __name__ == "__main__":
     import os
@@ -78,8 +75,6 @@ def heston_fit_vanilla_fx_smile(
 
     References:
     [1] Janek, A., Kluge, T., Weron, R., Wystup, U. (2010). "FX smile in the Heston model"
-    
-    Converted from MATLAB to Python by Shasa Foster (2023.09.02)
 
     The Heston SDE is:
         dS(t) = µ*S*dt + σ(t)*S*dW1(t)
@@ -280,7 +275,6 @@ def heston1993_price_fx_vanilla_european(cp, s, k, v0, vv, r_d, r_f, tau, kappa,
     
     Written by Agnieszka Janek and Rafal Weron (2010.07.07)
     Revised by Rafal Weron (2010.10.08, 2010.12.27)
-    Converted from MATLAB to Python by Shasa Foster (2023.09.02)
     """
 
     # Equation (18) from Heston, 1993

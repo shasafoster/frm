@@ -1,8 +1,4 @@
 # -*- coding: utf-8 -*-
-"""
-@author: Shasa Foster
-https://www.linkedin.com/in/shasafoster
-"""
 
 import os
 import pathlib

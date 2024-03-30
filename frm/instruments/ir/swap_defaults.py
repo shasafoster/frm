@@ -1,8 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-@author: Shasa Foster
-https://www.linkedin.com/in/shasafoster
-"""
+
 
 USD_LIBOR_SWAP_1Y = {
     # General key terms

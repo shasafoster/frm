@@ -1,13 +1,10 @@
 # -*- coding: utf-8 -*-
-"""
-@author: Shasa Foster
-https://www.linkedin.com/in/shasafoster
-"""
+
 
 import os
 import pathlib
 
-os.chdir(pathlib.Path(__file__).parent.parent.parent.resolve()) # path to /shasa
+os.chdir(pathlib.Path(__file__).parent.parent.parent.resolve()) 
 
 from instruments.bond import Bond
 from market_data.zero_curve import ZeroCurve

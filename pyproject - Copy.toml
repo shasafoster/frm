@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "frm"
 version = "0.0.1"
 authors = [
-  { name="Shasa Foster  ", email="shasa.foster.frm@gmail.com" },
+  { name="John Galt", email="frm.calcs@gmail.com" },
 ]
 description = "A python package for quantitative finance and derivative pricing"
 readme = "README.md"
@@ -28,7 +28,7 @@ classifiers = [
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/shasafoster/frm"
+"Homepage" = "https://github.com/frmcalcs/frm"
 "Website" = "https://www.frmcalcs.com/app_frm/"
 
 [tool.setuptools]

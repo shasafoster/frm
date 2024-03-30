@@ -13,7 +13,7 @@ import pandas as pd
 import numpy as np
 import scipy as sc
 
-os.chdir('C:/Users/shasa/OneDrive/Finance/OTC')
+os.chdir('C:/Users//OneDrive/Finance/OTC')
 
 from otc.schedule.tenor import tenor_to_date_offset
 from otc.calendars.calendar import get_calendar
@@ -23,7 +23,7 @@ from otc.schedule.daycounter import DayCounter
 
 #%% Import and clean data
 
-file_path = 'C:/Users/shasa/OneDrive/Finance/OTC/otc/notebooks/fx_data.xlsx'
+file_path = 'C:/Users//OneDrive/Finance/OTC/otc/notebooks/fx_data.xlsx'
 sheet_name = 'fx_data_validation'  
 df = pd.read_excel(file_path, sheet_name=sheet_name, usecols='A:H')
 

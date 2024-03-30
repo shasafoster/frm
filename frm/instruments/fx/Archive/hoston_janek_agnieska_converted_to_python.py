@@ -1,10 +1,4 @@
 # -*- coding: utf-8 -*-
-"""
-Created on Sun Aug 13 15:12:12 2023
-
-@author: shasa
-"""
-
 
 import numpy as np
 from scipy.stats import norm

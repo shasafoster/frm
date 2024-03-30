@@ -65,7 +65,6 @@ def simulate_heston_single(S0: float,
       
       References:
       [1] Janek, A., Kluge, T., Weron, R., Wystup, U. (2010). "FX smile in the Heston model"
-      Converted from MATLAB to Python by Shasa Foster (2023.09.02)
       """    
      
     dt = tau / nb_timesteps

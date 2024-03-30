@@ -1,9 +1,4 @@
 # -*- coding: utf-8 -*-
-"""
-Created on Sun Sep  3 15:24:02 2023
-
-@author: shasa
-"""
 
 ## Title:        Option Pricing
 ## Author:       Elisa FLeissner, Lars Stauffenegger
