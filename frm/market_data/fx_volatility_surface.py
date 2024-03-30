@@ -13,7 +13,7 @@ if __name__ == "__main__":
 from frm.frm.market_data.fx_volatility_surface_helpers import fx_σ_input_helper, VALID_DELTA_CONVENTIONS, interp_fx_forward_curve
 from frm.frm.market_data.ir_zero_curve import ZeroCurve
 from frm.frm.pricing_engine.garman_kohlhagen import gk_price, gk_solve_implied_σ, gk_solve_strike
-from frm.frm.pricing_engine.heston_garman_kohlhagen import heston_fit_vanilla_fx_smile, heston1993_price_fx_vanilla_european, heston_carr_madan_fx_vanilla_european
+from frm.frm.pricing_engine.heston_garman_kohlhagen import heston_fit_vanilla_fx_smile, heston1993_price_fx_vanilla_european, heston_carr_madan_price_fx_vanilla_european, heston_cosine_price_fx_vanilla_european
 from frm.frm.pricing_engine.monte_carlo_generic import generate_rand_nbs
 from frm.frm.pricing_engine.geometric_brownian_motion import simulate_gbm_path
 from frm.frm.pricing_engine.heston import simulate_heston
@@ -155,7 +155,7 @@ class FXVolatilitySurface:
                 dict_K_σ = {v.replace('σ', 'k'): v for v in self.σ_pillar.columns if 'σ' in v}
                 for date, row in K_pillar.iterrows():
                     # Scalars
-                    S = self.fx_spot_rate
+                    S0 = self.fx_spot_rate
                     r_f=row['foreign_ccy_continuously_compounded_zero_rate']
                     r_d=row['domestic_ccy_continuously_compounded_zero_rate']
                     tau=row['tenor_years']                
@@ -166,7 +166,7 @@ class FXVolatilitySurface:
                     Δ = [0.5 if v == 'k_atmΔneutral' else cp[i] * float(v.split('_')[1].split('Δ')[0]) / 100 for i,v in enumerate(dict_K_σ.keys())]
                     σ = self.σ_pillar.loc[date, dict_K_σ.values()].values
                                         
-                    K = gk_solve_strike(S=S,tau=tau,r_f=r_f,r_d=r_d,σ=σ,Δ=Δ,Δ_convention=Δ_convention,F=F)
+                    K = gk_solve_strike(S0=S0,tau=tau,r_f=r_f,r_d=r_d,σ=σ,Δ=Δ,Δ_convention=Δ_convention,F=F)
                     K_pillar.loc[date,dict_K_σ.keys()] = K
                                                 
                 self.K_pillar = K_pillar
@@ -311,12 +311,12 @@ class FXVolatilitySurface:
             σ = row[[c for c in self.σ_pillar.columns if c[0] == 'σ']].values             
                      
             if self.smile_interpolation_method[:6] == 'heston':
-                v0, vv, kappa, theta, rho, lambda_, IV, SSE = \
+                var0, vv, kappa, theta, rho, lambda_, IV, SSE = \
                     heston_fit_vanilla_fx_smile(Δ, Δ_convention, σ, S, r_f, r_d, tau, cp, pricing_method=self.smile_interpolation_method)
             
                 # Displaying output
                 print(f'=== {tenor_name} calibration results ===')
-                print(f'v0, vv, kappa, theta, rho: {v0, vv, kappa, theta, rho}')
+                print(f'var0, vv, kappa, theta, rho: {var0, vv, kappa, theta, rho}')
                 print(f'SSE {SSE*100}')
                 
                 # Plotting
@@ -334,107 +334,6 @@ class FXVolatilitySurface:
             else:
                 raise ValueError
 
-    # def interp_σ_surface(self, dates: pd.DatetimeIndex, K: np.array, cp):
-    #     """
-    #     Private method to interpolate the σ surface for given dates, updating the 
-    #     `K_σ_daily_smile_func` attribute with appropriate interpolation functions or Heston parameters.
-    
-    #     Parameters:
-    #     dates (pd.DatetimeIndex): Array of dates to perform the σ surface interpolation for.
-    
-    #     Raises:
-    #     ValueError: If the sum of squared errors (SSE) from the Heston fit exceeds a threshold, indicating a poor fit.
-    
-    #     Note:
-    #     Updates the `K_σ_daily_smile_func` attribute with either a spline interpolation function or Heston parameters for each date in `dates`.
-    #     """        
-        
-    #     K = np.atleast_1d(K).astype(float)
-    #     cp = np.atleast_1d(cp).astype(float)
-        
-    #     assert dates.shape == K.shape
-    #     assert dates.shape == cp.shape
-        
-    #     df = self.Δ_σ_daily.loc[pd.DatetimeIndex(dates),:].copy()
-        
-    #     cols_to_drop = [col for col in df.columns if 'σ' in col]
-    #     df.drop(columns=cols_to_drop, inplace=True)
-    #     df['K'] = K
-    #     df['call_put'] = cp
-
-    #     df_unique_dates = self.Δ_σ_daily.loc[pd.DatetimeIndex(set(dates)),:].copy()
-    #     df_unique_dates.loc[:, df_unique_dates.columns.str.contains('σ')] = np.nan
-    #     df_unique_dates.rename(columns=lambda x: x.replace('σ', 'k'), inplace=True)
-
-    #     helper_cols = ['tenor_date','tenor_name','tenor_years','fx_forward_rate','foreign_ccy_continuously_compounded_zero_rate','domestic_ccy_continuously_compounded_zero_rate','Δ_convention']
-    #     dict_K_σ = {v.replace('σ', 'k'): v for v in self.Δ_σ_daily.columns if v not in helper_cols}
-                
-    #     result = []
-    
-    #     # Interpolate volatility surface for each date in df
-    #     for date, row in df_unique_dates.iterrows():
-            
-    #         if date not in self.K_σ_daily_smile_func.keys(): 
-                
-    #             # Scalars
-    #             S = self.fx_spot_rate
-    #             r_f=row['foreign_ccy_continuously_compounded_zero_rate']
-    #             r_d=row['domestic_ccy_continuously_compounded_zero_rate']
-    #             tau=row['tenor_years']                
-    #             Δ_convention=row['Δ_convention']
-    #             F=row['fx_forward_rate']     
-                
-    #             # Arrays
-    #             cp = [1 if v[-4:] == 'call' else -1 if v[-3:] == 'put' else 1 for v in dict_K_σ.keys()]
-    #             Δ = [0.5 if v == 'k_atmΔneutral' else cp[i] * float(v.split('_')[1].split('Δ')[0]) / 100 for i,v in enumerate(dict_K_σ.keys())]
-    #             σ = self.Δ_σ_daily.loc[date, dict_K_σ.values()].values                
-                            
-    #             if self.smile_interpolation_method in ['univariate_spline','cubic_spline']:
-    #                 K = gk_solve_strike(S=S,tau=tau,r_f=r_f,r_d=r_d,σ=σ,Δ=Δ,Δ_convention=Δ_convention,F=F)
-    #                 df_unique_dates.loc[date,dict_K_σ.keys()] = K 
-    #                 if self.smile_interpolation_method == 'univariate_spline':
-    #                     self.K_σ_daily_smile_func[date] = InterpolatedUnivariateSpline(x=K, y=σ)
-    #                 elif self.smile_interpolation_method == 'cubic_spline':
-    #                     self.K_σ_daily_smile_func[date] = CubicSpline(x=K, y=σ)
-                    
-    #             elif self.smile_interpolation_method[:6] == 'heston':
-    #                 v0, vv, kappa, theta, rho, lambda_, IV, SSE = \
-    #                     heston_fit_vanilla_fx_smile(Δ, Δ_convention, σ, S, r_f, r_d, tau, cp, pricing_method=self.smile_interpolation_method)
-    #                 if SSE < 0.001:
-    #                     self.K_σ_daily_smile_func[date] = v0, vv, kappa, theta, rho, lambda_, IV, SSE
-    #                 else:
-    #                     raise ValueError('SSE is a large value, ', round(SSE,4), ' heston fit at ', date,' is likely poor')
-            
-    #     # Get the implied vol for each strike and date combination
-    #     # At some point need to make this over unique date, K
-    #     for date,row in df.iterrows():
-    #         K_target = row['K']
-            
-    #         if self.smile_interpolation_method in {'univariate_spline', 'cubic_spline'}:
-    #             σ = self.K_σ_daily_smile_func[date](K_target)
-    #             result.append(σ)
-    #         elif self.smile_interpolation_method[:6] == 'heston':
-    #             S = self.fx_spot_rate
-    #             r_f=row['foreign_ccy_continuously_compounded_zero_rate']
-    #             r_d=row['domestic_ccy_continuously_compounded_zero_rate']
-    #             tau=row['tenor_years']                
-    #             F=row['fx_forward_rate']               
-    #             cp = row['call_put']
-
-    #             v0, vv, kappa, theta, rho, lambda_, IV, SSE = self.K_σ_daily_smile_func[date]
-                
-    #             if self.smile_interpolation_method == 'heston_analytical_1993':
-    #                 X = heston1993_price_fx_vanilla_european(S, tau, r_f, r_d, cp, K_target, v0, vv, kappa, theta, rho, lambda_)
-    #             elif self.smile_interpolation_method == 'heston_carr_madan_gauss_kronrod_quadrature':     
-    #                 X = heston_carr_madan_fx_vanilla_european(S, tau, r_f, r_d, cp, K_target, v0, vv, kappa, theta, rho, integration_method=0)
-    #             elif self.smile_interpolation_method == 'heston_carr_madan_fft_w_simpsons':
-    #                 X = heston_carr_madan_fx_vanilla_european(S, tau, r_f, r_d, cp, K_target, v0, vv, kappa, theta, rho, integration_method=1)
-                
-    #             implied_σ = gk_solve_implied_σ(S=S, tau=tau, r_f=r_f, r_d=r_d, cp=cp, K=K_target, X=X, σ_guess=v0) 
-    #             result.append(implied_σ)            
-                        
-    #     return np.array(result)
-                  
 
     def interp_σ_smile_from_pillar_points(self, 
                          expiry_dates: pd.DatetimeIndex):
@@ -465,7 +364,7 @@ class FXVolatilitySurface:
             if expiry_date not in self.K_σ_daily_smile_func.keys(): 
                 
                 # Scalars
-                S = self.fx_spot_rate
+                S0 = self.fx_spot_rate
                 r_f=row['foreign_ccy_continuously_compounded_zero_rate']
                 r_d=row['domestic_ccy_continuously_compounded_zero_rate']
                 tau=row['tenor_years']                
@@ -478,19 +377,18 @@ class FXVolatilitySurface:
                 σ = self.Δ_σ_daily.loc[expiry_date, dict_K_σ.values()].values                
                             
                 if self.smile_interpolation_method in ['univariate_spline','cubic_spline']:
-                    K = gk_solve_strike(S=S,tau=tau,r_f=r_f,r_d=r_d,σ=σ,Δ=Δ,Δ_convention=Δ_convention,F=F)
+                    K = gk_solve_strike(S0=S0,tau=tau,r_f=r_f,r_d=r_d,σ=σ,Δ=Δ,Δ_convention=Δ_convention,F=F)
                     df_unique_dates.loc[expiry_date,dict_K_σ.keys()] = K 
                     if self.smile_interpolation_method == 'univariate_spline':
                         self.K_σ_daily_smile_func[expiry_date] = InterpolatedUnivariateSpline(x=K, y=σ)
                     elif self.smile_interpolation_method == 'cubic_spline':
                         self.K_σ_daily_smile_func[expiry_date] = CubicSpline(x=K, y=σ)
-                    
                 elif self.smile_interpolation_method[:6] == 'heston':
-                    v0, vv, kappa, theta, rho, lambda_, IV, SSE = \
-                        heston_fit_vanilla_fx_smile(Δ, Δ_convention, σ, S, r_f, r_d, tau, cp, pricing_method=self.smile_interpolation_method)
+                    var0, vv, kappa, theta, rho, lambda_, IV, SSE = \
+                        heston_fit_vanilla_fx_smile(Δ, Δ_convention, σ, S0, r_f, r_d, tau, cp, pricing_method=self.smile_interpolation_method)
                     if SSE < 0.001:
                         result = {
-                            'v0': v0,
+                            'var0': var0,
                             'vv': vv,
                             'kappa': kappa,
                             'theta': theta,
@@ -545,14 +443,14 @@ class FXVolatilitySurface:
                 
             elif self.smile_interpolation_method[:6] == 'heston':
                 
-                S = self.fx_spot_rate
+                S0 = self.fx_spot_rate
                 r_f = row['foreign_ccy_continuously_compounded_zero_rate']
                 r_d = row['domestic_ccy_continuously_compounded_zero_rate']
                 tau = row['tenor_years']                
                 F = row['fx_forward_rate']               
                 cp = row['call_put']
 
-                v0 = self.K_σ_daily_smile_func[expiry_date]['v0']
+                var0 = self.K_σ_daily_smile_func[expiry_date]['var0']
                 vv = self.K_σ_daily_smile_func[expiry_date]['vv']
                 kappa = self.K_σ_daily_smile_func[expiry_date]['kappa']
                 theta = self.K_σ_daily_smile_func[expiry_date]['theta']
@@ -560,13 +458,15 @@ class FXVolatilitySurface:
                 lambda_ = self.K_σ_daily_smile_func[expiry_date]['lambda_']
                 
                 if self.smile_interpolation_method == 'heston_analytical_1993':
-                    X = heston1993_price_fx_vanilla_european(S, tau, r_f, r_d, cp, K_target, v0, vv, kappa, theta, rho, lambda_)
+                    X = heston1993_price_fx_vanilla_european(S0, tau, r_f, r_d, cp, K_target, var0, vv, kappa, theta, rho, lambda_)
                 elif self.smile_interpolation_method == 'heston_carr_madan_gauss_kronrod_quadrature':     
-                    X = heston_carr_madan_fx_vanilla_european(S, tau, r_f, r_d, cp, K_target, v0, vv, kappa, theta, rho, integration_method=0)
+                    X = heston_carr_madan_price_fx_vanilla_european(S0, tau, r_f, r_d, cp, K_target, var0, vv, kappa, theta, rho, integration_method=0)
                 elif self.smile_interpolation_method == 'heston_carr_madan_fft_w_simpsons':
-                    X = heston_carr_madan_fx_vanilla_european(S, tau, r_f, r_d, cp, K_target, v0, vv, kappa, theta, rho, integration_method=1)
+                    X = heston_carr_madan_price_fx_vanilla_european(S0, tau, r_f, r_d, cp, K_target, var0, vv, kappa, theta, rho, integration_method=1)
+                elif self.smile_interpolation_method == 'heston_cosine':
+                    X = heston_cosine_price_fx_vanilla_european(S0=S0, tau=tau, r_f=r_f, r_d=r_d, cp=cp, K=K_target, var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho)
                 
-                implied_σ = gk_solve_implied_σ(S=S, tau=tau, r_f=r_f, r_d=r_d, cp=cp, K=K_target, X=X, σ_guess=v0) 
+                implied_σ = gk_solve_implied_σ(S=S0, tau=tau, r_f=r_f, r_d=r_d, cp=cp, K=K_target, X=X, σ_guess=var0**2) 
                 result.append(implied_σ)            
                         
         return np.array(result)
@@ -597,7 +497,7 @@ class FXVolatilitySurface:
         F = interp_fx_forward_curve(self.fx_forward_curve, dates=expiry_datetimeindex, date_type='expiry_date', flat_extrapolation=True)
 
         results = gk_price(
-            S=self.fx_spot_rate,
+            S0=self.fx_spot_rate,
             tau=self.daycounter.year_fraction(self.curve_date, expiry_datetimeindex),
             r_f=r_f,
             r_d=r_d,
@@ -706,7 +606,7 @@ class FXVolatilitySurface:
                 fx_forward_rate = interp_fx_forward_curve(self.fx_forward_curve, dates=pd.DatetimeIndex([delivery_date]), date_type='delivery_date').values
                 mu = np.log(fx_forward_rate/self.fx_spot_rate) / tau
             
-                v0 = self.K_σ_daily_smile_func[delivery_date]['v0']
+                var0 = self.K_σ_daily_smile_func[delivery_date]['var0']
                 vv = self.K_σ_daily_smile_func[delivery_date]['vv']
                 kappa = self.K_σ_daily_smile_func[delivery_date]['kappa']
                 theta = self.K_σ_daily_smile_func[delivery_date]['theta']
@@ -720,7 +620,7 @@ class FXVolatilitySurface:
                 
                 sim_results = simulate_heston(s0=self.fx_spot_rate,
                                 mu=mu,
-                                v0=v0,
+                                var0=var0,
                                 vv=vv,
                                 kappa=kappa,
                                 theta=theta,

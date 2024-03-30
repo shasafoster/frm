@@ -33,9 +33,9 @@ def normalcorr(C: np.array,
     return (M @ rand_nbs.T).T
 
 
-def simulate_heston_single(s0: float, 
+def simulate_heston_single(S0: float, 
                            mu: float, 
-                           v0: float, 
+                           var0: float, 
                            vv: float, 
                            kappa: float, 
                            theta: float, 
@@ -48,12 +48,12 @@ def simulate_heston_single(s0: float,
       Simulate trajectories of the spot price and volatility processes in the Heston model.
      
       Parameters:
-      s0 (float): initial spot price.
+      S0 (float): initial spot price.
       mu (float): drift (r-q)
-      v0 (float): initial volatility.
+      var0 (float): initial variance.
       vv (float): volatility of volatility.
       kappa (float): speed of mean reversion for volatility.
-      theta (float): long-term mean of volatility.
+      theta (float): long-run variance
       rho (float): correlation between spot price and volatility.
       tau (float): time end point
       dt (float): the time step size
@@ -77,7 +77,7 @@ def simulate_heston_single(s0: float,
     u = normalcorr(C, rand_nbs) * np.sqrt(dt)
     
     if method == 'quadratic_exponential':
-        x[0, :] = [np.log(s0), v0]
+        x[0, :] = [np.log(S0), var0]
         phiC = 1.5
         
         for i in range(1, nb_timesteps + 1):
@@ -109,7 +109,7 @@ def simulate_heston_single(s0: float,
         
         x[:, 0] = np.exp(x[:, 0])
     elif method[:5] == 'euler':
-        x[0, :] = [s0, v0]
+        x[0, :] = [S0, v0]
         for i in range(1, nb_timesteps+1):
             if method == 'euler_with_absorption_of_volatility_process':
                 x[i - 1, 1] = max(x[i - 1, 1], 0) 
@@ -122,7 +122,7 @@ def simulate_heston_single(s0: float,
     return x
 
 
-def simulate_heston(s0: float, 
+def simulate_heston(S0: float, 
                     mu: float, 
                     v0: float, 
                     vv: float, 
@@ -136,7 +136,7 @@ def simulate_heston(s0: float,
      Simulate trajectories of the spot price and volatility processes in the Heston model.
      
      Parameters:
-     s0 (float): initial spot price.
+     S0 (float): initial spot price.
      mu (float): drift.
      v0 (float): initial volatility.
      vv (float): volatility of volatility.
@@ -164,7 +164,7 @@ def simulate_heston(s0: float,
     u = normalcorr(C, rand_nbs) * np.sqrt(dt) # need to check this correlation works as expected
     
     if method == 'quadratic_exponential':
-        x[0, 0, :] = np.log(s0)
+        x[0, 0, :] = np.log(S0)
         x[0, 1, :] = v0
         
         phiC = 1.5
@@ -207,7 +207,7 @@ def simulate_heston(s0: float,
         
         x[:, 0] = np.exp(x[:, 0])
     elif method[:5] == 'euler':
-        x[0, 0, :] = s0
+        x[0, 0, :] = S0
         x[0, 1, :] = v0
         
         for i in range(1, nb_timesteps + 1):
@@ -230,7 +230,7 @@ if __name__ == '__main__':
     
     np.random.seed(0)
     
-    s0 = 0.6629
+    S0 = 0.6629
     mu = 0
     v0 = 0.01030476434426229
     vv = 0.2992984338043174
@@ -248,7 +248,7 @@ if __name__ == '__main__':
     
     t1 = time.time()
     
-    result = simulate_heston(s0=s0,
+    result = simulate_heston(S0=S0,
         mu=mu,
         v0=v0,
         vv=vv,
@@ -268,7 +268,7 @@ if __name__ == '__main__':
     
             rand_nbs_single = rand_nbs[:,:,i]
     
-            results_single = simulate_heston_single(s0=s0,
+            results_single = simulate_heston_single(S0=S0,
                 mu=mu,
                 v0=v0,
                 vv=vv,

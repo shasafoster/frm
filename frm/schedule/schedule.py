@@ -7,7 +7,7 @@ if __name__ == "__main__":
     os.chdir(pathlib.Path(__file__).parent.parent.parent.resolve())     
     print('__main__ - current working directory:', os.getcwd())
     
-from frm.frm.schedule.business_day_calendar import get_calendar, VALID_CITY_HOLIDAYS, VALID_CURRENCY_HOLIDAYS
+from frm.frm.schedule.business_day_calendar import get_calendar #, VALID_CITY_HOLIDAYS, VALID_CURRENCY_HOLIDAYS
 
 import numpy as np
 import pandas as pd
@@ -77,8 +77,8 @@ def payment_schedule(start_date: pd.Timestamp,
                      add_fixing_dates: bool=False,
                      add_initial_exchange_period: bool=False,
                      fixing_days_ahead: int=2,
-                     currency_holidays: Optional[VALID_CURRENCY_HOLIDAYS]=None,
-                     city_holidays: Optional[VALID_CITY_HOLIDAYS]=None,
+                     currency_holidays=None,
+                     city_holidays=None,
                      holiday_cal: np.busdaycalendar=None) -> pd.DataFrame:
     """
     Create a payment schedule.

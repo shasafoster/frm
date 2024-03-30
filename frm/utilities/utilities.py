@@ -7,7 +7,7 @@ Created on Sun Sep 17 14:10:55 2023
 
 import pandas as pd
 import numpy as np
-from frm.frm.schedule.calendar import get_calendar
+from frm.frm.schedule.business_day_calendar import get_calendar
 from frm.frm.schedule.tenor import calc_tenor_date, get_spot_offset
 from frm.frm.schedule.daycounter import DayCounter
 

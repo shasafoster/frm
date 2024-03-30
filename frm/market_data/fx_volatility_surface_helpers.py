@@ -12,7 +12,7 @@ if __name__ == "__main__":
     
 from frm.frm.market_data.ir_zero_curve import ZeroCurve
 from frm.frm.pricing_engine.garman_kohlhagen import gk_price, gk_solve_implied_σ, gk_solve_strike
-from frm.frm.pricing_engine.heston_garman_kohlhagen import heston_fit_vanilla_fx_smile, heston1993_price_fx_vanilla_european, heston_carr_madan_fx_vanilla_european
+from frm.frm.pricing_engine.heston_garman_kohlhagen import heston_fit_vanilla_fx_smile, heston1993_price_fx_vanilla_european, heston_carr_madan_price_fx_vanilla_european
 
 from frm.frm.schedule.tenor import calc_tenor_date, get_spot_offset
 from frm.frm.schedule.daycounter import VALID_DAY_COUNT_BASIS

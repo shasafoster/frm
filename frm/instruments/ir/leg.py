@@ -12,7 +12,7 @@ if __name__ == "__main__":
 
 from frm.frm.schedule.daycounter import DayCounter, VALID_DAY_COUNT_BASIS
 from frm.frm.schedule.schedule import payment_schedule, VALID_DAY_ROLL, VALID_PAYMENT_TYPE, VALID_PAYMENT_FREQUENCY, VALID_STUB, VALID_STUB_GENERAL, VALID_ROLL_CONVENTION
-from frm.frm.schedule.business_day_calendar import get_calendar, VALID_CITY_HOLIDAYS, VALID_CURRENCY_HOLIDAYS
+from frm.frm.schedule.business_day_calendar import get_calendar
 from frm.frm.schedule.tenor import calc_tenor_date
 from frm.frm.market_data.iban_ccys import VALID_CCYS
 
@@ -63,8 +63,8 @@ class Leg:
     payment_type: VALID_PAYMENT_TYPE='in_arrears'
     payment_delay: int=0
     fixing_days_ahead: int=0
-    currency_holidays: Optional[VALID_CURRENCY_HOLIDAYS]=None
-    city_holidays: Optional[VALID_CITY_HOLIDAYS]=None
+    currency_holidays=None
+    city_holidays=None
     holiday_calendar: InitVar[Optional[np.busdaycalendar]]=None
     
     # Notional and currencies definitions
