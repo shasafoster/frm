@@ -24,8 +24,6 @@ Vanilla European FX options
 - SABR volatility model
 - European interest rate swaption pricing
 - Heston-Local Volatility model (for pricing path dependent FX options)
-- Cosine method to 5x the calibration time of the volatility smile under Heston
-
 
 
 
