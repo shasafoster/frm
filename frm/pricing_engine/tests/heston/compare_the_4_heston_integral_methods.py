@@ -12,6 +12,7 @@ if __name__ == "__main__":
 from frm.frm.pricing_engine.heston_garman_kohlhagen import heston1993_price_fx_vanilla_european, heston_cosine_price_fx_vanilla_european, heston_carr_madan_price_fx_vanilla_european
 import numpy as np
 import matplotlib.pyplot as plt
+from time import time
 
 #% Sample input:
 S0 = 1.2;
@@ -67,4 +68,18 @@ plt.ylabel('Option price')
 plt.show()
 
 
+#%% Speed Test
 
+t1 = time()
+for i in range(1000):
+    COS_vectorised = heston_cosine_price_fx_vanilla_european(S0, tau, r_f, r_d, cp, K, var0, vv, kappa, theta, rho, N=160, L=10)
+t2 = time()
+print("COS: ", t2-t1)
+
+
+t1 = time()
+for j in range(1000):
+    for i in range(len(K)):
+        cm_quad.append(heston_carr_madan_price_fx_vanilla_european(S0, tau, r_f, r_d, cp[i], K[i], var0, vv, kappa, theta, rho, integration_method=0))
+t2 = time()
+print("CM: ", t2-t1)

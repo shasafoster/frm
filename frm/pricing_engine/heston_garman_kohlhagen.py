@@ -15,7 +15,7 @@ from frm.frm.pricing_engine.cosine_method_generic import get_cos_truncation_rang
 import numpy as np
 import scipy.fft
 import scipy  
-from numba import jit
+from numba import jit, njit
 from typing import Tuple
 import warnings
 
@@ -202,7 +202,7 @@ def heston_fit_vanilla_fx_smile(
 
 #%% Heston 1993 analytical pricing implementation (2nd version of the Characteristic function)
 
-@jit(nopython=True)
+@njit(fastmath=True, cache=True)
 def heston_1993_fx_vanilla_european_integral(φ, m, S0, K, tau, r_f, r_d, var0, vv, kappa, theta, rho, lambda_):
     """
     Defines the integral for pricing an FX Vanilla European option per the analytic Heston 1993 formula
@@ -387,7 +387,7 @@ def get_simpson_weights(n):
     return weights / 3
 
 
-@jit(nopython=True)
+@njit(fastmath=True, cache=True)
 def heston_fft_fx_vanilla_european_integral(v, cp, log_S0, log_K, tau, r_f, r_d, var0, vv, kappa, theta, rho, alpha):
     """
     Auxiliary function for heston_carr_madan_fx_vanilla_european.
@@ -417,7 +417,7 @@ def heston_fft_fx_vanilla_european_integral(v, cp, log_S0, log_K, tau, r_f, r_d,
     return np.real(np.exp(-1j * v * log_K) * ftt_func)
 
 
-@jit
+@njit(fastmath=True, cache=True)
 def chf_heston_albrecher2007(u, log_S0, tau, r_f, r_d, var0, vv, kappa, theta, rho):
     """
     Compute the characteristic function for the Heston model.
@@ -474,6 +474,7 @@ def chf_heston_albrecher2007(u, log_S0, tau, r_f, r_d, var0, vv, kappa, theta, r
     return np.exp(A + B + C)
 
 # Note this function (chf_heston_fang2008) is NOT speed up by use of numba/jit
+@njit(fastmath=True, cache=True)
 def chf_heston_fang2008(u, tau, r_f, r_d, var0, vv, kappa, theta, rho):
     """
     Compute the characteristic function for the Heston model per Fang 2008
@@ -517,7 +518,6 @@ def chf_heston_fang2008(u, tau, r_f, r_d, var0, vv, kappa, theta, rho):
     chf = np.exp(inner_exp_1 + inner_exp_2)
     
     return chf
-
 
 def calculate_Uk_european_options(cp, a, b, k):
     """
