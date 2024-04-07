@@ -60,7 +60,7 @@ def gk_price(S0: float,
         assert (F > 1e-8).all() 
         
         # Use market forward rate and imply basis-adjusted domestic interest rate        
-        r_d_basis_adj = np.log(F / S0) / tau + r_f # from F = S * exp((r_d - r_f) * tau)
+        r_d_basis_adj = np.log(F / S0) / tau + r_f # from F = S0 * exp((r_d - r_f) * tau)
         d1 = (np.log(F / K) + (0.5 * σ**2) * tau) / (σ * np.sqrt(tau))
         d2 = d1 - σ * np.sqrt(tau)    
         X = cp * np.exp(-r_d_basis_adj * tau) * (F * norm.cdf(cp * d1) - K * norm.cdf(cp * d2))   
@@ -91,7 +91,7 @@ def gk_price(S0: float,
         if intrinsic_time_split_flag:
             X_intrinsic = np.full_like(X, np.nan)
             X_time = np.full_like(X, np.nan)            
-            X_intrinsic[tau>0] = np.maximum(0, cp * (S * np.exp(-r_f * tau) - K * np.exp(-r_d * tau)))[tau>0]
+            X_intrinsic[tau>0] = np.maximum(0, cp * (S0 * np.exp(-r_f * tau) - K * np.exp(-r_d * tau)))[tau>0]
             X_intrinsic[tau==0] = X[tau==0]
             X_time = X - X_intrinsic 
             results['intrinsic_value'] = X_intrinsic
@@ -113,10 +113,10 @@ def gk_price(S0: float,
             # Delta, Δ, is the change in an option's price for a small change in the underlying assets price.
             # Δ := ∂X/∂S ≈ (X(S_plus) − X(S_minus)) / (S_plus - S_minus)
             # where X is the option price (whose units is DOM),
-            # and S is the fx spot price (whose units is DOM/FOR)
-            # Δ is returned as a % applied to the domestic notional, in order to get the dollar Δ amount
-            analytical_greeks['spot_delta'] = cp * np.exp(-r_f * tau) * norm.cdf(cp * d1)
-            analytical_greeks['forward_delta'] = cp * norm.cdf(cp * d1) 
+            # and S0 is the fx spot price (whose units is DOM/FOR)
+            # We multiply by S0 so to return the Δ a % applicable to  to the foreign currency notional
+            analytical_greeks['spot_delta'] = S0 * cp * np.exp(-r_f * tau) * norm.cdf(cp * d1)
+            analytical_greeks['forward_delta'] = S0 * cp * norm.cdf(cp * d1) 
     
             # Vega, ν, is the change in an options price for a small change in the volatility input
             # ν = ∂X/∂σ ≈ (X(σ_plus) − X(σ_minus)) / (σ_plus - σ_minus)
@@ -156,13 +156,18 @@ def gk_price(S0: float,
         if numerical_greeks_flag:
             numerical_greeks = {}
             
-            results_S0_plus = gk_price(S0=S0*(1+Δ_shift), tau=tau, r_f=r_f, r_d=r_d, cp=cp, K=K, σ=σ, F=F,analytical_greeks_flag=True) 
+            if F != None:
+                F_upshift = F*(1+Δ_shift)
+                F_downshift = F*(1-Δ_shift)
+            else:
+                F_upshift = None
+                F_downshift = None
+            results_S0_plus = gk_price(S0=S0*(1+Δ_shift), tau=tau, r_f=r_f, r_d=r_d, cp=cp, K=K, σ=σ, F=F_upshift,analytical_greeks_flag=True) 
             X_S_plus, analytical_greeks_S0_plus = results_S0_plus['option_value'], results_S0_plus['analytical_greeks']
-                        
-            results_S0_minus = gk_price(S0=S0*(1-Δ_shift), tau=tau, r_f=r_f, r_d=r_d, cp=cp, K=K, σ=σ, F=F,analytical_greeks_flag=True)
+            results_S0_minus = gk_price(S0=S0*(1-Δ_shift), tau=tau, r_f=r_f, r_d=r_d, cp=cp, K=K, σ=σ, F=F_downshift,analytical_greeks_flag=True)
             X_S_minus, analytical_greeks_S0_minus = results_S0_minus['option_value'], results_S0_minus['analytical_greeks']
             
-            numerical_greeks['spot_delta'] = (X_S_plus - X_S_minus) / (2 * S * Δ_shift)
+            numerical_greeks['spot_delta'] = (X_S_plus - X_S_minus) / (2 * S0 * Δ_shift)
             numerical_greeks['forward_delta'] = numerical_greeks['spot_delta'] / np.exp(-r_f * tau)
             
             X_σ_plus = gk_price(S0=S0, tau=tau, r_f=r_f, r_d=r_d, cp=cp, K=K, σ=σ+σ_shift, F=F)['option_value']
@@ -276,7 +281,7 @@ def gk_solve_strike(S0: float,
                     # Solve the upper bound, 'K_max' for the numerical solver
                     # The strike of a premium adjusted Δ-σ quote is ALWAYS below the regular (non premium adjusted) Δ-σ quote
                     # Hence, we analytically calculate the K, assuming the σ was a regular Δ quote
-                    K_max = gk_solve_strike(S=S, 
+                    K_max = gk_solve_strike(S0=S0, 
                                             tau=tau,
                                             r_f=r_f, 
                                             r_d=r_d,  
@@ -296,7 +301,7 @@ def gk_solve_strike(S0: float,
                         # To avoid this, we solve a lower bound, 'K_min' to guarantee we get the correct solution in the numerical solver.
                         # The lower bound is the 'maximum' Δ, hence we numerically solve the maximum Δ
                         def solve_K_min(K, σ, cp, F, t):
-                            d1 = (np.log(S / K) + (r_d - r_f + 0.5 * σ**2) * t) / (σ * np.sqrt(t))
+                            d1 = (np.log(S0 / K) + (r_d - r_f + 0.5 * σ**2) * t) / (σ * np.sqrt(t))
                             d2 = d1 - σ * np.sqrt(t)
                             return σ * np.sqrt(t) * norm.cdf(d2) - norm.pdf(d2)
                         
@@ -366,7 +371,7 @@ def gk_solve_implied_σ(S0: float,
 if __name__ == '__main__':
     pass
 
-    S=0.6438
+    S0=0.6438
     σ=0 #0.0953686
     r_d=0.05408
     r_f=0.04189
@@ -374,105 +379,22 @@ if __name__ == '__main__':
     cp=-1
     K=0.71000
     F = 0.646478
-    p1 = gk_price(S=S,tau=tau,r_f=r_f,r_d=r_d,cp=cp,K=K,σ=σ,F=F)['option_value']
+    p1 = gk_price(S0=S0,tau=tau,r_f=r_f,r_d=r_d,cp=cp,K=K,σ=σ,F=F)['option_value']
     print('F specified:', p1)
-    p2 = gk_price(S=S,tau=tau,r_f=r_f,r_d=r_d,cp=cp,K=K,σ=σ)['option_value']
+    p2 = gk_price(S0=S0,tau=tau,r_f=r_f,r_d=r_d,cp=cp,K=K,σ=σ)['option_value']
     print('IR parity', p2)
 
 
     # check if instrinisc value is returned. Use IR parity. 
-    p3 = gk_price(S=S,tau=tau,r_f=r_f,r_d=r_d,cp=cp,K=K,σ=σ)['option_value']
+    p3 = gk_price(S0=S0,tau=tau,r_f=r_f,r_d=r_d,cp=cp,K=K,σ=σ)['option_value']
     print('if tau=0 intrinisc?:', p3)    
 
 
 
-# #%%    
-    
-    
-    
-            
-#     d1 = (np.log(S / K) + (r_d - r_f + 0.5 * σ**2) * tau) / (σ * np.sqrt(tau))
-#     print('analytical d1: ', d1)
-    
-#     # Use market forward rate
-#     F_rp = S * np.exp((r_d - r_f) * tau)
-#     d1_market = (np.log(F_rp / K) + (- r_f + 0.5 * σ**2) * tau) / (σ * np.sqrt(tau))
-#     print('market fwd d1: ', d1_market)
-
-#     S2 = F_rp / np.exp((r_d - r_f) * tau)
-#     S2 = F_rp * np.exp(r_f * tau) * np.exp(-r_d * tau)
-
-#     d1_tmp = (np.log(S2 / K) + (r_d - r_f + 0.5 * σ**2) * tau) / (σ * np.sqrt(tau))
-    
-#     d1_tmp2 = (np.log(F_rp * np.exp(r_f * tau) * np.exp(-r_d * tau) / K) + (r_d - r_f + 0.5 * σ**2) * tau) / (σ * np.sqrt(tau))
-#     d1_tmp3 = (np.log(F_rp) + r_f*tau - r_d*tau - np.log(K) + (r_d - r_f + 0.5 * σ**2) * tau) / (σ * np.sqrt(tau))
-#     d1_tmp4 = (np.log(F_rp) - np.log(K) + ( + 0.5 * σ**2) * tau) / (σ * np.sqrt(tau))
-    
-#     print('analytical d1: ', d1_tmp)
-#     print('analytical d1: ', d1_tmp2)
-#     print('analytical d1: ', d1_tmp3)
-#     print('analytical d1: ', d1_tmp4)
 
 
 
 
-
-
-
-# Δ_convention = 'premium_adjusted_spot_Δ'
-# r_f = 5.376 / 100
-# r_d = -0.516 / 100
-# Δ = -0.3
-# cp = -1
-# S = 144.32
-# F = 136.1201
-# σ = 10.48028 / 100
-# tau = 368/365
-
-
-
-# if Δ_convention == 'premium_adjusted_spot_Δ':
-#     def solve_Δ(K, σ, cp, F, tau, Δ):
-#         return np.exp(-r_f * tau) * (cp * K / F) * norm.cdf(cp * (np.log(F/K) - 0.5 * σ ** 2 * tau) / (σ * np.sqrt(tau))) - Δ                
-# elif Δ_convention == 'premium_adjusted_forward_Δ':
-#     def solve_Δ(K, σ, cp, F, tau, Δ):
-#         return (cp * K / F) * norm.cdf(cp * (np.log(F/K) - 0.5 * σ ** 2 * tau) / (σ * np.sqrt(tau))) - Δ
-
-# # Solve the upper bound, 'K_max' for the numerical solver
-# # The strike of a premium adjusted Δ-σ quote is ALWAYS below the regular (non premium adjusted) Δ-σ quote
-# # Hence, we analytically calculate the K, assuming the σ was a regular Δ quote
-# K_max = gk_solve_strike(S=S, 
-#                         tau=tau,
-#                         r_f=r_f, 
-#                         r_d=r_d,  
-#                         σ=σ, 
-#                         Δ=Δ, 
-#                         Δ_convention=Δ_convention.replace('premium_adjusted','regular'),
-#                         F=F)
-# K_max = K_max.item()
-
-# # Put Option 
-# solution = root_scalar(solve_Δ, args=(σ, cp, F, tau, Δ), x0=F, bracket=[0.00001, K_max])
-
-# print(solution)
-
-
-# #%%
-# from scipy.stats import norm
-# import numpy as np
-
-# F = 0.663527
-# tau = 34/365
-# cp = -1
-# Δ = -0.05
-# r_f = 4.194 / 100
-# σ = 11.09059 / 100
-
-# tmp = F * np.exp(-cp * norm.ppf(cp * Δ * np.exp(r_f * tau)) * σ * np.sqrt(tau) + (0.5 * σ**2) * tau)
-
-# print(tmp)
-# print(tmp - 0.62800)
-# print(100 * (tmp - 0.62800) / 0.62800)
 
 
 
