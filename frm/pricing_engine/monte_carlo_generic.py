@@ -9,7 +9,7 @@ if __name__ == "__main__":
     
 import numpy as np
 
-MAX_RANDOM_NUMBERS = 100e6
+MAX_SIMULATIONS_PER_LOOP = 100e6
 
 def generate_rand_nbs(nb_steps: int,
                       nb_rand_vars: int=1,
@@ -63,7 +63,7 @@ def generate_rand_nbs(nb_steps: int,
     assert nb_rand_vars >= 1, nb_rand_vars
     assert nb_simulations >= 1, nb_simulations
     
-    if (nb_steps * nb_simulations) > MAX_RANDOM_NUMBERS:
+    if (nb_steps * nb_simulations) > MAX_SIMULATIONS_PER_LOOP:
         raise ValueError("Too many steps & simulations for one refresh; may lead to memory leak")    
         
     if flag_apply_antithetic_variates and nb_simulations == 1:
