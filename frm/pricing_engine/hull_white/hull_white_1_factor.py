@@ -29,15 +29,6 @@ import matplotlib.pyplot as plt
 from frm.frm.pricing_engine.hull_white.Bond import *
 
 
-#%%
-
-dataframe = pd.read_csv('./frm/frm/pricing_engine/hull_white/Strips.csv', index_col=None)
-print (dataframe.shape)
-dataframe.head(10)
-
-
-#%%
-
 class HullWhite(Bond):
     def __init__(self, ZCB, times, theta, kappa, sigma, r0=0.):
         Bond.__init__(self, theta, kappa, sigma, r0)
@@ -88,8 +79,8 @@ class HullWhite(Bond):
         df_t_down = self.ForwardRate(down)
         df_t_up = self.ForwardRate(up)  
         df_t = self.ForwardRate(time)
-        df = df_t_down - df_t_up
-        df_dt    = -df/(2*self.dt)
+        df =  df_t_up - df_t_down
+        df_dt    = df/(2*self.dt)
         
         return df_dt + self.kappa * df_t + (self.sigma**2)/(self.kappa*2)*(1-np.exp(-2*self.kappa*time))
         
@@ -135,6 +126,11 @@ class HullWhite(Bond):
     
     
 #%%
+
+dataframe = pd.read_csv('./frm/frm/pricing_engine/hull_white/Strips.csv', index_col=None)
+print (dataframe.shape)
+dataframe.head(10)
+
 
 Maturities = np.asarray(dataframe.years)
 Prices     = np.asarray(dataframe.discount_factor)
