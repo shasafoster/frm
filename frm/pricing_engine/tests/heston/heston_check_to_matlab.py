@@ -48,15 +48,15 @@ start_time = time()
 results_gk = []
 results_cos = []
 
-#pricing_method = 'heston_analytical_1993'
+pricing_method = 'heston_analytical_1993'
 #pricing_method = 'heston_carr_madan_gauss_kronrod_quadrature'
 #pricing_method = 'heston_carr_madan_fft_w_simpsons'
-pricing_method = 'heston_cosine'
+#pricing_method = 'heston_cosine'
 
 
 # Main loop for various smiles
 for i, σ_market in enumerate(σ_market_set):
-    if i > -1:
+    if i >= 5:
         #delta_spot = np.exp(-r_f[i] * tau[i]) * delta
         var0, vv, kappa, theta, rho, lambda_, IV, SSE = heston_fit_vanilla_fx_smile(Δ, Δ_convention, σ_market, S, r_f[i], r_d[i], tau[i], cp, pricing_method=pricing_method)        
         results_gk.append([tenors[i], var0, vv, kappa, theta, rho, lambda_, IV, SSE])

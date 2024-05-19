@@ -202,7 +202,7 @@ def heston_fit_vanilla_fx_smile(
 
 #%% Heston 1993 analytical pricing implementation (2nd version of the Characteristic function)
 
-@njit(fastmath=True, cache=True)
+#@njit(fastmath=True, cache=True)
 def heston_1993_fx_vanilla_european_integral(φ, m, S0, K, tau, r_f, r_d, var0, vv, kappa, theta, rho, lambda_):
     """
     Defines the integral for pricing an FX Vanilla European option per the analytic Heston 1993 formula
@@ -304,8 +304,8 @@ def heston1993_price_fx_vanilla_european(S0, tau, r_f, r_d, cp, K, var0, vv, kap
     """
 
     # Equation (18) from Heston, 1993
-    P1 = 0.5 + 1/np.pi * scipy.integrate.quad(lambda φ: heston_1993_fx_vanilla_european_integral(φ=φ, m=1, S0=S0, K=K, tau=tau, r_f=r_f, r_d=r_d, var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho, lambda_=lambda_), 0, np.inf, epsrel=1e-8)[0]
-    P2 = 0.5 + 1/np.pi * scipy.integrate.quad(lambda φ: heston_1993_fx_vanilla_european_integral(φ=φ, m=2, S0=S0, K=K, tau=tau, r_f=r_f, r_d=r_d, var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho, lambda_=lambda_), 0, np.inf, epsrel=1e-8)[0]
+    P1 = 0.5 + 1/np.pi * scipy.integrate.quad(func=lambda φ: heston_1993_fx_vanilla_european_integral(φ=φ, m=1, S0=S0, K=K, tau=tau, r_f=r_f, r_d=r_d, var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho, lambda_=lambda_), a=0, b=np.inf, epsrel=1e-8)[0]
+    P2 = 0.5 + 1/np.pi * scipy.integrate.quad(func=lambda φ: heston_1993_fx_vanilla_european_integral(φ=φ, m=2, S0=S0, K=K, tau=tau, r_f=r_f, r_d=r_d, var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho, lambda_=lambda_), a=0, b=np.inf, epsrel=1e-8)[0]
 
     Pplus = (1 - cp) / 2 + cp * P1   # Pplus = N(d1)
     Pminus = (1 - cp) / 2 + cp * P2  # Pminus = N(d2)

@@ -52,6 +52,9 @@ def clewlow_strickland_1_factor(forward_curve, nb_simulations, segments_per_day,
     Want it to support a generic structure where the increment may change and may be denomintated in days, months or years. 
     The code simply discretises it generally. Need to figure out if it should discretise evenly from t=0 to T=T or discretize based on the forward curve granularity (which may change)
     
+    Probably easiest to simulate the entire forward curve, and not include the T input that Atmos did. 
+    The user can process the simulation results after.
+    
     Likely the easiest way is to add extra granuarity between the timesteps provided by the user. 
     That gives the user more power as well - they can apply interpolation if they want rather than us assuming they want it. 
     

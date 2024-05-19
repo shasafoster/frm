@@ -65,7 +65,6 @@ def VannaVolgaImpliedVol(F,K,t,K1,K2,K3,σ1,σ2,σ3):
     
     return σ
 
-
 #%%
 strike = (1+np.arange(-0.20,0.21,0.001))*df['fx_spot'].iloc[0]
 

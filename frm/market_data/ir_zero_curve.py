@@ -15,7 +15,7 @@ from frm.frm.schedule.business_day_calendar import get_calendar
 from frm.frm.schedule.tenor import calc_tenor_date
 from frm.frm.utilities.utilities import convert_column_type
 
-from scipy.interpolate import CubicSpline 
+import scipy 
 import pandas as pd
 import numpy as np
 from scipy.optimize import fsolve
@@ -25,11 +25,12 @@ import matplotlib.pyplot as plt
 
 
 VALID_COMPOUNDING_FREQUENCY = Literal['continuously','simple','weekly','daily','monthly','quarterly','semiannually','annually']
-VALID_INTERPOLATION_METHOD = Literal['linear_on_log_of_discount_factors','cubic_spline_on_log_of_discount_factors']
+VALID_INTERPOLATION_METHOD = Literal['linear_on_log_of_discount_factors','cubic_spline_on_zero_rates']
 VALID_EXTRAPOLATION_METHOD = Literal['none','flat']
 
 @dataclass
 class ZeroCurve:
+    # tk need to update this to work for (i) days, (ii) dates or (iii) years 
     curve_date: pd.Timestamp
     curve_ccy: str = None 
     
@@ -42,11 +43,11 @@ class ZeroCurve:
     instruments: InitVar[Optional[dict]] = None
     dsc_crv: InitVar[Optional['ZeroCurve']] = None
     fwd_crv: InitVar[Optional['ZeroCurve']] = None
+    cubic_spline_definition = None
     
     # Non initialisation arguments
     daycounter: DayCounter = field(init=False)
-    df_data: pd.DataFrame = field(init=False, repr=False)
-    
+    daily_data: pd.DataFrame = field(init=False, repr=False)
     
     def __post_init__(self, historical_fixings, day_count_basis, zero_data, zero_rate_compounding_frequency, instruments, dsc_crv, fwd_crv):
         
@@ -99,6 +100,9 @@ class ZeroCurve:
             for i,row in zero_data.iterrows():
                 self.zero_data[row['tenor_date']] = row['discount_factor']
                  
+            self.zero_data_df = pd.DataFrame(list(self.zero_data.items()), columns=['tenor_date', 'discount_factor'])
+            self.zero_data_df['days'] = self.daycounter.day_count(self.curve_date,self.zero_data_df['tenor_date'])
+            self.zero_data_df['years'] = self.daycounter.year_fraction(self.curve_date,self.zero_data_df['tenor_date'])
             self.__interpolate_zero_data()
                 
         else:
@@ -112,17 +116,20 @@ class ZeroCurve:
         date_range = pd.date_range(self.curve_date,max(tenor_dates),freq='d')
         years_to_date = self.daycounter.year_fraction(self.curve_date,date_range)
         
-        if self.interpolation_method == 'cubic_spline_on_log_of_discount_factors':
-            log_discount_obj = CubicSpline(years,-np.log(list(self.zero_data.values())))
-            self.df_data = pd.DataFrame({'date':date_range.to_list(), 
+        if self.interpolation_method == 'cubic_spline_on_zero_rates':
+            zero_rates = -np.log(list(self.zero_data.values())) / years
+            zero_rates[0] = zero_rates[1] # ln(1.0) = nan
+            self.cubic_spline_definition = scipy.interpolate.splrep(x=years,y=zero_rates, k=3)  
+            spline_interp_result = scipy.interpolate.splev(years_to_date, self.cubic_spline_definition, der=0)
+            self.daily_data = pd.DataFrame({'date':date_range.to_list(), 
                                          'years_to_date': years_to_date, 
-                                         'discount_factor': np.exp(-log_discount_obj(years_to_date))})
+                                         'discount_factor': np.exp(-spline_interp_result)})
+            
         elif self.interpolation_method == 'linear_on_log_of_discount_factors':            
             interpolated = np.interp(years_to_date, years, -np.log(list(self.zero_data.values())))
-            self.df_data = pd.DataFrame({'date':date_range.to_list(), 
+            self.daily_data = pd.DataFrame({'date':date_range.to_list(), 
                                          'years_to_date': years_to_date, 
                                          'discount_factor': np.exp(-interpolated)})        
-        
         
     def __bootstrap(self, 
                   instruments: dict,
@@ -149,7 +156,7 @@ class ZeroCurve:
         
 
         self.zero_data = {self.curve_date: 1.0}
-        self.df_data = pd.DataFrame({'date': [self.curve_date],
+        self.daily_data = pd.DataFrame({'date': [self.curve_date],
                                      'years_to_date': [0.0], 
                                      'discount_factor': [1.0]})
 
@@ -188,7 +195,7 @@ class ZeroCurve:
             for i,swap in enumerate(swaps):
                 final_payment_date = swap.pay_leg.schedule['payment_date'].iloc[-1]
 
-                if final_payment_date > self.df_data['date'].iloc[-1]:
+                if final_payment_date > self.daily_data['date'].iloc[-1]:
                     
                     # Set the initial guess to be the swaps par coupon rate
                     zero_rate = swap.pay_leg.fixed_rate if swap.pay_leg.leg_type == 'fixed' else swap.rec_leg.fixed_rate   
@@ -241,7 +248,7 @@ class ZeroCurve:
             for i,leg in enumerate(legs):
                 final_payment_date = leg.schedule['payment_date'].iloc[-1]
 
-                if final_payment_date > self.df_data['date'].iloc[-1]:
+                if final_payment_date > self.daily_data['date'].iloc[-1]:
                     
                     # Set the initial guess to be the swaps par coupon rate
                     zero_rate = leg.fixed_rate if leg.leg_type == 'fixed' else leg.fixed_rate   
@@ -287,9 +294,6 @@ class ZeroCurve:
                 else:        
                     print('Leg with maturity', leg.maturity_date.strftime('%Y-%m-%d'), \
                           'excluded from bootstrapping as prior instruments have covered this period.')
-
-
-    
     
     def flat_shift(self, 
                    basis_points: float=1) -> 'ZeroCurve':
@@ -340,78 +344,106 @@ class ZeroCurve:
                         dates: Union[pd.Timestamp, pd.Series]) -> pd.Series:
         if type(dates) is pd.Timestamp: 
             dates = pd.Series([dates])
-        return pd.Series(pd.merge(pd.DataFrame(data=dates.values, columns=['date']), self.df_data, left_on='date',right_on='date')['discount_factor'].values)
+        return pd.Series(pd.merge(pd.DataFrame(data=dates.values, columns=['date']), self.daily_data, left_on='date',right_on='date')['discount_factor'].values)
 
     
+
+    def instantaneous_forward_rate(self, 
+                                   dates=None,
+                                   days=None,
+                                   years=None,
+                                   ):
+        
+        if self.interpolation_method == 'cubic_spline_on_zero_rates':
+            zero_rate = self.zero_rate(dates=dates, days=days, years=years)
+            zero_rate_1st_deriv = scipy.interpolate.splev(x=years, tck=self.cubic_spline_definition, der=1) 
+            return zero_rate + years * zero_rate_1st_deriv
+        else:
+            raise ValueError
+
+
     def zero_rate(self, 
-                  dates: Union[pd.Timestamp, pd.Series],
+                  dates: Union[pd.Timestamp, pd.Series] = None,
+                  days = None,
+                  years: Union[float, pd.Series] = None,
                   compounding_frequency: VALID_COMPOUNDING_FREQUENCY='continuously') -> pd.Series:
                 
-        if type(dates) is pd.Timestamp: dates = pd.Series([dates])
-        
         if self.extrapolation_method == 'none':    
-            msg = ". NaN will be returned. Consider applying the ZeroCurve 'extrapolation_method'"
+            msg = ". NaN may be returned. Consider applying the ZeroCurve 'extrapolation_method'"
         elif self.extrapolation_method == 'flat':
             msg = '. Flat extropolation will be applied.'
-        
-        # check if any of the dates are outside the available data
-        min_date = self.df_data['date'].min()
-        below_range = dates < min_date
-        dates_below = []
-        if any(below_range):
-            bound_date = self.df_data['date'].min()
-            for i,date in enumerate(dates[below_range]):
-                print('Date', date.strftime('%Y-%m-%d'), 'is below the min available data of ' + bound_date.strftime('%Y-%m-%d') + msg)
-                if self.extrapolation_method == 'none':    
-                    dates_below.append(np.nan)
-                elif self.extrapolation_method == 'flat':    
-                    dates_below.append(bound_date)
-        
-        max_date = self.df_data['date'].max()
-        above_range = dates > max_date
-        dates_above = []
-        if any(above_range):
-            bound_date = self.df_data['date'].max()
-            for i,date in enumerate(dates[above_range]):
-                print('Date', date.strftime('%Y-%m-%d'), 'is above the max available data of ' + bound_date.strftime('%Y-%m-%d') + msg)
-                if self.extrapolation_method == 'none':    
-                    dates_above.append(np.nan)
-                elif self.extrapolation_method == 'flat':    
-                    dates_above.append(bound_date)
-      
-        in_range = np.logical_and(np.logical_not(below_range),np.logical_not(above_range))
-        cleaned_dates = dates_below + list(dates[in_range].values) + dates_above
-        
-        # this would be quicker if used pandas index
-        df = pd.merge(pd.DataFrame(data=cleaned_dates, columns=['date']), self.df_data, left_on='date',right_on='date', how='left')
-        if compounding_frequency == 'continuously':
-            result = (- np.log(df['discount_factor']) / df['years_to_date'])
-        elif compounding_frequency == 'daily':
-            days_to_date = self.daycounter.day_count(self.curve_date,df['date']) 
-            result = (days_to_date * ((1 / df['discount_factor']) ** (1.0 / (days_to_date * df['years_to_date'])) - 1.0))
-        elif compounding_frequency == 'monthly':
-            result = (12.0 * ((1.0 / df['discount_factor']) ** (1.0 / (12.0 * df['years_to_date'])) - 1.0))
-        elif compounding_frequency == 'quarterly':
-            result = (4.0 * ((1.0 / df['discount_factor']) ** (1.0 / (4.0 * df['years_to_date'])) - 1.0))
-        elif compounding_frequency == 'semi-annually':
-            result = (2.0 * ((1.0 / df['discount_factor']) ** (1.0 / (2.0 * df['years_to_date'])) - 1.0))
-        elif compounding_frequency == 'annually':
-            result = ((1.0 / df['discount_factor']) ** (1.0 / df['years_to_date']) - 1.0)
-        elif compounding_frequency == 'simple':
-            result = (((1.0 / df['discount_factor']) - 1.0) / df['years_to_date'])
+
+
+        if years is not None:
+            if self.interpolation_method == 'cubic_spline_on_zero_rates':
+                return scipy.interpolate.splev(x=years, tck=self.cubic_spline_definition, der=0) 
+            elif self.interpolation_method == 'linear_on_log_of_discount_factors':
+                
+                # np.interp(x=)
+                
+                return None 
+                
+
+        if dates is not None:
+            if type(dates) is pd.Timestamp: dates = pd.Series([dates])
+            
+            # check if any of the dates are outside the available data
+            min_date = self.daily_data['date'].min()
+            below_range = dates < min_date
+            dates_below = []
+            if any(below_range):
+                bound_date = self.daily_data['date'].min()
+                for i,date in enumerate(dates[below_range]):
+                    print('Date', date.strftime('%Y-%m-%d'), 'is below the min available data of ' + bound_date.strftime('%Y-%m-%d') + msg)
+                    if self.extrapolation_method == 'none':    
+                        dates_below.append(np.nan)
+                    elif self.extrapolation_method == 'flat':    
+                        dates_below.append(bound_date)
+            
+            max_date = self.daily_data['date'].max()
+            above_range = dates > max_date
+            dates_above = []
+            if any(above_range):
+                bound_date = self.daily_data['date'].max()
+                for i,date in enumerate(dates[above_range]):
+                    print('Date', date.strftime('%Y-%m-%d'), 'is above the max available data of ' + bound_date.strftime('%Y-%m-%d') + msg)
+                    if self.extrapolation_method == 'none':    
+                        dates_above.append(np.nan)
+                    elif self.extrapolation_method == 'flat':    
+                        dates_above.append(bound_date)
+          
+            in_range = np.logical_and(np.logical_not(below_range),np.logical_not(above_range))
+            cleaned_dates = dates_below + list(dates[in_range].values) + dates_above
+            
+            # this would be quicker if used pandas index
+            df = pd.merge(pd.DataFrame(data=cleaned_dates, columns=['date']), self.daily_data, left_on='date',right_on='date', how='left')
+            if compounding_frequency == 'continuously':
+                result = (- np.log(df['discount_factor']) / df['years_to_date'])
+            elif compounding_frequency == 'daily':
+                days_to_date = self.daycounter.day_count(self.curve_date,df['date']) 
+                result = (days_to_date * ((1 / df['discount_factor']) ** (1.0 / (days_to_date * df['years_to_date'])) - 1.0))
+            elif compounding_frequency == 'monthly':
+                result = (12.0 * ((1.0 / df['discount_factor']) ** (1.0 / (12.0 * df['years_to_date'])) - 1.0))
+            elif compounding_frequency == 'quarterly':
+                result = (4.0 * ((1.0 / df['discount_factor']) ** (1.0 / (4.0 * df['years_to_date'])) - 1.0))
+            elif compounding_frequency == 'semi-annually':
+                result = (2.0 * ((1.0 / df['discount_factor']) ** (1.0 / (2.0 * df['years_to_date'])) - 1.0))
+            elif compounding_frequency == 'annually':
+                result = ((1.0 / df['discount_factor']) ** (1.0 / df['years_to_date']) - 1.0)
+            elif compounding_frequency == 'simple':
+                result = (((1.0 / df['discount_factor']) - 1.0) / df['years_to_date'])
     
         return result
         
         
     def plot(self, forward_rate_terms=[90]):
             
-
         # Zero rates
-        min_date = self.df_data['date'].iloc[1]
-        max_date = self.df_data['date'].iloc[-1]
+        min_date = self.daily_data['date'].iloc[1]
+        max_date = self.daily_data['date'].iloc[-1]
         date_range = pd.date_range(min_date,max_date,freq='d')
         years_zr = self.daycounter.year_fraction(self.curve_date,date_range)
-        zero_rates = pd.Series(self.zero_rate(date_range)) * 100
+        zero_rates = pd.Series(self.zero_rate(dates=date_range)) * 100
         
         fig, ax = plt.subplots()
         
@@ -451,13 +483,13 @@ class ZeroCurve:
             if self.name is not None and zero_curve.name is not None:
                 name = '[' + self.name + '] - [' + zero_curve.name + ']'
             
-        min_date = min(self.df_data['date'].iloc[-1], zero_curve.df_data['date'].iloc[-1])
+        min_date = min(self.daily_data['date'].iloc[-1], zero_curve.daily_data['date'].iloc[-1])
 
         date_range = pd.date_range(self.curve_date, min_date,freq='d')
         date_range = date_range[1:] # exclude the zero_rate on self.data which is probably a np.nan
 
-        zero_rates_self = self.zero_rate(date_range)
-        zero_rates_other = zero_curve.zero_rate(date_range)
+        zero_rates_self = self.zero_rate(dates=date_range)
+        zero_rates_other = zero_curve.zero_rate(dates=date_range)
         
         zero_rate_difference = zero_rates_self - zero_rates_other
         df_diff = pd.DataFrame({'date': date_range,
@@ -485,13 +517,13 @@ class ZeroCurve:
             if self.name is not None and zero_curve.name is not None:
                 name = '[' + self.name + '] + [' + zero_curve.name + ']'
             
-        min_date = min(self.df_data['date'].iloc[-1], zero_curve.df_data['date'].iloc[-1])
+        min_date = min(self.daily_data['date'].iloc[-1], zero_curve.daily_data['date'].iloc[-1])
 
         date_range = pd.date_range(self.curve_date, min_date,freq='d')
         date_range = date_range[1:] # exclude the zero_rate on self.data which is probably a np.nan
 
-        zero_rates_self = self.zero_rate(date_range)
-        zero_rates_other = zero_curve.zero_rate(date_range)
+        zero_rates_self = self.zero_rate(dates=date_range)
+        zero_rates_other = zero_curve.zero_rate(dates=date_range)
         
         zero_rate_difference = zero_rates_self + zero_rates_other
         df_diff = pd.DataFrame({'date': date_range,

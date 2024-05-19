@@ -293,7 +293,7 @@ def main():
     # Example Input
     # FXOptionPrice(1.1609, 1.2, 30 / 360, 'Case Study 2017 - Pricing Engine.xlsx')
 
-    validus_answer = Conrad(1.1609, 1.1, 5, os.getcwd() + '\\frm\\pricing_engine\\tests\\test_vanna_volga.xlsx').FXOptionPrice()
+    validus_answer = Conrad(1.1609, 1.1, 5, os.getcwd() + '\\pricing_engine\\in_progress\\Case Study 2017 - Pricing Engine.xlsx').FXOptionPrice()
     print(validus_answer)
     plt.show()
 
