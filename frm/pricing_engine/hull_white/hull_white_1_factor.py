@@ -52,6 +52,7 @@ class HullWhite(Bond):
     def PrepareThetas(self):
         Timeline        = np.linspace(Maturities[0], Maturities[-1],100)
         Thetarates      = [self.Thetat(t) for t in Timeline]
+        self.ThetaratesForTimeline = np.array(Thetarates)
         self.Thetarates = scipy.interpolate.splrep(Timeline, Thetarates) 
         
     def A(self, t, T):                    
@@ -76,11 +77,12 @@ class HullWhite(Bond):
         # Calculate dF/dt by numerical integration
         up       = np.max(time + self.dt,0)
         down     = np.max(time - self.dt,0)
-        df_t_down = self.ForwardRate(down)
-        df_t_up = self.ForwardRate(up)  
+        
         df_t = self.ForwardRate(time)
-        df =  df_t_up - df_t_down
-        df_dt    = df/(2*self.dt)
+        df_t_up = self.ForwardRate(up)  
+        df_t_down = self.ForwardRate(down)
+
+        df_dt    = (df_t_up - df_t_down)/(2*self.dt)
         
         return df_dt + self.kappa * df_t + (self.sigma**2)/(self.kappa*2)*(1-np.exp(-2*self.kappa*time))
         
@@ -146,6 +148,21 @@ sigma = 0.0196  # vol
 hullwhite = HullWhite(Prices,Maturities, theta, kappa, sigma,rate0)
 hullwhite.PrepareThetas()
 
+theta = hullwhite.ThetaratesForTimeline
+
+#%%
+
+CCZR = -1 * np.log(Prices) / Maturities
+
+spline_def = scipy.interpolate.splrep(Maturities, CCZR)   
+
+Timeline        = np.linspace(Maturities[0], Maturities[-1],100)
+
+CCZR_0 = scipy.interpolate.splev(Timeline, spline_def, der=0) # der=1 gets the 1st derivative
+CCZR_1 = scipy.interpolate.splev(Timeline, spline_def, der=1) # der=1 gets the 1st derivative
+
+
+
 
 #%%
 
@@ -170,6 +187,12 @@ Fwdrates  = [hullwhite.ForwardRate(t) for t in Timeline]
 zerorates = [hullwhite.ZeroRate(t) for t in Timeline]
 Thetarates= [hullwhite.Thetat(t) for t in Timeline]
 hullwhitePrices=[hullwhite.Exact_zcb(0, t) for t in Timeline]
+
+FwdratesNp = np.array(Fwdrates)
+zeroratesNp = np.array(zerorates)
+ThetaratesNp = np.array(Thetarates)
+hullwhitePricesp = np.array(hullwhitePrices)
+
 
 #%%
 
@@ -215,18 +238,14 @@ tau = 5
 I   = 10000       # no. of simulations
 M   = tau * 252   # trading day per annum
 
-
 # So we always use the same random numbers
 npr.seed(1500)
 
 # run the sde
 %time hullwhite.Euler(M, I, tau)
 
-
 vals = hullwhite.StochasticPrice(hullwhite.rates, hullwhite.times)
 
-
-#%%
 print("the price is:      ", vals[0])
 print("the price +2sd is :", vals[1])
 print("the price -2sd is :", vals[2])
@@ -252,9 +271,6 @@ for i, j in enumerate(Maturities):
     Result[i,4] = np.round(hullwhite.Exact_zcb(0,j),4)
     Result[i,5] = np.round(vals[2],4)
     
-    
-#%%
-
 Result = pd.DataFrame(Result)
 Result.columns = ['Maturity','MC Price','MC Price+2CD', 'Original Price', 'hullwhite Price', 'MC Price-2CD',]
 Result.tail(10)
