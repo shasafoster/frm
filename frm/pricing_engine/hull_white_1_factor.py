@@ -74,7 +74,7 @@ def calc_A(t, T, θ_spline_definition, α, σ):
         
 
 def calc_discount_factor(t, T, θ, α, σ, r0):
-    # MAFS525 – Computational Methods for Pricing Structured Products, Slide 3/41   
+    # MAFS525 – Computational Methods for Pricing Structured Products, Slide 3/41 (Hull Whi)
     B = calc_B(t, T, α)
     A = calc_A(t, T, θ, α, σ)
     return np.exp(A - r0*B)
