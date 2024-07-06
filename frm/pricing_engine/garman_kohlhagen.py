@@ -80,7 +80,7 @@ def gk_price(S0: float,
     else:
         # Under interest rate parity 
         F = S0 * np.exp((r_d - r_f) * tau)
-        d1 = (np.log(S0 / K) + (r_d - r_f + 0.5 * σ**2) * tau) / (σ * np.sqrt(tau))
+        d1 = (np.log(S0 / K) + (r_d - r_f + 0.5 * σ**2) * tau) / (σ * np.sqrt(tau)) # Not actually used in the pricing
         d2 = d1 - σ * np.sqrt(tau)    
         X = cp * (S0 * np.exp(-r_f * tau) * norm.cdf(cp * d1) - K * np.exp(-r_d * tau) * norm.cdf(cp * d2))
         

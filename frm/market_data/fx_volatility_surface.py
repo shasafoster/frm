@@ -18,7 +18,7 @@ from frm.frm.pricing_engine.heston import simulate_heston
 from frm.frm.schedule.tenor import calc_tenor_date, get_spot_offset
 from frm.frm.schedule.daycounter import DayCounter, VALID_DAY_COUNT_BASIS_TYPES
 from frm.frm.schedule.business_day_calendar import get_calendar        
-from frm.frm.utilities.utilities import convert_column_type, generic_market_data_input_cleanup_and_validation    
+from frm.frm.utilities.utilities import convert_column_to_consistent_data_type, generic_market_data_input_cleanup_and_validation    
 
 #%%
 
@@ -102,7 +102,7 @@ class FXVolatilitySurface:
  
         # fx_forward_curve validation 
         assert 'fx_forward_rate' in self.fx_forward_curve.columns 
-        self.fx_forward_curve = convert_column_type(self.fx_forward_curve)
+        self.fx_forward_curve = convert_column_to_consistent_data_type(self.fx_forward_curve)
         assert ('tenor_name' in self.fx_forward_curve.columns) or ('expiry_date' in self.fx_forward_curve.columns and 'delivery_date' in self.fx_forward_curve.columns)
         if 'expiry_date' not in self.fx_forward_curve.columns and 'delivery_date' not in self.fx_forward_curve.columns:
             

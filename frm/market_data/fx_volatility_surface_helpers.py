@@ -14,7 +14,7 @@ from frm.frm.pricing_engine.heston_garman_kohlhagen import heston_fit_vanilla_fx
 from frm.frm.schedule.tenor import calc_tenor_date, get_spot_offset
 from frm.frm.schedule.daycounter import VALID_DAY_COUNT_BASIS
 from frm.frm.schedule.business_day_calendar import get_calendar        
-from frm.frm.utilities.utilities import convert_column_type, clean_input_dataframe, move_col_after, copy_errors_and_warnings_to_input
+from frm.frm.utilities.utilities import convert_column_to_consistent_data_type, clean_input_dataframe, move_col_after, copy_errors_and_warnings_to_input
 
 import numpy as np
 import pandas as pd
