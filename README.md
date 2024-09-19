@@ -1,7 +1,8 @@
 # frm
 
 A python package for quantitative finance and derivative pricing.
-Emphasis on documentation, references and detailed examples.
+Emphasis on documentation, academic references, detailed examples and supporting excel models. 
+Uses common 3rd party python packages for scientific computing (numpy, scipy, pandas, numba, matplotlib) as well as holidays and pandas_market_calendars.
 
 This package will have a similar scope to Quantlib. The rational for this package is:
 - QuantLib-Python is fiddly and due to SWIG it's hard to drill down into errors. 
