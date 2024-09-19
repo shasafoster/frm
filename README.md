@@ -4,13 +4,19 @@
 [![PyPI](https://img.shields.io/pypi/v/frm?label=PyPI%20Package)](https://pypi.org/project/frm/)
 
 
-A python package for quantitative finance and derivative pricing.
+frm is a python package for quantitative finance and derivative pricing.
 Emphasis on documentation, academic references, detailed examples and supporting excel models. 
 Uses common 3rd party python packages for scientific computing (numpy, scipy, pandas, numba, matplotlib) as well as holidays and pandas_market_calendars.
 
 This package will have a similar scope to Quantlib. The rational for this package is:
 - QuantLib-Python is fiddly and due to SWIG it's hard to drill down into errors. 
 - QuantLib C++ is in C++ which is unproductive for many use cases and is harder to read than native python (which is nearly pseudocode) 
+
+# Installation
+```bash
+pip install frm
+```
+
 
 ## Complete
 
