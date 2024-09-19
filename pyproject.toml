@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "frm"
 version = "0.0.1"
 authors = [
-  { name="John Galt", email="frm.calcs@gmail.com" },
+  { name="Shasa Foster", email="shasa.foster@gmail.com" },
 ]
 description = "A python package for quantitative finance and derivative pricing"
 readme = "README.md"
@@ -29,10 +29,10 @@ classifiers = [
 
 [project.urls]
 "Homepage" = "https://github.com/frmcalcs/frm"
-"Website" = "https://www.frmcalcs.com/app_frm/"
+"Website" = "https://www.frmcalcs.com"
 
 [tool.setuptools]
 include-package-data = false
 
 [tool.setuptools.packages.find]
-exclude = ["references", "testing"]  # Add these lines to exclude specific packages
+exclude = ["references", "testing", "excel_models", "excel_models_private", "examples"]  # Add these lines to exclude specific packages
