@@ -1,5 +1,9 @@
 # frm
 
+
+[![PyPI](https://img.shields.io/pypi/v/frm)](https://pypi.org/project/frm/)
+
+
 A python package for quantitative finance and derivative pricing.
 Emphasis on documentation, academic references, detailed examples and supporting excel models. 
 Uses common 3rd party python packages for scientific computing (numpy, scipy, pandas, numba, matplotlib) as well as holidays and pandas_market_calendars.
