@@ -1,7 +1,7 @@
 # frm
 
 
-[![PyPI](https://img.shields.io/pypi/v/frm)](https://pypi.org/project/frm/)
+[![PyPI](https://img.shields.io/pypi/v/frm?label=PyPI%20Package)](https://pypi.org/project/frm/)
 
 
 A python package for quantitative finance and derivative pricing.
