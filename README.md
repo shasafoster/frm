@@ -1,13 +1,23 @@
 # frm
 
-A python package for quantitative finance and derivative pricing.
-Emphasis on documentation, references and detailed examples.
+[![PyPI](https://img.shields.io/pypi/v/frm?label=PyPI%20Package)](https://pypi.org/project/frm/)
+[![Codacy Badge](https://app.codacy.com/project/badge/Grade/84233a0d4c944e7e92abdb4011db33b4)](https://app.codacy.com/gh/frmcalcs/frm/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
 
-This package will have a similar scope to Quantlib. The rational for this package is:
-- QuantLib-Python is fiddly and due to SWIG it's hard to drill down into errors. 
-- QuantLib C++ is in C++ which is unproductive for many use cases and is harder to read than native python (which is nearly pseudocode) 
+frm is an in-development python package for quantitative financial pricing and modelling.
+frm uses common 3rd party python packages for scientific computing (numpy, scipy, pandas, numba, matplotlib) and the holidays package.
 
-## Complete
+This package will have a similar function set to Quantlib however we want to make it more *accessible*, *documented*, and *productive* though:
+1. The python (core + 3rd party libaries) implementation
+2. Academic and industry references (at specific lines of code) to support users own validation and testing
+3. Supporting [excel/VBA models](https://github.com/frmcalcs/frm/tree/master/excel_models) that validate/support the code 
+4. Significant code examples  
+
+# Installation
+```bash
+pip install frm
+```
+
+## In progress
 
 Interest rate swaps
 - pricing
@@ -19,15 +29,15 @@ Vanilla European FX options
 - pricing + greeks (under Garman-Kohlhagen)
 - volatility surface construction (smile construction via Heston or splines)  
 
-
 ## Pipeline
 - SABR volatility model
 - European interest rate swaption pricing
-- Heston-Local Volatility model (for pricing path dependent FX options)
+- CDS Bootstrapper
 
-
-
-At <a href="https://www.frmcalcs.com/app_frm/" target="_blank">frmcalcs.com/app_frm/</a>, some use cases are are hosted.
+## Hosted examples
+At <https://frmcalcs.com>, the following tools are are hosted:
+- FX forward valuations and exposure modelling for CVA/DVA 
+- Vanilla FX option valuations
 
 
 
