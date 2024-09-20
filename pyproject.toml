@@ -32,8 +32,13 @@ classifiers = [
 "Homepage" = "https://github.com/frmcalcs/frm"
 "Website" = "https://www.frmcalcs.com"
 
-[tool.setuptools]
-include-package-data = false
+# Hatchling-specific configuration to ensure the correct files are included in the wheel
+[tool.hatch.build.targets.wheel]
+packages = ["frm"]  # Replace with the correct directory if your package isn't directly under 'frm'
 
-[tool.setuptools.packages.find]
-exclude = ["references", "tests", "excel_models", "excel_models_private", "examples", "excel_models", "excel_models_private", "examples"]  # Add these lines to exclude specific packages
+# Specify which files to include in the build
+[tool.hatch.build]
+include = ["frm/**", "README.md"]  # Adjust this to include relevant files
+
+# Exclude unnecessary files
+exclude = ["references/**", "tests/**", "examples/**", "excel_models/**", "excel_models_private/**"]
