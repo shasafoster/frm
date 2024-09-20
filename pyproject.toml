@@ -32,7 +32,10 @@ classifiers = [
 "Homepage" = "https://github.com/frmcalcs/frm"
 "Website" = "https://www.frmcalcs.com"
 
-# Exclude unnecessary files
-exclude = ["references/**", "tests/**", "examples/**", "excel_models/**", "excel_models_private/**"]
+[tool.hatch.build.targets.wheel]
+packages = ["frm"]
 
+[tool.hatch.build]
+include = ["frm/**", "README.md"]
+exclude = ["tests/**", "examples/**", "references/**", "excel_models/**", "excel_models_private/**"]
 
