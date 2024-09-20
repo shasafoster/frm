@@ -1,14 +1,5 @@
 # -*- coding: utf-8 -*-
-
-
-if __name__ == "__main__":
-    import os
-    import pathlib
-    os.chdir(pathlib.Path(__file__).parent.parent.parent.resolve())     
-    print('__main__ - current working directory:', os.getcwd())
-    
 import numpy as np
-
 MAX_SIMULATIONS_PER_LOOP = 100e6
 
 def generate_rand_nbs(nb_steps: int,
@@ -81,9 +72,6 @@ def generate_rand_nbs(nb_steps: int,
     return rand_nbs
 
 
-#%%
-
-            
 if __name__ == "__main__":
     rand_nbs = generate_rand_nbs(nb_steps=20,
                                  nb_rand_vars=1,

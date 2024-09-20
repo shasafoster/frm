@@ -35,4 +35,4 @@ classifiers = [
 include-package-data = false
 
 [tool.setuptools.packages.find]
-exclude = ["references", "testing", "excel_models", "excel_models_private", "examples"]  # Add these lines to exclude specific packages
+exclude = ["references", "tests", "excel_models", "excel_models_private", "examples"]  # Add these lines to exclude specific packages
