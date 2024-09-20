@@ -1,8 +1,7 @@
 # frm
 
 [![PyPI](https://img.shields.io/pypi/v/frm?label=PyPI%20Package)](https://pypi.org/project/frm/)
-
-
+[![Codacy Badge](https://app.codacy.com/project/badge/Grade/84233a0d4c944e7e92abdb4011db33b4)](https://app.codacy.com/gh/frmcalcs/frm/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
 
 frm is an in-development python package for quantitative financial pricing and modelling.
 frm uses common 3rd party python packages for scientific computing (numpy, scipy, pandas, numba, matplotlib) and the holidays package.
