@@ -32,7 +32,7 @@ jobs:
         pip install build bump2version
 
     - name: Bump version
-      # Automatically bump the patch version (you can also bump minor or major)
+      # Automatically bump the PyPI version
       run: bump2version patch
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
