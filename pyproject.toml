@@ -18,6 +18,8 @@ dependencies=[
     "numpy",
     "pandas",	
     "pandas_market_calendars",
+    "PrettyTable",
+    "pytest",
     "scipy",
       ]
 classifiers = [
