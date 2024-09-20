@@ -36,9 +36,8 @@ Vanilla European FX options
 - European interest rate swaption pricing
 - Heston-Local Volatility model (for pricing path dependent FX options)
 
-
-
-At <a href="https://www.frmcalcs.com/app_frm/" target="_blank">frmcalcs.com/app_frm/</a>, some use cases are are hosted.
+## Hosted examples
+At <a href="https://www.frmcalcs.com" target="_blank">frmcalcs.com</a>, some examples / use cases are are hosted.
 
 
 
