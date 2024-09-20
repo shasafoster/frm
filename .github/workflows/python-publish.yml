@@ -50,7 +50,9 @@ jobs:
       with:
         user: ${{ secrets.PYPI_USERNAME }}
         password: ${{ secrets.PYPI_PASSWORD }}
+        skip_existing: true
         verbose: true # enable verbose mode
+        
 
     - name: Push new version tag
       # Pushes the new version tag that bump2version created
