@@ -31,6 +31,11 @@ jobs:
         python -m pip install --upgrade pip
         pip install build bump2version
 
+    - name: Configure Git
+      run: |
+        git config --local user.name "GitHub Actions"
+        git config --local user.email "actions@github.com"
+
     - name: Bump version
       # Automatically bump the PyPI version
       run: bump2version patch
