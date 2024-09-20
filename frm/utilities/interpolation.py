@@ -35,3 +35,4 @@
 #     result = result.reindex(x)
     
 #     return result['fx_forward_rate']
+# Test
