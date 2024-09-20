@@ -13,7 +13,7 @@ on:
     types: [published]
 
 permissions:
-  contents: read
+  contents: write  # To allow GitHub Actions to push tags
 
 jobs:
   deploy:
@@ -31,6 +31,11 @@ jobs:
         python -m pip install --upgrade pip
         pip install build bump2version
 
+    - name: Configure Git
+      run: |
+        git config --local user.name "GitHub Actions"
+        git config --local user.email "actions@github.com"
+
     - name: Bump version
       # Automatically bump the PyPI version
       run: bump2version patch
@@ -45,7 +50,9 @@ jobs:
       with:
         user: ${{ secrets.PYPI_USERNAME }}
         password: ${{ secrets.PYPI_PASSWORD }}
+        skip_existing: true
         verbose: true # enable verbose mode
+        
 
     - name: Push new version tag
       # Pushes the new version tag that bump2version created
