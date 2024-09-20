@@ -35,7 +35,7 @@ Vanilla European FX options
 - CDS Bootstrapper
 
 ## Hosted examples
-At [frmcalcs.com](https://frmcalcs.com), the following tools are are hosted:
+At <https://frmcalcs.com>, the following tools are are hosted:
 - FX forward valuations and exposure modelling for CVA/DVA 
 - Vanilla FX option valuations
 
