@@ -1,24 +1,22 @@
 # frm
 
-
 [![PyPI](https://img.shields.io/pypi/v/frm?label=PyPI%20Package)](https://pypi.org/project/frm/)
 
+frm is an in-development python package for quantitative financial pricing and modelling.
+frm uses common 3rd party python packages for scientific computing (numpy, scipy, pandas, numba, matplotlib) as well as the holidays and pandas_market_calendars.
 
-frm is a python package for quantitative finance and derivative pricing.
-Emphasis on documentation, academic references, detailed examples and supporting excel models. 
-Uses common 3rd party python packages for scientific computing (numpy, scipy, pandas, numba, matplotlib) as well as holidays and pandas_market_calendars.
-
-This package will have a similar scope to Quantlib. The rational for this package is:
-- QuantLib-Python is fiddly and due to SWIG it's hard to drill down into errors. 
-- QuantLib C++ is in C++ which is unproductive for many use cases and is harder to read than native python (which is nearly pseudocode) 
+This package will have a similar function set to Quantlib however we want to make it more accessible, documented, productive though:
+1. The python (core + 3rd party libaries) implementation
+2. Academic and industry references (at specific lines of code) to support users own validation and testing
+3. Supporting [excel/VBA models](https://frmcalcs.com) that validate/support the code 
+4. Significant code examples  
 
 # Installation
 ```bash
 pip install frm
 ```
 
-
-## Complete
+## In progress
 
 Interest rate swaps
 - pricing
@@ -30,14 +28,15 @@ Vanilla European FX options
 - pricing + greeks (under Garman-Kohlhagen)
 - volatility surface construction (smile construction via Heston or splines)  
 
-
 ## Pipeline
 - SABR volatility model
 - European interest rate swaption pricing
-- Heston-Local Volatility model (for pricing path dependent FX options)
+- CDS Bootstrapper
 
 ## Hosted examples
-At [![frmcalcs.com]](https://frmcalcs.com), some examples / use cases are are hosted.
+At [frmcalcs.com](https://frmcalcs.com), the following tools are are hosted:
+- FX forward valuations and exposure modelling for CVA/DVA 
+- Vanilla FX option valuations
 
 
 
