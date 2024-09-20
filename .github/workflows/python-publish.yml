@@ -13,7 +13,7 @@ on:
     types: [published]
 
 permissions:
-  contents: read
+  contents: write  # To allow GitHub Actions to push tags
 
 jobs:
   deploy:
