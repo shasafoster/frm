@@ -2,9 +2,6 @@
 
 [![PyPI](https://img.shields.io/pypi/v/frm?label=PyPI%20Package)](https://pypi.org/project/frm/)
 
-[![GitHub Actions](https://img.shields.io/pypi/v/frm?label=PyPI%20Package)](https://github.com/frmcalcs/frm/actions)
-
-
 
 
 frm is an in-development python package for quantitative financial pricing and modelling.
