@@ -3,7 +3,7 @@
 [![PyPI](https://img.shields.io/pypi/v/frm?label=PyPI%20Package)](https://pypi.org/project/frm/)
 
 frm is an in-development python package for quantitative financial pricing and modelling.
-frm uses common 3rd party python packages for scientific computing (numpy, scipy, pandas, numba, matplotlib) as well as the holidays and pandas_market_calendars.
+frm uses common 3rd party python packages for scientific computing (numpy, scipy, pandas, numba, matplotlib) and the holidays package.
 
 This package will have a similar function set to Quantlib however we want to make it more accessible, documented, productive though:
 1. The python (core + 3rd party libaries) implementation
