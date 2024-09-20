@@ -13,13 +13,12 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies=[           
     "holidays",
-    "pandas",
-    "numpy",
-    "pandas_market_calendars",
-    "datetime",
-    "scipy",
-    "matplotlib",
+    "matplotlib",	
     "numba",
+    "numpy",
+    "pandas",	
+    "pandas_market_calendars",
+    "scipy",
       ]
 classifiers = [
     "Programming Language :: Python :: 3",
