@@ -37,7 +37,7 @@ Vanilla European FX options
 - Heston-Local Volatility model (for pricing path dependent FX options)
 
 ## Hosted examples
-At <a href="https://www.frmcalcs.com" target="_blank">frmcalcs.com</a>, some examples / use cases are are hosted.
+At [![frmcalcs.com]](https://frmcalcs.com), some examples / use cases are are hosted.
 
 
 
