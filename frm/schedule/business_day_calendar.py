@@ -52,7 +52,7 @@ LOCALE_HOLIDAY = dict(sorted({
     'VN-HO_CHI_MINH_CITY': holidays.VN(categories=['public'], years=years),
     'ZA-JOHANNESBURG': holidays.ZA(categories=['public'], years=years),
     'European_Central_Bank': holidays.ECB(categories=['public'], years=years),
-    'ICE_Futures_Europe': holidays.IFEU(categories=['public'], years=years),
+    'ICE_Futures_Europe': holidays.IFEU(categories=['public'], years=years), # Requires holidays >=0.49
     'New_York_Stock_Exchange': holidays.XNYS(categories=['public'], years=years),
 }.items()))
 
