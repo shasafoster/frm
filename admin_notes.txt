@@ -1,4 +1,5 @@
 For publishing new package to PyPi
-1. Increment/specify version number in pyproject.toml
-2. Create new release with a unique tag (it cannot related to an existing tag, you can delete existing tags though).
-3. Verify new release on PyPi
+1. Ensure all tests are passing (run '>pytest' in root)
+2. Increment/specify version number in pyproject.toml
+3. Create new release with a unique tag (it cannot related to an existing tag, you can delete existing tags though).
+4. Verify new release on PyPi

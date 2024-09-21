@@ -12,9 +12,9 @@ This package will have a similar function set to Quantlib however we want to mak
 3. Supporting [excel/VBA models](https://github.com/frmcalcs/frm/tree/master/excel_models) that validate/support the code 
 4. Significant code examples  
 
-## Installation / Upgrade
+## Installation
 ```bash
-pip install --upgrade frm || pip install --upgrade frm
+pip install --upgrade frm
 ```
 
 ## In progress

@@ -1,273 +1,200 @@
 # -*- coding: utf-8 -*-
-
-
-if __name__ == "__main__":
-    import os
-    import pathlib
-    os.chdir(pathlib.Path(__file__).parent.parent.parent.parent.resolve())     
-    print('__main__ - current working directory:', os.getcwd())
-
-#from frm.frm.market_data.iban_ccys import VALID_CCYS
-
-import os
-import holidays
-import pandas_market_calendars as mcal
-import numpy as np
 import datetime as dt
+from functools import reduce
+import os
+import sys
+
+import holidays
+import numpy as np
+import pandas as pd
 from dateutil.relativedelta import relativedelta
-import time
-import pickle
-from typing import Literal
+
+years = range(1990,2100)
+
+LOCALE_HOLIDAY = dict(sorted({
+    'AE-DUBAI': holidays.AE(categories=['public'], years=years),
+    'AR-BUENOS_AIRES': holidays.AR(categories=['public'], years=years),
+    'AU-SYDNEY': holidays.AU(subdiv='NSW', categories=['public', 'bank'], years=years),
+    'AU-MELBOURNE': holidays.AU(subdiv='VIC', categories=['public', 'bank'], years=years),
+    'BR-SAO_PAULO': holidays.BR(subdiv='SP', categories=['public'], years=years),
+    'CA-TORONTO': holidays.CA(subdiv='ON', categories=['public'], years=years),
+    'CH-ZURICH': holidays.CH(subdiv='ZH', categories=['public'], years=years),
+    'CL-SANTIAGO': holidays.CL(subdiv='RM', categories=['public', 'bank'], years=years),
+    'CN-SHANGHAI': holidays.CN(categories=['public'], years=years),
+    'CO-BOGOTA': holidays.CO(categories=['public'], years=years),
+    'CZ-PRAGUE': holidays.CZ(categories=['public'], years=years),
+    'DK-COPENHAGEN': holidays.DK(categories=['public'], years=years),
+    'DE-FRANKFURT': holidays.DE(subdiv='HH', categories=['public'], years=years),
+    'ES-MADRID': holidays.ES(subdiv='MD', categories=['public'], years=years),
+    'FR-PARIS': holidays.FR(categories=['public'], years=years),
+    'FI-HELSINKI': holidays.FI(categories=['public'], years=years),
+    'HK-HONG_KONG': holidays.HK(categories=['public'], years=years),
+    'HU-BUDAPEST': holidays.HU(categories=['public'], years=years),
+    'ID-JAKARTA': holidays.ID(categories=['public'], years=years),
+    'IN-MUMBAI': holidays.IN(subdiv='MH', categories=['public'], years=years),
+    'IL-TEL_AVIV': holidays.IL(categories=['public'], years=years),
+    'IS-REYKJAVIK': holidays.IS(categories=['public'], years=years),
+    'MY-KUALA_LUMPUR': holidays.MY(subdiv='KUL', categories=['public'], years=years),
+    'MX-MEXICO_CITY': holidays.MX(categories=['public'], years=years),
+    'NO-OSLO': holidays.NO(categories=['public'], years=years),
+    'NZ-AUCKLAND': holidays.NZ(subdiv='AUK', categories=['public'], years=years),
+    'PL-WARSAW': holidays.PL(categories=['public'], years=years),
+    'PH-MANILA': holidays.PH(categories=['public'], years=years),
+    'RU-MOSCOW': holidays.RU(categories=['public'], years=years),
+    'SA-RIYADH': holidays.SA(categories=['public'], years=years),
+    'SE-STOCKHOLM': holidays.SE(categories=['public'], years=years),
+    'SG-SINGAPORE': holidays.SG(categories=['public'], years=years),
+    'TH-BANKCOK': holidays.TH(categories=['public', 'bank'], years=years),
+    'TR-ISTANBUL': holidays.TR(categories=['public'], years=years),
+    'TW-TAPEI': holidays.TW(categories=['public'], years=years),
+    'UK-LONDON': holidays.UK(subdiv='ENG', categories=['public'], years=years),
+    'US-NEW_YORK': holidays.US(subdiv='NY', categories=['public'], years=years),
+    'VN-HO_CHI_MINH_CITY': holidays.VN(categories=['public'], years=years),
+    'ZA-JOHANNESBURG': holidays.ZA(categories=['public'], years=years),
+    'European_Central_Bank': holidays.ECB(categories=['public'], years=years),
+    'ICE_Futures_Europe': holidays.IFEU(categories=['public'], years=years),
+    'New_York_Stock_Exchange': holidays.XNYS(categories=['public'], years=years),
+}.items()))
 
 
-def log(log_idx, t1, msg):
-    t2 = time.time()
-    if __name__ == "__main__":
-        print(log_idx, msg, round(t2-t1,2))
-    return log_idx + 1, t2
+CCY_HOLIDAY = dict(sorted({
+    'AED': holidays.AE(categories=['public'], years=years),
+    'ARS': holidays.AR(categories=['public'], years=years),
+    'AUD': holidays.AU(subdiv='NSW', categories=['public', 'bank'], years=years),
+    'BRL': holidays.BR(subdiv='SP', categories=['public'], years=years),
+    'CAD': holidays.CA(subdiv='ON', categories=['public'], years=years),
+    'CHF': holidays.CH(subdiv='ZH', categories=['public'], years=years),
+    'CLP': holidays.CL(subdiv='RM', categories=['public', 'bank'], years=years),
+    'CNY': holidays.CN(categories=['public'], years=years),
+    'COP': holidays.CO(categories=['public'], years=years),
+    'CZK': holidays.CZ(categories=['public'], years=years),
+    'DKK': holidays.DK(categories=['public'], years=years),
+    'HKD': holidays.HK(categories=['public'], years=years),
+    'HUF': holidays.HU(categories=['public'], years=years),
+    'IDR': holidays.ID(categories=['public'], years=years),
+    'INR': holidays.IN(subdiv='MH', categories=['public'], years=years),
+    'ILS': holidays.IL(categories=['public'], years=years),
+    'ISK': holidays.IS(categories=['public'], years=years),
+    'MYR': holidays.MY(subdiv='KUL', categories=['public'], years=years),
+    'MXN': holidays.MX(categories=['public'], years=years),
+    'NOK': holidays.NO(categories=['public'], years=years),
+    'NZD': holidays.NZ(subdiv='AUK', categories=['public'], years=years),
+    'PLN': holidays.PL(categories=['public'], years=years),
+    'PHP': holidays.PH(categories=['public'], years=years),
+    'RUB': holidays.RU(categories=['public'], years=years),
+    'SAR': holidays.SA(categories=['public'], years=years),
+    'SEK': holidays.SE(categories=['public'], years=years),
+    'SGD': holidays.SG(categories=['public'], years=years),
+    'THB': holidays.TH(categories=['public', 'bank'], years=years),
+    'TRY': holidays.TR(categories=['public'], years=years),
+    'TWD': holidays.TW(categories=['public'], years=years),
+    'GBP': holidays.UK(subdiv='ENG', categories=['public'], years=years),
+    'USD': holidays.US(subdiv='NY', categories=['public'], years=years),
+    'VND': holidays.VN(categories=['public'], years=years),
+    'ZAR': holidays.ZA(categories=['public'], years=years),
+    'EUR': holidays.ECB(categories=['public'], years=years),
+}.items()))
+
+#%%
+
+def get_holidays_obj(ccy):
+    ccy_uppercase = ccy.upper()
+    if ccy_uppercase in CCY_HOLIDAY.keys():
+        return CCY_HOLIDAY[ccy_uppercase]
+    else:
+        raise ValueError(f"Holidays not setup for {ccy_uppercase}")
 
 
-# Define your currency to country/market mapping
-ccy_country_mapping = {
+def convert_weekend_to_weekmask(weekend_set):
+    "For converting the holidays.weekend attribute to a valid weekmask for numpy.busdaycalendar"
+    # Initialize a list of ones representing Monday to Sunday (working days)
+    weekmask = [1, 1, 1, 1, 1, 1, 1]
     
-    # Use market calendars from 'pandas_market_calendars' in 1st instance
-    'USD': 'NYSE',  # United States Dollar - New York Stock Exchange
-    'EUR': 'EUREX',  # Euro - EUREX
-    'JPY': 'JPX',  # Japanese Yen - Tokyo Stock Exchange
-    'GBP': 'LSE',  # British Pound - London Stock Exchange
-#    'AUD': 'ASX',  # Australian Dollar - Australian Securities Exchange
-    'CAD': 'TSX',  # Canadian Dollar - Toronto Stock Exchange
-    'CHF': 'SIX',  # Swiss Franc - SIX Swiss Exchange
-    'NZD': 'XNZE',  # New Zealand Dollar - New Zealand Stock Exchange
-    'BRL': 'BVMF',  # Brazilian Real - B3 - Brasil Bolsa Balcão
-    'INR': 'NSE',  # Indian Rupee - National Stock Exchange of India
-    'HKD': 'HKEX',  # Hong Kong Dollar - HKEX
-    'NOK': 'OSE',  # Norwegian Krone - Olso Stock Exchange
+    # Loop through the weekend days and set corresponding indexes in the weekmask to 0
+    for weekend_day in weekend_set:
+        weekmask[weekend_day] = 0
     
-    # Otherwise use country holidays from 'holidays'
-    'AUD': ('Australia','NSW'),
-    'MXN': 'Mexico', # Mexican Peso - Mexican Stock Exchange
-    'SGD': 'Singapore',  # Singapore Dollar
-    'KRW': 'SouthKorea',  # South Korean Won
-    'TRY': 'Turkey',  # Turkish Lira
-    # 'CNY': 'China',  # Chinese Yuan
-    'SEK': 'Sweden',  # Swedish Krona    
-    'RUB': 'Russia',  # Russian Ruble    
-    'ZAR': 'SouthAfrica',  # South African Rand
-    'DKK': 'Denmark',  # Danish Krone
-    'PLN': 'Poland',  # Polish Złoty
-    'THB': 'Thailand',  # Thai Baht
-    'IDR': 'Indonesia',  # Indonesian Rupiah
-    'HUF': 'Hungary',  # Hungarian Forint
-    'CZK': 'Czech',  # Czech Koruna
-    'ILS': 'Israel',  # Israeli Shekel
-    'CLP': 'Chile',  # Chilean Peso
-    'PHP': 'Philippines',  # Philippine Peso
-    'AED': 'UnitedArabEmirates',  # UAE Dirham
-    'COP': 'Colombia',  # Colombian Peso
-    'SAR': 'SaudiArabia',  # Saudi Riyal
-    'MYR': 'Malaysia',  # Malaysian Ringgit
-    'RON': 'Romania',  # Romanian Leu
-    'ARS': 'Argentina',  # Argentine Peso
-    # Add more currencies here...
-}
-
-def get_holidays(ccy,
-                 start_date=None, 
-                 end_date=None):
-
-    log_idx, t = log(1, time.time(), 'start get_holidays()')
-      
-    ccy = ccy.upper()
-    if start_date == None:
-        start_date = dt.today().date() + relativedelta(years=-10)
-    if end_date == None:
-        end_date = dt.today().date() + relativedelta(years=40)
-    
-    try:
-        with open('./frm/frm/schedule/ccy_holidays_dict.pkl', 'rb') as f:
-            ccy_holidays_dict = pickle.load(f)  
-            
-            if ccy.upper() in ccy_holidays_dict.keys():
-                log_idx, t = log(log_idx, t, 'read in pickled holidays')
-                return ccy_holidays_dict[ccy]  
-            else:
-                print(ccy, ' is not in ccy_holidays_dict.pkl')
-            
-    except FileNotFoundError:
-
-        if ccy.upper() in ccy_country_mapping.keys():
-            holiday_index = ccy_country_mapping[ccy.upper()]
-            
-            if holiday_index in mcal.get_calendar_names():
-                # Get calendar for the market
-                cal = mcal.get_calendar(holiday_index)
-                # Get market schedule
-                market_schedule = cal.schedule(start_date=start_date, end_date=end_date)
-                valid_days_np  = np.array(market_schedule.index.values.astype('datetime64[D]'), dtype='datetime64[D]')
-                all_days = np.arange(valid_days_np[0], valid_days_np[-1] + np.timedelta64(1, 'D'), dtype='datetime64[D]')
-                # the holidays are the days that are in all_days but not in valid_days
-                holidays_np = np.setdiff1d(all_days, valid_days_np)
-                log_idx, t = log(log_idx, t, 'get holidays for ' + ccy + ' from pandas-market-calendars')
-                return holidays_np 
-            else:
-                # If the market is not in the pandas_market_calendars package, get the country holidays
-                
-                if isinstance(holiday_index, tuple):
-                    country, prov = holiday_index[0], holiday_index[1]
-                    
-                elif isinstance(holiday_index, str):
-                    country = holiday_index
-                    prov = None
-                
-                try:
-                    country_holidays = holidays.CountryHoliday(country=country, prov=prov, years=list(range(start_date.year, end_date.year+1)))
-                except:
-                    country_holidays = holidays.CountryHoliday(country=country, prov=prov)
-                
-                # Convert to numpy datetime64[D] format and return busdaycalendar
-                holidays_np = np.array(list(country_holidays.keys()))
-                log_idx, t = log(log_idx, t, 'get holidays for ' + ccy + ' from holidays.CountryHoliday()')
-                return holidays_np
-        else:
-            return None
+    # Return the weekmask as a string (optional, can also return as a list if needed)
+    return ''.join(map(str, weekmask))
 
 
-# https://legislation.nsw.gov.au/view/html/inforce/current/act-2008-049#pt.3A
-# the first Monday in August (Bank Holiday).
-extra_financial_holidays = {
-    
-    
-    }
-
-
-
-
-def get_calendar(ccys,
-                 cities=None,
-                 start_date=None,
-                 end_date=None) -> np.busdaycalendar:
+def get_busdaycalendar(ccys) -> np.busdaycalendar:
     """
-    Create a calendar which has the holidays and business of the currency inputs.
-
-    Parameters
-    ----------
-    ccys : array of strings, optional
-        DESCRIPTION. Array of three letter currency codes, The default is None.
-
-    Returns
-    -------
-    CustomBusinessDay() object, observing the holiday of the cities
-    
+    Create a calendar which has the holidays and business days of the currency inputs.
     """
-    log_idx, t = log(1, time.time(), 'start get_calendar()')
-        
+
     if ccys is None:
         return np.busdaycalendar()
-    
-    if start_date == None:
-        start_date = dt.datetime(2000, 1, 1)
-    if end_date == None:
-        end_date = dt.datetime(2100, 1, 1)    
-    
-    if type(ccys) is str: 
+
+    if type(ccys) is str:
         ccys = [ccys]
     elif type(ccys) is list:
         ccys = list(set(ccys))
         ccys = [ccy.upper() for ccy in ccys]
-            
-    weekmask = getWeekMask(ccys)
 
-    holidays = []
-    if ccys is not None:
-        holidays += [get_holidays(ccy, start_date, end_date) for ccy in ccys]
-    log_idx, t = log(log_idx, t, 'get holidays') 
-   
+    holiday_objs = [get_holidays_obj(ccy) for ccy in ccys]
+    combined_weekend_union = reduce(lambda x, y: x | y.weekend, holiday_objs, set())
+    weekmasks = convert_weekend_to_weekmask(combined_weekend_union)
+
     # Flattan the list of lists
-    holidays = [h for holiday_list in holidays for h in holiday_list]  
-    log_idx, t = log(log_idx, t, 'flatten holidays') 
-    
-    if holidays == []:
-        return np.busdaycalendar(weekmask=weekmask)
-    else:
-        return np.busdaycalendar(weekmask=weekmask, holidays=holidays) #.values.astype('datetime64[D]'))
-        
-    
-def getWeekMask(ccys):
-    """
-    Return the business days of the countries associated with the provided ccys.
-    Muslim/Jewish states have have Friday & Saturday as the weekend.
-    
-    Parameters
-    ----------
-    ccys : numpy array of strings
-        array of three letter currency codes 
-        
-    Returns
-    -------
-    The business days consistent across all ccys 
-    
-    """
-    
-    if ccys is None:
-        return 'Mon Tue Wed Thu Fri'
-    else:    
-        fri_sat_weekend = set(['AFN',  #Afghanistan
-                               'BHD',  #Bahrain
-                               'BDT',  #Bangladesh
-                               'DZD',  #Algeria
-                               'EGP',  #Egypt
-                               'ILS',  #Israel
-                               'IQD',  #Iraq
-                               'JOD',  #Jordan
-                               'KWD',  #Kuwait
-                               'LYD',  #Libya
-                               'MYR',  #Malaysia (some states)
-                               'MVR',  #Maldives
-                               'OMR',  #Oman
-                               'ILS',  #Palestine (depending on the area)
-                               'QAR',  #Qatar
-                               'SAR',  #Saudi Arabia
-                               'SDG',  #Sudan
-                               'SYP',  #Syria
-                               'YER',  #Yemen
-                               ])
-    
-        bool_arr = [ccy.upper() in fri_sat_weekend for ccy in ccys]
-        
-        if True in bool_arr and False in bool_arr:
-            return 'Mon Tue Wed Thu'
-        elif False in bool_arr:
-            return 'Mon Tue Wed Thu Fri'
-        else:
-            return 'Sun Mon Tue Wed Thu'
+    holidays = [h for holiday_list in holiday_objs for h in holiday_list]
+
+    return np.busdaycalendar(weekmask=weekmasks, holidays=holidays)  # .values.astype('datetime64[D]'))
 
 
-#%%
+# %% Create code for static holidays definition
 
 if __name__ == "__main__":
-    print('main')
-    log_idx = 1
-    t = time.time()
-    
-    #cal = get_calendar(['USD','AUD','JPY','NZD','EUR'])
-    
-    for ccy in ['USD','AUD','JPY','NZD','EUR']:
-        h = get_holidays(ccy)
-    
-    
+    # Get the directory of the current file
+    current_dir = os.path.dirname(os.path.abspath(__file__))
 
-#%% Pickle all possible calls of ccy_country_mapping 
+    # Add the directory to the system path
+    sys.path.append(current_dir)
+    df = pd.read_excel(current_dir + "\\calendar_map.xlsx", usecols=range(6))
+    holiday_dict = {}
+    holiday_dict_str = "LOCALE_HOLIDAY = dict(sorted({\n"
+    ccy_holiday_dict = {}
+    ccy_holiday_dict_str = "CCY_HOLIDAY = dict(sorted({\n"
+    years=range(1990,2100)
 
-# ccy_holidays_dict = {}
-# for ccy in ccy_country_mapping.keys():
-#     try:    
-#         ccy_holidays_dict[ccy] = get_holidays(ccy)
-#     except:
-#         print(ccy)
+    for i, row in df.iterrows():
+        eval_str = None
+        ccy = row["ISOCurrencyCode"]
+        ui_string = row["UIString"]
+        code = row["Code"]
+        subdivision = row["Subdivision"]
 
-# with open('ccy_holidays_dict.pkl', 'wb') as f:
-#     pickle.dump(ccy_holidays_dict, f)
+        try:
+            categories = [holidays.PUBLIC, holidays.BANK]
+            if pd.isna(row["Subdivision"]):
+                eval_str = f"holidays.{code}(categories={categories}, years=years)"
 
+            else:
+                eval_str = (
+                    f"holidays.{code}(subdiv='{subdivision}', categories={categories}, years=years)"
+                )
+            holiday_obj = eval(eval_str)
 
+        except ValueError:
+            categories = [holidays.PUBLIC]
+            if pd.isna(row["Subdivision"]):
+                eval_str = f"holidays.{code}(categories={categories}, years=years)"
+            else:
+                eval_str = (
+                    f"holidays.{code}(subdiv='{subdivision}', categories={categories}, years=years)"
+                )
+            holiday_obj = eval(eval_str)
 
+        holiday_dict[ui_string] = holiday_obj
+        holiday_dict_str += f"    '{ui_string}': {eval_str},\n"
+
+        if row["CurrencyPrimaryCalendar"]:
+            ccy_holiday_dict[ccy] = holiday_obj
+            ccy_holiday_dict_str += f"    '{ccy}': {eval_str},\n"
+
+    holiday_dict_str += "}.items()))"
+    ccy_holiday_dict_str += "}.items()))"
+
+    print(holiday_dict_str)
+    print("\n")
+    print(ccy_holiday_dict_str)

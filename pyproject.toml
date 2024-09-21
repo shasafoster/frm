@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "frm"
-version = "0.0.4"
+version = "0.0.5"
 authors = [
   { name="Shasa Foster", email="shasa.foster@gmail.com" },
 ]
@@ -19,6 +19,7 @@ dependencies=[
     "pandas",	
     "pandas_market_calendars",
     "PrettyTable",
+    "pycountry",
     "pytest",
     "scipy",
       ]

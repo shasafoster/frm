@@ -2,9 +2,10 @@ holidays
 matplotlib
 numba
 numpy
+openpyxl
 pandas
-pandas_market_calendars
 PrettyTable 
 pytest
+ruff
 scipy
 
