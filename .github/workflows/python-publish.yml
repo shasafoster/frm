@@ -27,6 +27,11 @@ jobs:
       run: |
         ls -la
         ls -la frm/
+
+    - name: Show commit and workflow file
+      run: |
+        echo "Commit SHA: $GITHUB_SHA"
+        cat .github/workflows/python-publish.yml
     
     - name: Set up Python
       uses: actions/setup-python@v3
