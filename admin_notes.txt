@@ -1,0 +1,4 @@
+For publishing new package to PyPi
+1. Increment/specify version number in pyproject.toml
+2. Create new release
+3. Verify new release on PyPi
