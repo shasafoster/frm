@@ -118,7 +118,7 @@ def convert_weekend_to_weekmask(weekend_set):
     return ''.join(map(str, weekmask))
 
 
-def get_busdaycalendar(ccys) -> np.busdaycalendar:
+def get_busdaycal(ccys) -> np.busdaycalendar:
     """
     Create a calendar which has the holidays and business days of the currency inputs.
     """
@@ -145,17 +145,14 @@ def get_busdaycalendar(ccys) -> np.busdaycalendar:
 # %% Create code for static holidays definition
 
 if __name__ == "__main__":
-    # Get the directory of the current file
     current_dir = os.path.dirname(os.path.abspath(__file__))
-
-    # Add the directory to the system path
     sys.path.append(current_dir)
+    
     df = pd.read_excel(current_dir + "\\calendar_map.xlsx", usecols=range(6))
     holiday_dict = {}
     holiday_dict_str = "LOCALE_HOLIDAY = dict(sorted({\n"
     ccy_holiday_dict = {}
     ccy_holiday_dict_str = "CCY_HOLIDAY = dict(sorted({\n"
-    years=range(1990,2100)
 
     for i, row in df.iterrows():
         eval_str = None

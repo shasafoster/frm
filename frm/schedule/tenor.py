@@ -1,11 +1,7 @@
 # -*- coding: utf-8 -*-
-
-
+import os
 if __name__ == "__main__":
-    import os
-    import pathlib
-    os.chdir(pathlib.Path(__file__).parent.parent.parent.resolve())     
-    print('__main__ - current working directory:', os.getcwd())
+    os.chdir(os.environ.get('PROJECT_DIR_FRM')) 
 
 import re 
 import unicodedata
@@ -60,35 +56,32 @@ def clean_tenor(tenor: str) -> str:
         raise TypeError("function input 'tenor' must be a string")      
     
     tenor = unicodedata.normalize('NFKD', tenor)
-
     tenor = tenor.lower().replace(' ','').replace('/','').replace('\n', '').replace('\r', '')
     
-    tenor = tenor.replace('days','d')
-    tenor = tenor.replace('day','d')
-    tenor = tenor.replace('weeks','w')
-    tenor = tenor.replace('week','w')
-    tenor = tenor.replace('months','m')
-    tenor = tenor.replace('month','m')
-    tenor = tenor.replace('mon','m')
-    tenor = tenor.replace('years','y')    
-    tenor = tenor.replace('year','y')
-    tenor = tenor.replace('yrs','y')        
-    tenor = tenor.replace('yr','y')     
+    replacements = {
+        'days': 'd', 'day': 'd',
+        'weeks': 'w', 'week': 'w',
+        'months': 'm', 'month': 'm', 'mon': 'm',
+        'years': 'y', 'year': 'y', 'yrs': 'y', 'yr': 'y',
+        'overnight': 'on', 
+        'tomorrownext': 'tn', 
+        'tomnext': 'tn',
+        'spotweek': 'sw', 
+        'spotnext': 'sn', 
+        'spot': 'sp'
+    }    
     
-    tenor = tenor.replace('overnight','on') 
-    tenor = tenor.replace('tomorrownext','tn')
-    tenor = tenor.replace('tomnext','sn')  
-    tenor = tenor.replace('spotweek','sw')    
-    tenor = tenor.replace('spotnext','sn')     
-    tenor = tenor.replace('spot','sp') 
+    pattern = re.compile('|'.join(map(re.escape, replacements.keys())))
+    tenor = pattern.sub(lambda match: replacements[match.group(0)], tenor)
+    
     return tenor 
    
 
 @np.vectorize
 def tenor_name_to_date_offset(tenor_name: str) -> pd.DateOffset:    
     if not isinstance(tenor_name, str):
-        logging.error("function input 'tenor' must be a string")
-        raise TypeError("function input 'tenor' must be a string")      
+        logging.error("function input 'tenor_name' must be a string")
+        raise TypeError("function input 'tenor_name' must be a string")      
         
     misc_tenors_offset = {
         'on' : DateOffset(days=1), # 1 day (overnight)
@@ -127,15 +120,14 @@ def tenor_name_to_date_offset(tenor_name: str) -> pd.DateOffset:
 @np.vectorize
 def offset_market_data_date(curve_date: np.datetime64,
                 spot_date: np.datetime64,
-                tenor_name: str) -> np.datetime64:    
-    
+                tenor_name: str) -> np.datetime64:     
     # offset from 
     # (i) the curve_date for the ON and TN tenors and from;
     # (ii) the spot date for all other tenors   
     
     date_offset = tenor_name_to_date_offset(tenor_name)
     
-    if tenor_name in {'on'}:
+    if tenor_name in {'on', 'tn'}:
         return curve_date + date_offset.item() 
     else:
         return spot_date + date_offset.item()
