@@ -88,8 +88,7 @@ def payment_schedule(start_date: pd.Timestamp,
     first_stub_type = StubType.from_value(first_stub_type)
     last_stub_type = StubType.from_value(last_stub_type)
     payment_type = PaymentType.from_value(payment_type)
-    
-    
+
     # Input validation
     if start_date >= end_date:
         raise ValueError(f"start_date {start_date} must be before end_date {end_date}")
@@ -114,98 +113,110 @@ def payment_schedule(start_date: pd.Timestamp,
         d2 = [last_cpn_start_date, end_date]
     else:        
         # Need to generate the schedule
-        if first_cpn_end_date is None and last_cpn_start_date is None:  
-            
-            if first_stub_type == StubType.DEFAULT and last_stub_type == StubType.DEFAULT:
-                # If no stub is specified, defaults to market convention on the 1st stub
-                first_stub_type = StubType.market_convention()
-                last_stub_type = StubType.NONE
-            elif first_stub_type == StubType.DEFAULT:
-                first_stub_type  = StubType.NONE
-            elif last_stub_type == StubType.DEFAULT:
-                last_stub_type = StubType.NONE
-                
-            if last_stub_type == StubType.NONE:
+        if first_cpn_end_date is None and last_cpn_start_date is None:    
+            if last_stub_type.value is None:
                 d1, d2 = generate_date_schedule(start_date, end_date, freq_obj, 'backward', roll_convention, day_roll, busdaycal, roll_user_specified_dates)
-                if first_stub_type == StubType.LONG:
+                if first_stub_type.value == StubType.LONG.value:
                     d1 = [d1[0]] + d1[2:]
                     d2 = d2[1:]
+                #d1, d2 = roll_date_schedule(d1, d2, day_roll, roll_convention, busdaycal, roll_user_specified_dates)
             
-            elif first_stub_type == StubType.NONE and last_stub_type != StubType.NONE:
+            elif first_stub_type.value is None and last_stub_type.value is not None:
                 d1, d2 = generate_date_schedule(start_date, end_date, freq_obj, 'forward', roll_convention, day_roll, busdaycal, roll_user_specified_dates)
-                if last_stub_type == StubType.LONG:
+                if last_stub_type.value == StubType.LONG.value:
                     d1 = d1[:-1]
                     d2 = d2[:-2] + [d2[-1]]
-            elif first_stub_type in [StubType.SHORT, StubType.LONG] and last_stub_type in [StubType.SHORT, StubType.LONG]:
+                #d1, d2 = roll_date_schedule(d1, d2, day_roll, roll_convention, busdaycal, roll_user_specified_dates)
+            elif first_stub_type.value is not None and last_stub_type.value is not None:
                 raise ValueError("If a schedule has first and last stubs they must be specified via first_cpn_end_date and last_cpn_start_date")
             else:
-                raise ValueError("Unexpected logic branch - please raise GitHub issue")
+                raise ValueError("Unexpected logic branch")
                 
         else:
             # If first_cpn_end_date or last_cpn_start_date are specified we want generate the schedule 
-            # via generate_date_schedule(start_date, end_date, ...) and see if 
-            # the first_cpn_end_date or last_cpn_start_date match the generated schedule.
-            #
+            # via generate_date_schedule(start_date, end_date, ...) and see if the first_cpn_end_date or last_cpn_start_date align. 
             # If they align, we use this generated schedule. 
-            #
             # If they don't align, we generate the schedule:
             # (i) via backward generation from last_cpn_start_date if only last_cpn_start_date is specified
             # (ii) via forward generation from first_cpn_end_date if only first_cpn_end_date is specified
             # (iii) between first_cpn_end_date and last_cpn_start_date if both are specified
             
-            # Step 1: Generate the schedule by backward and forward date generation
+            # Backward date generation
             d1_backward, d2_backward = generate_date_schedule(start_date, end_date, freq_obj, 'backward', roll_convention, day_roll, busdaycal, roll_user_specified_dates)
-            d1_forward, d2_forward = generate_date_schedule(start_date, end_date, freq_obj, 'forward', roll_convention, day_roll, busdaycal, roll_user_specified_dates)
+            #d1_backward, d2_backward = roll_date_schedule(d1_backward, d2_backward, day_roll, roll_convention, busdaycal, roll_user_specified_dates)
 
-            # Step 2a : Check if the first_cpn_end_date matches any generated schedules
+            # Forward date generation
+            d1_forward, d2_forward = generate_date_schedule(start_date, end_date, freq_obj, 'forward', roll_convention, day_roll, busdaycal, roll_user_specified_dates)
+            #d1_forward, d2_forward = roll_date_schedule(d1_forward, d2_forward, day_roll, roll_convention, busdaycal, roll_user_specified_dates)
+
+            # # If first_cpn_end_date is specified
+            # if first_cpn_end_date is not None and last_cpn_start_date is None:
+                
+            #     if first_cpn_end_date == d2_forward[0]:
+            #         first_stub_type = StubType.NONE
+            #         d1, d2 = d1_forward, d2_forward        
+            #     elif first_cpn_end_date == d2_backward[0]:
+            #         first_stub_type = StubType.SHORT
+            #         d1, d2 = d1_backward, d2_backward      
+            #     elif first_cpn_end_date == d2_backward[1]:
+            #         first_stub_type = StubType.LONG
+            #         d1 = d1_backward[0] + d1_backward[2:] 
+            #         d2 = d2_backward[1:]
+            #     else:
+            #         d1, d2 = generate_date_schedule(first_cpn_end_date, end_date, freq_obj, 'forward', roll_convention, day_roll, busdaycal, roll_user_specified_dates) 
+            #         d1 = [start_date] + d1
+            #         d2 = [first_cpn_end_date] + d2
+                                          
+            # # If last_cpn_start_date is specified
+            # elif last_cpn_start_date is not None and first_cpn_end_date is None:
+            #     if last_cpn_start_date == d1_backward[-1]:
+            #         last_stub_type = StubType.NONE
+            #         d1, d2 = d1_backward, d2_backward                       
+            #     elif last_cpn_start_date == d1_forward[-1]:
+            #         last_stub_type = StubType.SHORT
+            #         d1, d2 = d1_forward, d2_forward    
+            #     elif last_cpn_start_date == d1_forward[-2]:
+            #         last_stub_type = StubType.LONG
+            #         d1 = d1_forward[:-1]
+            #         d2 = d2_forward[:-2] + d2_forward[-1]
+            #     else:
+            #         d1, d2 = generate_date_schedule(start_date, last_cpn_start_date, freq_obj, 'backward', roll_convention, day_roll, busdaycal, roll_user_specified_dates)
+            #         d1 = d1 + [last_cpn_start_date]
+            #         d2 = d2 + [end_date]
             
-            direction = []
+            
+            
+            
+            # Step 1: Determine if the first_cpn_end_date, last_cpn_start_date match generate_date_schedule()
+            
+            # If first_cpn_end_date is specified
+            first_stub_type = None # Clear the specified stub type
             if first_cpn_end_date is not None:
                 if first_cpn_end_date == d2_forward[0]:
-                    direction.append('forward')
                     first_stub_type = StubType.NONE      
                 elif first_cpn_end_date == d2_backward[0]:
-                    direction.append('backward')
                     first_stub_type = StubType.SHORT 
                 elif first_cpn_end_date == d2_backward[1]:
-                    direction.append('backward')
                     first_stub_type = StubType.LONG
                 else:
                     # Need to construct schedule using first_cpn_end_date
                     first_stub_type = np.nan
-
-            # Step 2a : Check if the last_cpn_start_date matches any generated schedules
+                                          
+            # If last_cpn_start_date is specified
+            last_stub_type = None # Clear the specified stub type
             if last_cpn_start_date is not None:    
                 if last_cpn_start_date == d1_backward[-1]:
-                    direction.append('backward')
                     last_stub_type = StubType.NONE                      
                 elif last_cpn_start_date == d1_forward[-1]:
-                    direction.append('forward')
                     last_stub_type = StubType.SHORT  
                 elif last_cpn_start_date == d1_forward[-2]:
-                    direction.append('forward')
                     last_stub_type = StubType.LONG
                 else:
                     # Need to construct schedule using last_cpn_start_date
-                    last_stub_type = np.nan
+                    last_stub_type = np.nan        
             
-            # Step 2c : Set default stub values to:
-            #              (i) NONE if other stub is SHORT/LONG
-            #              (ii) SHORT if other stub is NONE
-            if first_stub_type == StubType.DEFAULT:
-                assert last_stub_type != StubType.DEFAULT
-                if last_stub_type == StubType.NONE:
-                    first_stub_type = StubType.market_convention()
-                else:
-                    first_stub_type = StubType.NONE
-            if last_stub_type == StubType.DEFAULT:
-                assert first_stub_type != StubType.DEFAULT
-                if first_stub_type == StubType.NONE:
-                    last_stub_type = StubType.market_convention()
-                else:
-                    last_stub_type = StubType.NONE         
-                
-            # Step 3: Contruct the schedules
+            # Step 2: 
+            
             if first_stub_type == np.nan and last_stub_type == np.nan:
                 # Generate date schedule between first_cpn_end_date and last_cpn_start_date
                 d1, d2 = generate_date_schedule(first_cpn_end_date, last_cpn_start_date, freq_obj, 'backward', roll_convention, day_roll, busdaycal, roll_user_specified_dates)    
@@ -217,40 +228,29 @@ def payment_schedule(start_date: pd.Timestamp,
                 d1 = [start_date] + d1
                 d2 = [first_cpn_end_date] + d2
                 if last_stub_type == StubType.LONG:
-                    d1 = d1[:-1]
-                    d2 = d2[:-2] + [d2[-1]]
+                    d1 = d1_forward[:-1]
+                    d2 = d2_forward[:-2] + d2_forward[-1]
             elif first_stub_type != np.nan and last_stub_type == np.nan:
                 # Backward generation from last_cpn_start_date and if long first stub, combine first two periods
                 d1, d2 = generate_date_schedule(start_date, last_cpn_start_date, freq_obj, 'backward', roll_convention, day_roll, busdaycal, roll_user_specified_dates)
                 d1 = d1 + [last_cpn_start_date]
                 d2 = d2 + [end_date]                
-                if first_stub_type == StubType.LONG:
-                    d1 = [d1[0]] + d1[2:]
-                    d2 = d2[1:]
-            else:
-                # Don't need to generate any additional schedules
-                assert len(set(direction)) == 1
+                if last_stub_type == StubType.LONG:
+                    d1 = d1_forward[:-1]
+                    d2 = d2_forward[:-2] + d2_forward[-1]
                 
-                if first_stub_type == StubType.NONE:
-                    # Forward date generation
-                    d1, d2 = d1_forward, d2_forward
-                    if last_stub_type == StubType.LONG:
-                        d1 = d1[:-1]
-                        d2 = d2[:-2] + [d2[-1]]
-                elif last_stub_type == StubType.NONE:
-                    # Backward date generation
-                    d1, d2 = d1_backward, d2_backward
-                    if first_stub_type == StubType.LONG:
-                        d1 = [d1[0]] + d1[2:]
-                        d2 = d2[1:]          
-                else:
-                    raise ValueError("Unexpected logic branch - please raise GitHub issue")
+                
+                
+                
+                
                 
     # Add the payment dates
     if payment_type.value == PaymentType.IN_ARREARS.value:
         datetime64_array = np.array(d2, dtype='datetime64[D]')
     elif payment_type.value == PaymentType.IN_ADVANCE.value:
-        datetime64_array = np.array(d1, dtype='datetime64[D]')                                      
+        datetime64_array = np.array(d1, dtype='datetime64[D]')
+    else:
+        raise ValueError(f"Invalid payment type '{payment_type}'. Must be 'in_arrears' or 'in_advance'.")                                       
     payment_dates = pd.DatetimeIndex(np.busday_offset(datetime64_array, offsets=payment_delay, roll=roll_convention.value, busdaycal=busdaycal)).astype('datetime64[ns]')
 
     df = pd.DataFrame({'period_start': d1, 'period_end': d2, 'payment_date': payment_dates})    
