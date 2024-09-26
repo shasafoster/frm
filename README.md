@@ -8,7 +8,7 @@ frm uses common 3rd party python packages for scientific computing (numpy, scipy
 
 This package will have a similar function set to Quantlib however we want to make it more *accessible*, *documented*, and *productive* through:
 1. The python (core + 3rd party libaries) implementation
-2. Academic and industry references (at specific lines of code) to support users own validation and testing
+2. In line academic and industry references to support users own validation and testing
 3. Supporting [excel/VBA models](https://github.com/shasafoster/frm/tree/master/excel_models) that validate/support the code 
 4. Significant code examples  
 
