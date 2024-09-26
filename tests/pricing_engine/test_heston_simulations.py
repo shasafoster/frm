@@ -203,8 +203,6 @@ def test_heston_simulation_to_3rd_party_code():
         [-0.665612917361851,-0.895132048958458]]
     rand_nbs = np.array(rand_nbs)
     
-    
-    
     S0 = 4 # Initial spot price
     mu = 0.02 # Drift
     kappa = 2 # Speed of mean reversion for volatility
@@ -223,32 +221,33 @@ def test_heston_simulation_to_3rd_party_code():
     heston_result_vectorised = simulate_heston(S0, mu, var0, vv, kappa, theta, rho, tau, rand_nbs.reshape(rand_nbs.shape[0], rand_nbs.shape[1], 1), 'quadratic_exponential')
     assert (np.abs(heston_result_vectorised[:,:,0] - heston_result_scalar) < 1e-10).all()
     
-    # Plots align to Figure 1.1 in [1]
-    plt.figure()
-    
-    # Plot pricepath
-    plt.subplot(1, 2, 1) # First subplot (1 row, 2 columns, 1st plot)
-    plt.plot(time, gbm_result[1:], 'r--', label='GBM')
-    plt.plot(time, heston_result_scalar[1:, 0], 'b', label='simulate_heston_scalar')
-    plt.plot(time, heston_result_vectorised[1:, 0, 0], 'y--', label='simulate_heston')
-    plt.xlabel('Time [years]')
-    plt.ylabel('FX rate')
-    plt.ylim([3.5, 6])
-    plt.legend(loc=2)
-    
-    # Plot volatility
-    plt.subplot(1, 2, 2) # Second subplot (1 row, 2 columns, 2nd plot)
-    plt.plot(time, 100 * np.sqrt(heston_result_scalar[1:, 1]), 'b', label='simulate_heston_scalar')
-    plt.plot(time, 100 * np.sqrt(heston_result_vectorised[1:, 1]), 'y--', label='simulate_heston')
-    plt.axhline(y=np.sqrt(theta) * 100, color='r', linestyle='--', label='GBM Volatility')
-    plt.xlabel('Time [years]')
-    plt.ylabel('Volatility [%]')
-    plt.ylim([5, 35])
-    plt.legend()
-    
-    plt.suptitle('Plots align to Figure 1.1 in Janek, Agnieszka & Kluge, Tino & Weron, Rafał & Wystup, Uwe. (2010). FX Smile in the Heston Model.')
-    
-    plt.show()
+    # Want to run if running in script, but not in pytest
+    if __name__ == "__main__":    
+        # Plots align to Figure 1.1 in [1]
+        plt.figure()
+        
+        # Plot pricepath
+        plt.subplot(1, 2, 1) # First subplot (1 row, 2 columns, 1st plot)
+        plt.plot(time, gbm_result[1:], 'r--', label='GBM')
+        plt.plot(time, heston_result_scalar[1:, 0], 'b', label='simulate_heston_scalar')
+        plt.plot(time, heston_result_vectorised[1:, 0, 0], 'y--', label='simulate_heston')
+        plt.xlabel('Time [years]')
+        plt.ylabel('FX rate')
+        plt.ylim([3.5, 6])
+        plt.legend(loc=2)
+        
+        # Plot volatility
+        plt.subplot(1, 2, 2) # Second subplot (1 row, 2 columns, 2nd plot)
+        plt.plot(time, 100 * np.sqrt(heston_result_scalar[1:, 1]), 'b', label='simulate_heston_scalar')
+        plt.plot(time, 100 * np.sqrt(heston_result_vectorised[1:, 1]), 'y--', label='simulate_heston')
+        plt.axhline(y=np.sqrt(theta) * 100, color='r', linestyle='--', label='GBM Volatility')
+        plt.xlabel('Time [years]')
+        plt.ylabel('Volatility [%]')
+        plt.ylim([5, 35])
+        plt.legend()
+        
+        plt.suptitle('Plots align to Figure 1.1 in Janek, Agnieszka & Kluge, Tino & Weron, Rafał & Wystup, Uwe. (2010). FX Smile in the Heston Model.')
+        plt.show()
 
 if __name__ == "__main__":
     test_alignment_between_heston_scalar_and_vectorised_simulation_functions()
