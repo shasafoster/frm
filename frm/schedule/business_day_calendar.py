@@ -95,14 +95,14 @@ CCY_HOLIDAY = dict(sorted({
     'EUR': holidays.ECB(categories=['public'], years=years),
 }.items()))
 
-#%%
 
-def get_holidays_obj(ccy):
-    ccy_uppercase = ccy.upper()
-    if ccy_uppercase in CCY_HOLIDAY.keys():
-        return CCY_HOLIDAY[ccy_uppercase]
+def get_holidays_object(key):
+    if key in CCY_HOLIDAY.keys():
+        return CCY_HOLIDAY[key]
+    elif key in LOCALE_HOLIDAY.keys():
+        return LOCALE_HOLIDAY[key]
     else:
-        raise ValueError(f"Holidays not setup for {ccy_uppercase}")
+        raise ValueError(f"Holidays not setup for {key}")
 
 
 def convert_weekend_to_weekmask(weekend_set):
@@ -118,28 +118,28 @@ def convert_weekend_to_weekmask(weekend_set):
     return ''.join(map(str, weekmask))
 
 
-def get_busdaycal(ccys) -> np.busdaycalendar:
+def busdaycal(keys) -> np.busdaycalendar:
     """
-    Create a calendar which has the holidays and business days of the currency inputs.
+    Create a calendar which has the holidays and business days of the currencies/locales.
     """
 
-    if ccys is None:
+    if keys is None:
         return np.busdaycalendar()
 
-    if type(ccys) is str:
-        ccys = [ccys]
-    elif type(ccys) is list:
-        ccys = list(set(ccys))
-        ccys = [ccy.upper() for ccy in ccys]
+    if type(keys) is str:
+        keys = [keys]
+    elif type(keys) is list:
+        keys = list(set(keys))
+        keys = [key.upper() for key in keys]
 
-    holiday_objs = [get_holidays_obj(ccy) for ccy in ccys]
-    combined_weekend_union = reduce(lambda x, y: x | y.weekend, holiday_objs, set())
+    holiday_objects = [get_holidays_object(key) for key in keys]
+    combined_weekend_union = reduce(lambda x, y: x | y.weekend, holiday_objects, set())
     weekmasks = convert_weekend_to_weekmask(combined_weekend_union)
 
     # Flattan the list of lists
-    holidays = [h for holiday_list in holiday_objs for h in holiday_list]
+    holidays = [h for holiday_list in holiday_objects for h in holiday_list]
 
-    return np.busdaycalendar(weekmask=weekmasks, holidays=holidays)  # .values.astype('datetime64[D]'))
+    return np.busdaycalendar(weekmask=weekmasks, holidays=holidays)  
 
 
 # %% Create code for static holidays definition

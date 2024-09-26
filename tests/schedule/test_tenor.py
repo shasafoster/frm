@@ -4,7 +4,7 @@ if __name__ == "__main__":
     os.chdir(os.environ.get('PROJECT_DIR_FRM')) 
 
 from frm.schedule.tenor import calc_tenor_date, tenor_name_to_date_offset
-from frm.schedule.business_day_calendar import get_busdaycalendar
+from frm.schedule.business_day_calendar import busdaycal
 import pandas as pd
 import numpy as np
 
@@ -43,7 +43,7 @@ def test_calc_tenor_date():
     curve_date = pd.Timestamp(2023,6,30)
     tenor_name = '1 year'
     curve_ccy = 'audusd'
-    holiday_calendar = get_busdaycalendar(['usd','aud'])
+    holiday_calendar = busdaycal(['usd','aud'])
     tenor_date, tenor_name_cleaned, spot_date = calc_tenor_date(curve_date, tenor_name, curve_ccy, holiday_calendar=holiday_calendar)
     assert tenor_date == pd.Timestamp(2024,7,5) 
     assert tenor_name_cleaned == '1y'
@@ -52,7 +52,7 @@ def test_calc_tenor_date():
     curve_date = pd.Timestamp(2023,6,30)
     tenor_name = ['1 year','2 year']
     curve_ccy = 'audusd'
-    holiday_calendar = get_busdaycalendar(['usd','aud'])
+    holiday_calendar = busdaycal(['usd','aud'])
     tenor_date, tenor_name_cleaned, spot_date = calc_tenor_date(curve_date, tenor_name, curve_ccy, holiday_calendar=holiday_calendar)
     arr = np.array([pd.Timestamp(2024,7,5), pd.Timestamp(2025,7,7)])
     assert (tenor_date == arr).all()

@@ -209,7 +209,10 @@ class StubType(Enum):
     SHORT = 'short'
     LONG = 'long'
     DEFAULT = 'default'
+    DEFINED_PER_FIRST_CPN_END_DATE = 'defined_per_first_cpn_end_date'
+    DEFINED_PER_LAST_CPN_START_DATE = 'defined_per_last_cpn_start_date'
         
+    
     @classmethod
     def default(cls):
         return cls.DEFAULT # Return the default enum value    

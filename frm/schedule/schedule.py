@@ -3,10 +3,8 @@ import os
 if __name__ == "__main__":
     os.chdir(os.environ.get('PROJECT_DIR_FRM'))
     
-from enum import Enum
 import numpy as np
 import pandas as pd
-import datetime as dt
 from typing import Literal, Optional, Union, List, Tuple
 from frm.schedule.schedule_enums import RollConvention, PaymentType, StubType, Frequency, DayRoll
 
@@ -17,21 +15,69 @@ def set_default(value, default):
     return value
 
 
-def payment_schedule(start_date: pd.Timestamp,
-                     end_date: pd.Timestamp,
-                     payment_freq: str,
-                     roll_convention: str=RollConvention.MODIFIED_FOLLOWING.value,
-                     day_roll: Union[int, str]=None,
-                     first_cpn_end_date: pd.Timestamp=None,
-                     last_cpn_start_date: pd.Timestamp=None,                     
-                     first_stub_type: str=None,
-                     last_stub_type: str=None,
-                     payment_type: str=PaymentType.IN_ARREARS.value,
-                     payment_delay: int=0,
-                     busdaycal: np.busdaycalendar=np.busdaycalendar(),
-                     roll_user_specified_dates=False) -> pd.DataFrame:
+def add_payment_date(
+        schedule: pd.DataFrame,
+        roll_convention: str=RollConvention.MODIFIED_FOLLOWING.value,
+        payment_type: str=PaymentType.IN_ARREARS.value,
+        payment_delay: int=0,
+        busdaycal: np.busdaycalendar=np.busdaycalendar()
+    ) -> pd.DataFrame:
     """
-    Create a payment schedule.
+    Adds payment dates to a schedule.
+
+    Parameters
+    ----------
+    schedule : pd.DataFrame
+        Dataframe with date columns 'period_start' and 'period_end'
+    roll_convention: str, optional
+        DESCRIPTION. The default is RollConvention.MODIFIED_FOLLOWING.value.
+    payment_type : str, optional
+        Specifies when payments are made. The default is PaymentType.IN_ARREARS.value.
+    payment_delay : int, optional
+        Specifies how many days after period start_date/end_date (if payments are in_advance/in_arrears), the payment is made. The default is 0.
+    busdaycal : np.busdaycalendar, optional
+        DESCRIPTION. The default is np.busdaycalendar().
+
+    Returns
+    -------
+    schedule : pandas.DataFrame
+        Columns:
+            - period_start
+            - period_end
+            - payment_date
+    """
+
+    roll_convention = RollConvention.from_value(roll_convention) 
+    payment_type = PaymentType.from_value(payment_type)
+    payment_delay = set_default(payment_delay, 0)
+    
+    # Add the payment dates
+    if payment_type == PaymentType.IN_ARREARS:
+        dates = schedule['period_end'].to_numpy(dtype='datetime64[D]')
+    elif payment_type == PaymentType.IN_ADVANCE:
+        dates = schedule['period_start'].to_numpy(dtype='datetime64[D]')
+
+    payment_dates_np = np.busday_offset(dates, offsets=payment_delay, roll=roll_convention.value, busdaycal=busdaycal)
+    schedule['payment_date'] = pd.DatetimeIndex(payment_dates_np).astype('datetime64[ns]')
+                           
+    return schedule
+
+
+def schedule(
+        start_date: pd.Timestamp,
+        end_date: pd.Timestamp,
+        frequency: str,
+        roll_convention: str=RollConvention.MODIFIED_FOLLOWING.value,
+        day_roll: Union[int, str]=None,
+        first_cpn_end_date: pd.Timestamp=None,
+        last_cpn_start_date: pd.Timestamp=None,                     
+        first_stub_type: str=None,
+        last_stub_type: str=None,
+        busdaycal: np.busdaycalendar=np.busdaycalendar(),
+        roll_user_specified_dates=False
+        ) -> pd.DataFrame:
+    """
+    Create a schedule. Optional detailed stub logic.
 
     Parameters
     ----------
@@ -39,8 +85,8 @@ def payment_schedule(start_date: pd.Timestamp,
         Specifies the effective date of the schedule
     end_date : pandas.Timestamp
         Specifies the expiration date of the schedule
-    payment_freq : {'d','w','28d','m', 'q', 's', 'a', 'z'}
-        Specify the payment frequency
+    frequency : str
+        Specify the period frequency
     roll_convention : {'None','following','preceding','modifiedfollowing','modifiedpreceding'},
         How to treat dates (period_start, period_end, paymen_date) that do not fall on a valid day. The default is 'modifiedfollowing'.
             'following' means to take the first valid day later in time.
@@ -57,10 +103,6 @@ def payment_schedule(start_date: pd.Timestamp,
         Specifies the type of the first stub. If first_cpn_end_date is specified, the first_stub_type is ignored. Defaults to 'short'.
     last_stub_type : {'short', 'long'}
         Specifies the type of the last stub. If last_cpn_start_date is specified, the last_stub_type is ignored.                 
-    payment_type : {'in_arrears','in_advance'}
-        Specifies when payments are made. The defaut is 'in_arrears'.
-    payment_delay : int
-        Specifies how many days after period start_date/end_date (if payments are in_advance/in_arrears), the payment is made. 
     busdaycal : np.busdaycalendar
         Specifies the business day calendar to observe. 
     roll_user_specified_dates : bool
@@ -72,13 +114,12 @@ def payment_schedule(start_date: pd.Timestamp,
         Columns:
             - period_start
             - period_end
-            - payment_date
     """
             
     # Set defaults for optional parameters
     first_cpn_end_date = set_default(first_cpn_end_date, None)
     last_cpn_start_date = set_default(last_cpn_start_date, None)    
-    payment_delay = set_default(payment_delay, 0)
+    
     busdaycal = set_default(busdaycal, np.busdaycalendar())
     roll_user_specified_dates = set_default(roll_user_specified_dates, False)
 
@@ -87,17 +128,15 @@ def payment_schedule(start_date: pd.Timestamp,
     day_roll = DayRoll.from_value(day_roll)
     first_stub_type = StubType.from_value(first_stub_type)
     last_stub_type = StubType.from_value(last_stub_type)
-    payment_type = PaymentType.from_value(payment_type)
-    
-    
+
     # Input validation
     if start_date >= end_date:
         raise ValueError(f"start_date {start_date} must be before end_date {end_date}")
     
-    if Frequency.is_valid(payment_freq):
-        freq_obj = Frequency.from_value(payment_freq)
+    if Frequency.is_valid(frequency):
+        freq_obj = Frequency.from_value(frequency)
     else:
-        raise ValueError(f"Invalid 'payment_freq' {payment_freq}")     
+        raise ValueError(f"Invalid 'frequency' {frequency}")     
     
     if first_cpn_end_date is not None:
         assert first_cpn_end_date > start_date and first_cpn_end_date <= end_date
@@ -115,22 +154,25 @@ def payment_schedule(start_date: pd.Timestamp,
     else:        
         # Need to generate the schedule
         if first_cpn_end_date is None and last_cpn_start_date is None:  
+            assert first_stub_type != StubType.DEFINED_PER_FIRST_CPN_END_DATE
+            assert last_stub_type != StubType.DEFINED_PER_LAST_CPN_START_DATE
             
             if first_stub_type == StubType.DEFAULT and last_stub_type == StubType.DEFAULT:
-                # If no stub is specified, defaults to market convention on the 1st stub
+                # If no stub is specified, defaults to market convention on the 1st stub, no last stub.
                 first_stub_type = StubType.market_convention()
                 last_stub_type = StubType.NONE
             elif first_stub_type == StubType.DEFAULT:
                 first_stub_type  = StubType.NONE
             elif last_stub_type == StubType.DEFAULT:
                 last_stub_type = StubType.NONE
+            else:
+                raise ValueError("Unexpected logic branch - please raise GitHub issue")                
                 
             if last_stub_type == StubType.NONE:
                 d1, d2 = generate_date_schedule(start_date, end_date, freq_obj, 'backward', roll_convention, day_roll, busdaycal, roll_user_specified_dates)
                 if first_stub_type == StubType.LONG:
                     d1 = [d1[0]] + d1[2:]
                     d2 = d2[1:]
-            
             elif first_stub_type == StubType.NONE and last_stub_type != StubType.NONE:
                 d1, d2 = generate_date_schedule(start_date, end_date, freq_obj, 'forward', roll_convention, day_roll, busdaycal, roll_user_specified_dates)
                 if last_stub_type == StubType.LONG:
@@ -172,7 +214,7 @@ def payment_schedule(start_date: pd.Timestamp,
                     first_stub_type = StubType.LONG
                 else:
                     # Need to construct schedule using first_cpn_end_date
-                    first_stub_type = np.nan
+                    first_stub_type = StubType.DEFINED_PER_FIRST_CPN_END_DATE
 
             # Step 2a : Check if the last_cpn_start_date matches any generated schedules
             if last_cpn_start_date is not None:    
@@ -187,18 +229,18 @@ def payment_schedule(start_date: pd.Timestamp,
                     last_stub_type = StubType.LONG
                 else:
                     # Need to construct schedule using last_cpn_start_date
-                    last_stub_type = np.nan
+                    last_stub_type = StubType.DEFINED_PER_LAST_CPN_START_DATE
             
             # Step 2c : Set default stub values to:
             #              (i) NONE if other stub is SHORT/LONG
             #              (ii) SHORT if other stub is NONE
-            if first_stub_type == StubType.DEFAULT:
+            if first_stub_type == StubType.DEFAULT and last_stub_type != StubType.DEFINED_PER_LAST_CPN_START_DATE:
                 assert last_stub_type != StubType.DEFAULT
                 if last_stub_type == StubType.NONE:
                     first_stub_type = StubType.market_convention()
                 else:
                     first_stub_type = StubType.NONE
-            if last_stub_type == StubType.DEFAULT:
+            if last_stub_type == StubType.DEFAULT and first_stub_type != StubType.DEFINED_PER_FIRST_CPN_END_DATE:
                 assert first_stub_type != StubType.DEFAULT
                 if first_stub_type == StubType.NONE:
                     last_stub_type = StubType.market_convention()
@@ -206,12 +248,12 @@ def payment_schedule(start_date: pd.Timestamp,
                     last_stub_type = StubType.NONE         
                 
             # Step 3: Contruct the schedules
-            if first_stub_type == np.nan and last_stub_type == np.nan:
+            if first_stub_type == StubType.DEFINED_PER_FIRST_CPN_END_DATE and last_stub_type == StubType.DEFINED_PER_LAST_CPN_START_DATE:
                 # Generate date schedule between first_cpn_end_date and last_cpn_start_date
                 d1, d2 = generate_date_schedule(first_cpn_end_date, last_cpn_start_date, freq_obj, 'backward', roll_convention, day_roll, busdaycal, roll_user_specified_dates)    
                 d1 = [start_date] + d1 + [last_cpn_start_date]
                 d2 = [first_cpn_end_date] + d2 + [end_date]
-            elif first_stub_type == np.nan and last_stub_type != np.nan:
+            elif first_stub_type == StubType.DEFINED_PER_FIRST_CPN_END_DATE and last_stub_type != StubType.DEFINED_PER_LAST_CPN_START_DATE:
                 # Forward generation from from first_cpn_end_date and if long last stub, combine last two periods
                 d1, d2 = generate_date_schedule(first_cpn_end_date, end_date, freq_obj, 'forward', roll_convention, day_roll, busdaycal, roll_user_specified_dates) 
                 d1 = [start_date] + d1
@@ -219,7 +261,7 @@ def payment_schedule(start_date: pd.Timestamp,
                 if last_stub_type == StubType.LONG:
                     d1 = d1[:-1]
                     d2 = d2[:-2] + [d2[-1]]
-            elif first_stub_type != np.nan and last_stub_type == np.nan:
+            elif first_stub_type != StubType.DEFINED_PER_FIRST_CPN_END_DATE and last_stub_type == StubType.DEFINED_PER_LAST_CPN_START_DATE:
                 # Backward generation from last_cpn_start_date and if long first stub, combine first two periods
                 d1, d2 = generate_date_schedule(start_date, last_cpn_start_date, freq_obj, 'backward', roll_convention, day_roll, busdaycal, roll_user_specified_dates)
                 d1 = d1 + [last_cpn_start_date]
@@ -246,14 +288,7 @@ def payment_schedule(start_date: pd.Timestamp,
                 else:
                     raise ValueError("Unexpected logic branch - please raise GitHub issue")
                 
-    # Add the payment dates
-    if payment_type.value == PaymentType.IN_ARREARS.value:
-        datetime64_array = np.array(d2, dtype='datetime64[D]')
-    elif payment_type.value == PaymentType.IN_ADVANCE.value:
-        datetime64_array = np.array(d1, dtype='datetime64[D]')                                      
-    payment_dates = pd.DatetimeIndex(np.busday_offset(datetime64_array, offsets=payment_delay, roll=roll_convention.value, busdaycal=busdaycal)).astype('datetime64[ns]')
-
-    df = pd.DataFrame({'period_start': d1, 'period_end': d2, 'payment_date': payment_dates})    
+    return pd.DataFrame({'period_start': d1, 'period_end': d2})
 
     # # Add the fixing dates
     # if add_fixing_dates:
@@ -268,7 +303,7 @@ def payment_schedule(start_date: pd.Timestamp,
     #     # payment_date = np.busday_offset(pd.DatetimeIndex([start_date+pd.DateOffset(days=payment_delay)]).values.astype('datetime64[D]'), offsets=0)
     #     row = {'period_start': start_date,'period_end': start_date,'payment_date':start_date}
     #     df = pd.concat([pd.DataFrame(row), df], ignore_index=True)
-    return df
+
     
 
 def generate_date_schedule(
@@ -276,10 +311,10 @@ def generate_date_schedule(
         end_date: pd.Timestamp, 
         frequency: Frequency,
         direction: str,
-        roll_convention: RollConvention,
-        day_roll: DayRoll,
-        busdaycal: np.busdaycalendar,
-        roll_user_specified_dates: bool
+        roll_convention: RollConvention=RollConvention.MODIFIED_FOLLOWING,
+        day_roll: DayRoll=DayRoll.NONE,
+        busdaycal: np.busdaycalendar=np.busdaycalendar(),
+        roll_user_specified_dates: bool=False,
     ) -> Tuple[List, List]:
     """
     Generates a schedule of start and end dates between start_date and end_date.
