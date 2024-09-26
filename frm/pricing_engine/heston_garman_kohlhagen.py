@@ -120,7 +120,7 @@ def heston_fit_vanilla_fx_smile(
             if P[i] < 0.0:
                 IV[i] = -1.0
             else:
-                IV[i] = gk_solve_implied_σ(S0=S0, tau=tau, r_f=r_f, r_d=r_d, cp=cp[i], K=strikes[i], X=P[i], σ_guess=σ_market[i])
+                IV[i] = gk_solve_implied_σ(S0=S0, tau=tau, r_f=r_f, r_d=r_d, cp=cp[i], K=strikes[i], X=P[i], σ_guess=σ_market[i])             
 
         return np.sum((σ_market - IV)**2)
 

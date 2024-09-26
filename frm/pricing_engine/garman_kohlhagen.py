@@ -425,11 +425,11 @@ def gk_solve_implied_σ(S0: float,
     """
     try:
         # Try Netwon's method first (it's faster but less robust)
-        return newton(lambda σ: (gk_price(S0=S0,tau=tau,r_f=r_f,r_d=r_d,cp=cp,K=K,σ=σ)['option_value']  - X), x0=σ_guess, tol=1e-4, maxiter=50)
+        return newton(lambda σ: (gk_price(S0=S0,tau=tau,r_f=r_f,r_d=r_d,cp=cp,K=K,σ=σ)['option_value']  - X), x0=σ_guess, tol=1e-4, maxiter=50).item()
     except RuntimeError:
         # Fallback to Brent's method
         try:
-            return root_scalar(lambda σ: (gk_price(S0=S0,tau=tau,r_f=r_f,r_d=r_d,cp=cp,K=K,σ=σ)['option_value']  - X), bracket=[0.0001, 2], method='brentq').root
+            return root_scalar(lambda σ: (gk_price(S0=S0,tau=tau,r_f=r_f,r_d=r_d,cp=cp,K=K,σ=σ)['option_value']  - X), bracket=[0.0001, 2], method='brentq').root.item()
         except ValueError:
             return np.inf        
         

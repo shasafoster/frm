@@ -3,12 +3,13 @@ import os
 if __name__ == "__main__":
     os.chdir(os.environ.get('PROJECT_DIR_FRM')) 
 
-from frm.pricing_engine.garman_kohlhagen import gk_price, gk_solve_strike
+from frm.pricing_engine.garman_kohlhagen import gk_price, gk_solve_strike, gk_solve_implied_σ
 
 
-def test_gk_price():
+def test_gk_price_and_solve_implied_σ():
 
-    epsilon = 0.0006 # 0.06% of notional
+    epsilon_px = 0.0006 # 0.06% of notional
+    epsilon_σ = 0.0001 # 0.0001%
     
     ##### AUDUSD Tests, function results in USD per 1 AUD ######
     
@@ -22,7 +23,9 @@ def test_gk_price():
     cp=1
     K=0.7882
     px = gk_price(S0=S0,tau=tau,r_f=r_f,r_d=r_d,cp=cp,K=K,σ=σ)['option_value']
-    assert abs(px_test - px) < epsilon
+    assert abs(px_test - px) < epsilon_px
+    IV = gk_solve_implied_σ(S0=S0, tau=tau, r_f=r_f, r_d=r_d, cp=cp, K=K, X=px, σ_guess=0.1)
+    assert 100* abs(σ - IV) < epsilon_σ
     
     # 1Y AUDUSD Put, 30 June 2023, London 8am
     px_test = 0.11533070 # 115,330.7 USD per A$1,000,000 notional
@@ -34,7 +37,9 @@ def test_gk_price():
     cp=-1
     K=0.7882
     px = gk_price(S0=S0,tau=tau,r_f=r_f,r_d=r_d,cp=cp,K=K,σ=σ)['option_value']
-    assert abs(px_test - px) < epsilon
+    assert abs(px_test - px) < epsilon_px
+    IV = gk_solve_implied_σ(S0=S0, tau=tau, r_f=r_f, r_d=r_d, cp=cp, K=K, X=px, σ_guess=0.1)
+    assert 100* abs(σ - IV) < epsilon_σ 
     
     # 1Y AUDUSD Call, 30 June 2023, London 8am
     px_test = 0.12284766 
@@ -46,7 +51,9 @@ def test_gk_price():
     cp=1
     K=0.5405
     px = gk_price(S0=S0,tau=tau,r_f=r_f,r_d=r_d,cp=cp,K=K,σ=σ)['option_value']     
-    assert abs(px_test - px) < epsilon  
+    assert abs(px_test - px) < epsilon_px  
+    IV = gk_solve_implied_σ(S0=S0, tau=tau, r_f=r_f, r_d=r_d, cp=cp, K=K, X=px, σ_guess=0.1)
+    assert 100* abs(σ - IV) < epsilon_σ
           
     # 1Y AUDUSD Put, 30 June 2023, London 8am
     px_test = 0.00200167
@@ -58,8 +65,9 @@ def test_gk_price():
     cp=-1
     K=0.5405
     px = gk_price(S0=S0,tau=tau,r_f=r_f,r_d=r_d,cp=cp,K=K,σ=σ)['option_value']           
-    assert abs(px_test - px) < epsilon     
-      
+    assert abs(px_test - px) < epsilon_px     
+    IV = gk_solve_implied_σ(S0=S0, tau=tau, r_f=r_f, r_d=r_d, cp=cp, K=K, X=px, σ_guess=0.1)
+    assert 100* abs(σ - IV) < epsilon_σ    
     
     ##### AUDUSD Tests, function results in AUD per 1 USD ######
     
@@ -74,7 +82,9 @@ def test_gk_price():
     K=1/0.7882
     px = gk_price(S0=S0,tau=tau,r_f=r_f,r_d=r_d,cp=cp,K=K,σ=σ)['option_value']    
     px_in_AUD_per_1_AUD = px / S0 / K
-    assert abs(px_test - px_in_AUD_per_1_AUD) < epsilon
+    assert abs(px_test - px_in_AUD_per_1_AUD) < epsilon_px
+    IV = gk_solve_implied_σ(S0=S0, tau=tau, r_f=r_f, r_d=r_d, cp=cp, K=K, X=px, σ_guess=0.1)
+    assert 100* abs(σ - IV) < epsilon_σ    
     
     # 1Y USDAUD Call, 30 June 2023, London 8am
     px_test = 0.11533070 
@@ -87,7 +97,9 @@ def test_gk_price():
     K=1/0.7882
     px = gk_price(S0=S0,tau=tau,r_f=r_f,r_d=r_d,cp=cp,K=K,σ=σ)['option_value']      
     px_in_AUD_per_1_AUD = px / S0 / K
-    assert abs(px_test - px_in_AUD_per_1_AUD) < epsilon
+    assert abs(px_test - px_in_AUD_per_1_AUD) < epsilon_px
+    IV = gk_solve_implied_σ(S0=S0, tau=tau, r_f=r_f, r_d=r_d, cp=cp, K=K, X=px, σ_guess=0.1)
+    assert 100* abs(σ - IV) < epsilon_σ   
 
     # 1Y USDAUD Put, 30 June 2023, London 8am
     px_test = 0.12284766
@@ -100,7 +112,9 @@ def test_gk_price():
     K=1/0.5405
     px = gk_price(S0=S0,tau=tau,r_f=r_f,r_d=r_d,cp=cp,K=K,σ=σ)['option_value']        
     px_in_AUD_per_1_AUD = px / S0 / K
-    assert abs(px_test - px_in_AUD_per_1_AUD) < epsilon 
+    assert abs(px_test - px_in_AUD_per_1_AUD) < epsilon_px 
+    IV = gk_solve_implied_σ(S0=S0, tau=tau, r_f=r_f, r_d=r_d, cp=cp, K=K, X=px, σ_guess=0.1)
+    assert 100* abs(σ - IV) < epsilon_σ   
 
     # 1Y USDAUD Call, 30 June 2023, London 8am
     px_test = 0.00200167
@@ -113,12 +127,14 @@ def test_gk_price():
     K=1/0.5405
     px = gk_price(S0=S0,tau=tau,r_f=r_f,r_d=r_d,cp=cp,K=K,σ=σ)['option_value']    
     px_in_AUD_per_1_AUD = px / S0 / K
-    assert abs(px_test - px_in_AUD_per_1_AUD) < epsilon
+    assert abs(px_test - px_in_AUD_per_1_AUD) < epsilon_px
+    IV = gk_solve_implied_σ(S0=S0, tau=tau, r_f=r_f, r_d=r_d, cp=cp, K=K, X=px, σ_guess=0.1)
+    assert 100* abs(σ - IV) < epsilon_σ  
 
 
 def test_gk_solve_strike():
     
-    epsilon = 0.001 # 0.1 % 
+    epsilon_px = 0.001 # 0.1 % 
 
     # AUDUSD 1Y 30 Δ Put, 30 June 2023 London 10pm 
     strike_test = 0.64100
@@ -130,7 +146,7 @@ def test_gk_solve_strike():
     Δ = -0.3
     Δ_convention = 'regular_spot_Δ'
     strike = gk_solve_strike(S0=S0,tau=tau,r_f=r_f,r_d=r_d,σ=σ,Δ=Δ,Δ_convention=Δ_convention)
-    assert abs(strike_test - strike) / strike_test < epsilon
+    assert abs(strike_test - strike) / strike_test < epsilon_px
 
     # AUDUSD 1Y 30 Δ Call, 30 June 2023 London 10pm 
     strike_test = 0.70690
@@ -142,7 +158,7 @@ def test_gk_solve_strike():
     Δ = 0.3
     Δ_convention = 'regular_spot_Δ'
     strike = gk_solve_strike(S0=S0,tau=tau,r_f=r_f,r_d=r_d,σ=σ,Δ=Δ,Δ_convention=Δ_convention)
-    assert abs(strike_test - strike) / strike_test < epsilon
+    assert abs(strike_test - strike) / strike_test < epsilon_px
 
     # AUDUSD 1Y 5 Δ Put, 30 June 2023 London 10pm 
     strike_test = 0.54280
@@ -154,11 +170,11 @@ def test_gk_solve_strike():
     Δ = -0.05
     Δ_convention = 'regular_spot_Δ'
     strike = gk_solve_strike(S0=S0,tau=tau,r_f=r_f,r_d=r_d,σ=σ,Δ=Δ,Δ_convention=Δ_convention)
-    assert abs(strike_test - strike) / strike_test < epsilon
+    assert abs(strike_test - strike) / strike_test < epsilon_px
 
 
     # AUDUSD 1Y 5 Δ Call, 30 June 2023 London 10pm 
-    epsilon = 0.0015 # 0.15 % higher tolerance for this one 
+    epsilon_px = 0.0015 # 0.15 % higher tolerance for this one 
     strike_test = 0.79300
     S0 = 0.6662
     σ = 0.0990869
@@ -168,10 +184,10 @@ def test_gk_solve_strike():
     Δ = 0.05
     Δ_convention = 'regular_spot_Δ'
     strike = gk_solve_strike(S0=S0,tau=tau,r_f=r_f,r_d=r_d,σ=σ,Δ=Δ,Δ_convention=Δ_convention)
-    assert abs(strike_test - strike) / strike_test < epsilon
+    assert abs(strike_test - strike) / strike_test < epsilon_px
     
     # AUDUSD 5Y 30 Δ Put, 30 June 2023 London 10pm 
-    epsilon = 0.0034 # 0.34 % higher tolerance for this one 
+    epsilon_px = 0.0034 # 0.34 % higher tolerance for this one 
     strike_test = 0.59180
     S0 = 0.6662
     σ = 0.1161961
@@ -181,10 +197,10 @@ def test_gk_solve_strike():
     Δ = -0.3
     Δ_convention = 'regular_forward_Δ'
     strike = gk_solve_strike(S0=S0,tau=tau,r_f=r_f,r_d=r_d,σ=σ,Δ=Δ,Δ_convention=Δ_convention)
-    assert abs(strike_test - strike) / strike_test < epsilon
+    assert abs(strike_test - strike) / strike_test < epsilon_px
     
     # AUDUSD 5Y 30 Δ Put, 30 June 2023 London 10pm 
-    epsilon = 0.0036 # 0.36 % higher tolerance for this one 
+    epsilon_px = 0.0036 # 0.36 % higher tolerance for this one 
     strike_test = 0.75820
     S0 = 0.6662
     σ = 0.1016627
@@ -194,10 +210,10 @@ def test_gk_solve_strike():
     Δ = 0.3
     Δ_convention = 'regular_forward_Δ'
     strike = gk_solve_strike(S0=S0,tau=tau,r_f=r_f,r_d=r_d,σ=σ,Δ=Δ,Δ_convention=Δ_convention)
-    assert abs(strike_test - strike) / strike_test < epsilon
+    assert abs(strike_test - strike) / strike_test < epsilon_px
 
 
-    epsilon = 0.001
+    epsilon_px = 0.001
     
     # 2Y USDJPY call, (USD call, JPY Put), 30 June 2023, London 10pm data
     strike_test = 145.83
@@ -210,7 +226,7 @@ def test_gk_solve_strike():
     Δ = 0.2
     Δ_convention = 'premium_adjusted_forward_Δ'
     strike = gk_solve_strike(S0=S0,tau=tau,r_f=r_f,r_d=r_d,σ=σ,Δ=Δ,Δ_convention=Δ_convention)
-    assert abs(strike_test - strike) / strike_test < epsilon
+    assert abs(strike_test - strike) / strike_test < epsilon_px
     
     # 9M USDJPY call, (USD call, JPY Put), 30 June 2023, London 10pm data
     strike_test = 148.11
@@ -223,7 +239,7 @@ def test_gk_solve_strike():
     Δ = 0.2
     Δ_convention = 'premium_adjusted_spot_Δ'
     strike = gk_solve_strike(S0=S0,tau=tau,r_f=r_f,r_d=r_d,σ=σ,Δ=Δ,Δ_convention=Δ_convention, F=F)
-    assert abs(strike_test - strike) / strike_test < epsilon
+    assert abs(strike_test - strike) / strike_test < epsilon_px
         
         
 def test_gk_price_greeks():
@@ -243,22 +259,28 @@ def test_gk_price_greeks():
     #print('greeks_numerical:',greeks_numerical)   
 
 
-        
-        
 
 if __name__ == '__main__':
-    test_gk_price()
+    test_gk_price_and_solve_implied_σ()
     test_gk_solve_strike()
+    
+
         
-    S0=0.6629
-    σ=0.0984688
-    r_f=0.0466
-    r_d=0.05381
-    tau= 1.00957592339261
-    cp=1
-    K=0.7882
-    F=0.667962
-    result  = gk_price(S0=S0, tau=tau, r_f=r_f, r_d=r_d, cp=cp, K=K, σ=σ, F=F, analytical_greeks_flag=True, numerical_greeks_flag=True)    
+    # S0=0.6629
+    # σ=0.0984688
+    # r_f=0.0466
+    # r_d=0.05381
+    # tau= 1.00957592339261
+    # cp=1
+    # K=0.7882
+    # F=0.667962
+    # result  = gk_price(S0=S0, tau=tau, r_f=r_f, r_d=r_d, cp=cp, K=K, σ=σ, F=F, analytical_greeks_flag=True, numerical_greeks_flag=True) 
+    
+    # X = result['option_value'].item()
+    
+    # IV = gk_solve_implied_σ(S0=S0, tau=tau, r_f=r_f, r_d=r_d, cp=cp, K=K, X=X, σ_guess=0.1)
+
+    
 
     
     
