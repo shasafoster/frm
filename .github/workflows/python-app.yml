@@ -5,10 +5,10 @@ name: Python application
 
 on:
   # Disable automatic triggers by commenting out push and pull_request events
-  # push:
-  #   branches: [ "master" ]
-  # pull_request:
-  #   branches: [ "master" ]
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
 
 permissions:
   contents: read
