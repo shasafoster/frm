@@ -1,18 +1,14 @@
 # -*- coding: utf-8 -*-
-
-
+import os
 if __name__ == "__main__":
-    import os
-    import pathlib
-    os.chdir(pathlib.Path(__file__).parent.parent.parent.parent.resolve())     
-    print('__main__ - current working directory:', os.getcwd())
+    os.chdir(os.environ.get('PROJECT_DIR_FRM')) 
     
 import numpy as np
 from numba import jit, prange
 import timeit
 import time
 
-from frm.frm.pricing_engine.monte_carlo_generic import generate_rand_nbs
+from frm.pricing_engine.monte_carlo_generic import generate_rand_nbs
 
 
 def simulate_gbm_path(initial_px: np.array,

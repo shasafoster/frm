@@ -1,17 +1,11 @@
 # -*- coding: utf-8 -*-
-
-
+import os
 if __name__ == "__main__":
-    import os
-    import pathlib
-    import sys
-    os.chdir(pathlib.Path(__file__).parent.parent.parent.resolve()) 
-    sys.path.append(os.getcwd())
-    print('__main__ - current working directory:', os.getcwd())
-   
+    os.chdir(os.environ.get('PROJECT_DIR_FRM')) 
 
-from frm.frm.pricing_engine.garman_kohlhagen import gk_solve_implied_σ, gk_solve_strike
-from frm.frm.pricing_engine.cosine_method_generic import get_cos_truncation_range
+from frm.pricing_engine.garman_kohlhagen import gk_solve_implied_σ, gk_solve_strike
+from frm.pricing_engine.cosine_method_generic import get_cos_truncation_range 
+
 import numpy as np
 import scipy.fft
 import scipy  

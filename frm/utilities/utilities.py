@@ -1,10 +1,14 @@
 # -*- coding: utf-8 -*-
+import os
+if __name__ == "__main__":
+    os.chdir(os.environ.get('PROJECT_DIR_FRM'))
 
 import pandas as pd
 import numpy as np
-from frm.frm.schedule.business_day_calendar import get_calendar
-from frm.frm.schedule.tenor import calc_tenor_date, get_spot_offset
-from frm.frm.schedule.daycounter import DayCounter
+from frm.schedule.business_day_calendar import get_calendar
+from frm.schedule.tenor import calc_tenor_date, get_spot_offset
+from frm.schedule.daycounter import DayCounter
+
 
 def convert_column_to_consistent_data_type(df: pd.DataFrame):
     for col in df.columns:

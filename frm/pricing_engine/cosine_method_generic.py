@@ -1,17 +1,12 @@
-# -*- coding: utf-8 -*
+# -*- coding: utf-8 -*-
+import os
+if __name__ == "__main__":
+    os.chdir(os.environ.get('PROJECT_DIR_FRM')) 
 
 import numpy as np
 from scipy.stats import norm
 
 
-if __name__ == "__main__":
-    import os
-    import pathlib
-    import sys
-    
-    os.chdir(pathlib.Path(__file__).parent.parent.parent.parent.resolve()) 
-    sys.path.append(os.getcwd())
-    print('__main__ - current working directory:', os.getcwd())
 
 
 #%% Test COS method function with the normal distribution

@@ -72,6 +72,24 @@ def generate_rand_nbs(nb_steps: int,
     return rand_nbs
 
 
+def normal_corr(C: np.array, 
+               rand_nbs: np.array):
+    """
+    Generate correlated pseudo random normal variates using the Cholesky factorization.
+    
+    Parameters:
+    C (np.ndarray): Correlation matrix.
+    rand_nbs (np.ndarray): Matrix of normally distributed pseudorandom numbers.
+    
+    Returns:
+    np.ndarray: Correlated pseudo random normal variates.
+    """    
+    
+    M = np.linalg.cholesky(C).T
+    return (M @ rand_nbs.T).T
+
+
+
 if __name__ == "__main__":
     rand_nbs = generate_rand_nbs(nb_steps=20,
                                  nb_rand_vars=1,

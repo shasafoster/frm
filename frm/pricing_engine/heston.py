@@ -1,39 +1,14 @@
 # -*- coding: utf-8 -*-
-
-
+import os
 if __name__ == "__main__":
-    import os
-    import pathlib
-    os.chdir(pathlib.Path(__file__).parent.parent.parent.parent.resolve())     
-    print('__main__ - current working directory:', os.getcwd())
+    os.chdir(os.environ.get('PROJECT_DIR_FRM')) 
     
 import numpy as np
-from numba import jit, prange
 from scipy.stats import norm
-import timeit
-import time
-
-from frm.frm.pricing_engine.monte_carlo_generic import generate_rand_nbs
+from frm.pricing_engine.monte_carlo_generic import normal_corr
 
 
-def normalcorr(C: np.array, 
-               rand_nbs: np.array):
-    """
-    Generate correlated pseudo random normal variates using the Cholesky factorization.
-    
-    Parameters:
-    C (np.ndarray): Correlation matrix.
-    rand_nbs (np.ndarray): Matrix of normally distributed pseudorandom numbers.
-    
-    Returns:
-    np.ndarray: Correlated pseudo random normal variates.
-    """    
-    
-    M = np.linalg.cholesky(C).T
-    return (M @ rand_nbs.T).T
-
-
-def simulate_heston_single(S0: float, 
+def simulate_heston_scalar(S0: float, 
                            mu: float, 
                            var0: float, 
                            vv: float, 
@@ -42,38 +17,55 @@ def simulate_heston_single(S0: float,
                            rho: float, 
                            tau: float, 
                            rand_nbs: np.array,
-                           method: str='quadratic_exponential'):
+                           method: str='quadratic_exponential') -> np.ndarray:
     
     """
-      Simulate trajectories of the spot price and volatility processes in the Heston model.
+    Simulate scalar (non-vectorised) trajectories of the spot price and volatility processes using the Heston model.
      
-      Parameters:
-      S0 (float): initial spot price.
-      mu (float): drift (r-q)
-      var0 (float): initial variance.
-      vv (float): volatility of volatility.
-      kappa (float): speed of mean reversion for volatility.
-      theta (float): long-run variance
-      rho (float): correlation between spot price and volatility.
-      tau (float): time end point
-      dt (float): the time step size
-      rand_nbs (np.ndarray, optional): 2-column array of normally distributed pseudorandom numbers. Defaults to None.
-      simulation_method (str, optional): Defaults to 'quadratic_exponential'.
-          {'quadratic_exponential,'euler_with_absorption_of_volatility_process','euler_with_reflection_of_volatility_process'}
-      Returns:
-      np.ndarray: 2-column array containing the simulated trajectories of the spot price and volatility.
-      
-      References:
-      [1] Janek, A., Kluge, T., Weron, R., Wystup, U. (2010). "FX smile in the Heston model"
-      """    
-     
-    dt = tau / nb_timesteps
+    Parameters:
+    ----------
+    S0 : float
+        Initial spot price.
+    mu : float
+        Drift term (r - q).
+    var0 : float
+        Initial variance.
+    vv : float
+        Volatility of volatility.
+    kappa : float
+        Speed of mean reversion for volatility.
+    theta : float
+        Long-run variance.
+    rho : float
+        Correlation between spot price and volatility.
+    tau : float
+        Time end point of the simulation.
+    rand_nbs : np.ndarray
+        Array of pseudorandom numbers for spot and volatility shocks. Shape=(# of timesteps, 2). 
+    method : str, optional
+        The method used for simulating variance paths. Defaults to 'quadratic_exponential'.
+        Options:
+        - 'quadratic_exponential'
+        - 'euler_with_absorption_of_volatility_process'
+        - 'euler_with_reflection_of_volatility_process'
 
-    t = np.arange(0, nb_timesteps + 1)
-    x = np.zeros((nb_timesteps + 1, 2))
+    Returns:
+    -------
+    np.ndarray
+        Simulated trajectories of spot price and variance. Shape is (nb_timesteps + 1, 2).
+
+    References:
+    ----------
+    [1] Janek, A., Kluge, T., Weron, R., Wystup, U. (2010). "FX smile in the Heston model".
+    """ 
+    
+    assert rand_nbs.shape[1] == 2
+    nb_timesteps = rand_nbs.shape[0]
+    dt = tau / nb_timesteps
+    x = np.zeros((nb_timesteps + 1, rand_nbs.shape[1]))
     
     C = np.array([[1, rho], [rho, 1]])
-    u = normalcorr(C, rand_nbs) * np.sqrt(dt)
+    u = normal_corr(C, rand_nbs) * np.sqrt(dt)
     
     if method == 'quadratic_exponential':
         x[0, :] = [np.log(S0), var0]
@@ -108,7 +100,7 @@ def simulate_heston_single(S0: float,
         
         x[:, 0] = np.exp(x[:, 0])
     elif method[:5] == 'euler':
-        x[0, :] = [S0, v0]
+        x[0, :] = [S0, var0]
         for i in range(1, nb_timesteps+1):
             if method == 'euler_with_absorption_of_volatility_process':
                 x[i - 1, 1] = max(x[i - 1, 1], 0) 
@@ -123,7 +115,7 @@ def simulate_heston_single(S0: float,
 
 def simulate_heston(S0: float, 
                     mu: float, 
-                    v0: float, 
+                    var0: float, 
                     vv: float, 
                     kappa: float, 
                     theta: float, 
@@ -132,39 +124,58 @@ def simulate_heston(S0: float,
                     rand_nbs: np.array,
                     method: str='quadratic_exponential'):
     """
-     Simulate trajectories of the spot price and volatility processes in the Heston model.
+     Simulate trajectories of the spot price and volatility processes using the Heston model. Is Vectorised.
+
+
      
-     Parameters:
-     S0 (float): initial spot price.
-     mu (float): drift.
-     v0 (float): initial volatility.
-     vv (float): volatility of volatility.
-     kappa (float): speed of mean reversion for volatility.
-     theta (float): long-term mean of volatility.
-     rho (float): correlation between spot price and volatility.
-     tau (float): time end point
-     nb_timesteps (float): the number of timesteps in the simulation
-     rand_nbs (np.ndarray, optional): 2-column array of normally distributed pseudorandom numbers. Defaults to None.
-     simulation_method (str, optional): Defaults to 'quadratic_exponential'.
-         {'quadratic_exponential,'euler_with_absorption_of_volatility_process','euler_with_reflection_of_volatility_process'}
-     Returns:
-     np.ndarray: 2-column array containing the simulated trajectories of the spot price and volatility.
+    Parameters:
+    ----------
+    S0 : float
+        Initial spot price.
+    mu : float
+        Drift term (r - q).
+    var0 : float
+        Initial variance.
+    vv : float
+        Volatility of volatility.
+    kappa : float
+        Speed of mean reversion for volatility.
+    theta : float
+        Long-run variance. 
+    rho : float
+        Correlation between spot price and volatility.
+    tau : float
+        Time end point of the simulation.
+    rand_nbs : np.ndarray
+        Array of pseudorandom numbers for spot and volatility shocks. Shape is (# of timesteps, 2, # of simulations).
+    method : str, optional
+        The method used for simulating variance paths. Defaults to 'quadratic_exponential'.
+        Options:
+        - 'quadratic_exponential'
+        - 'euler_with_absorption_of_volatility_process'
+        - 'euler_with_reflection_of_volatility_process'
+
+    Returns:
+    -------
+    np.ndarray
+        Simulated trajectories of spot price and variance. Shape is (nb_timesteps + 1, 2).
+
+    References:
+    ----------
+    [1] Janek, A., Kluge, T., Weron, R., Wystup, U. (2010). "FX smile in the Heston model".
      """    
      
-    np.random.seed(0)
-    
+    assert rand_nbs.shape[1] == 2
     nb_timesteps = rand_nbs.shape[0]
     dt = tau / nb_timesteps
-
-    t = np.arange(0, nb_timesteps + 1)
-    x = np.zeros((nb_timesteps+1, 2, rand_nbs.shape[2]))
+    x = np.zeros((nb_timesteps+1, rand_nbs.shape[1], rand_nbs.shape[2]))
     
     C = np.array([[1, rho], [rho, 1]])
-    u = normalcorr(C, rand_nbs) * np.sqrt(dt) # need to check this correlation works as expected
+    u = normal_corr(C, rand_nbs) * np.sqrt(dt) # need to check this correlation works as expected
     
     if method == 'quadratic_exponential':
         x[0, 0, :] = np.log(S0)
-        x[0, 1, :] = v0
+        x[0, 1, :] = var0
         
         phiC = 1.5
         
@@ -205,9 +216,10 @@ def simulate_heston(S0: float,
                       np.sqrt(K3 * x[i - 1, 1, :] + K4 * x[i, 1, :]) * rand_nbs[i - 1, 0, :]
         
         x[:, 0] = np.exp(x[:, 0])
+        
     elif method[:5] == 'euler':
         x[0, 0, :] = S0
-        x[0, 1, :] = v0
+        x[0, 1, :] = var0
         
         for i in range(1, nb_timesteps + 1):
             if method == 'euler_with_absorption_of_volatility_process':
@@ -220,74 +232,6 @@ def simulate_heston(S0: float,
     
     return x
 
-
-#%%
-
-if __name__ == '__main__':
-    
-    # This is a check to demonstate the vectorised function gives the same result as the non vectorised function
-    
-    np.random.seed(0)
-    
-    S0 = 0.6629
-    mu = 0
-    v0 = 0.01030476434426229
-    vv = 0.2992984338043174
-    kappa = 1.5
-    theta = 0.013836406947876231
-    rho = -0.3432643651463818
-    tau = 2
-    nb_timesteps = 100
-    
-    rand_nbs = generate_rand_nbs(nb_timesteps=nb_timesteps,
-                                 nb_rand_vars=2,
-                                 nb_simulations=1 * 1000,
-                                 flag_apply_antithetic_variates=False)
-   
-    
-    t1 = time.time()
-    
-    result = simulate_heston(S0=S0,
-        mu=mu,
-        v0=v0,
-        vv=vv,
-        kappa=kappa,
-        theta=theta,
-        rho=rho, 
-        tau=tau, 
-        rand_nbs=rand_nbs,
-        method='quadratic_exponential')
-    
-    t2 = time.time()
-
-    if True:
-        for i in range(rand_nbs.shape[2]):
-            
-            print(i, '/', rand_nbs.shape[2])
-    
-            rand_nbs_single = rand_nbs[:,:,i]
-    
-            results_single = simulate_heston_single(S0=S0,
-                mu=mu,
-                v0=v0,
-                vv=vv,
-                kappa=kappa,
-                theta=theta,
-                rho=rho, 
-                tau=tau, 
-                rand_nbs=rand_nbs_single,
-                method='quadratic_exponential')
-                
-            check = (result[:,:,i] - results_single).sum()
-            epsilon = 1e-8
-            assert check < epsilon
-            
-        t3 = time.time()
-        
-        print('Runtime of vectorised function:', t2-t1)
-        print('Runtime of for-loop function:', t3-t2)
-    
-    result_avg = result.mean(axis=2)
 
 
 
