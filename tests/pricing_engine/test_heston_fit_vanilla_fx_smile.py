@@ -1,35 +1,32 @@
 # -*- coding: utf-8 -*-
+import os
+if __name__ == "__main__":
+    os.chdir(os.environ.get('PROJECT_DIR_FRM')) 
+
+
 # This test script is a check to "STF2hes07.m" which is a support to
 # "FX smile in the Heston model" by A Janek, 2010.
 # Source: https://ideas.repec.org/c/wuu/hscode/zip10001.html
+# WaybackMachine save: 
+# https://web.archive.org/web/20240926111306/https://ideas.repec.org/c/wuu/hscode/zip10001.html
 
-if __name__ == "__main__":
-    import os
-    import pathlib
-    import sys
-    
-    os.chdir(pathlib.Path(__file__).parent.parent.parent.parent.parent.parent.resolve()) 
-    sys.path.append(os.getcwd())
-    print('__main__ - current working directory:', os.getcwd())
-
-from frm.frm.pricing_engine.heston_garman_kohlhagen import heston1993_price_fx_vanilla_european, heston_fit_vanilla_fx_smile
+from frm.pricing_engine.heston_garman_kohlhagen import heston1993_price_fx_vanilla_european, heston_fit_vanilla_fx_smile
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import norm
 from time import time
 import pandas as pd
 
-
 # Initialize
 standalone = 0  # set to 0 to make plots as seen in STF2
-delta_plt = np.array([0.1, 0.25, 0.5, 0.75, 0.9]) # forward deltas
-#Δ = np.array([-0.1, -0.25, 0.5, 0.25, 0.1])
+Δ_for_plt = np.array([0.1, 0.25, 0.5, 0.75, 0.9]) # forward deltas
+
 Δ = np.array([0.1, 0.25, 0.5, -0.25, -0.1])
 r_d = np.array([0.31100, 0.32875, 0.49781, 0.70075, 1.08, 1.08]) * 0.01
 r_f = np.array([0.58, 0.631, 0.884, 1.131, 1.399, 1.399]) * 0.01
 tau = np.array([7 / 365, 1 / 12, 3 / 12, 6 / 12, 1, 2])
-S = 1.2779
-#cp = np.array([-1, -1, 1, 1, 1])
+S0 = 1.2779
+
 cp = np.array([1, 1, 1, -1, -1])
 Δ_convention = 'regular_forward_Δ'
 
@@ -44,41 +41,70 @@ tenors = ['1W','1M','3M','6M','1Y','2Y']
     np.array([12.139, 11.784, 12.174, 13.284, 14.764]) * 0.01       # 2Y
 ]
 
-start_time = time()
-results_gk = []
-results_cos = []
+# Results of STF2hes07.m
+# [IV (10, 25, ATM, 75, 90), SSE] * 100%
+MATLAB_IV_SSE = [
+    np.array([13.9211, 13.2659, 13.2548, 14.1217, 15.4063, 0.0002]), # 1W 
+    np.array([12.4581, 12.2439, 12.6723, 13.8030, 15.1972, 0.0000]), # 1M
+    np.array([12.6938, 12.4002, 13.0049, 14.6137, 16.6331, 0.0001]), # 3M
+    np.array([13.6671, 12.9641, 13.4527, 15.3880, 18.0948, 0.0002]), # 6M
+    np.array([13.6178, 12.7871, 13.0836, 14.7562, 17.2699, 0.0003]),  # 1Y
+    np.array([12.1160, 11.8254, 12.1683, 13.2481, 14.7866, 0.0000])  # 2Y
+]
+
+# Results of STF2hes07.m 
+# v0, vv, kappa, theta, rho, 2*kappa*theta - vv^2
+MATLAB_heston_params = [
+    np.array([0.0178, 1.2971, 1.5000, 0.1650, -0.1577, -1.1874]),  # 1W 
+    np.array([0.0161, 0.5836, 1.5000, 0.0487, -0.3143, -0.19460]), # 1M
+    np.array([0.0170, 0.4804, 1.5000, 0.0362, -0.3763, -0.1224]),  # 3M
+    np.array([0.0184, 0.5251, 1.5000, 0.0354, -0.3572, -0.1695]),  # 6M
+    np.array([0.0174, 0.4724, 1.5000, 0.0277, -0.3114, -0.1400]),  # 1Y
+    np.array([0.0148, 0.3159, 1.5000, 0.0190, -0.3004, -0.0430])   # 2Y
+]
 
 # THIS SHOULD BE A CONSTANT THAT IS IMPORTED 
-pricing_method = 'heston_analytical_1993'
-#pricing_method = 'heston_carr_madan_gauss_kronrod_quadrature'
-#pricing_method = 'heston_carr_madan_fft_w_simpsons'
-#pricing_method = 'heston_cosine'
+# pricing_method = 'heston_analytical_1993'
+# pricing_method = 'heston_carr_madan_gauss_kronrod_quadrature'
+# pricing_method = 'heston_carr_madan_fft_w_simpsons'
 
+pricing_method = 'heston_cosine'
 
 # Main loop for various smiles
 for i, σ_market in enumerate(σ_market_set):
-    if i >= 5:
-        #delta_spot = np.exp(-r_f[i] * tau[i]) * delta
-        var0, vv, kappa, theta, rho, lambda_, IV, SSE = heston_fit_vanilla_fx_smile(Δ, Δ_convention, σ_market, S, r_f[i], r_d[i], tau[i], cp, pricing_method=pricing_method)        
-        results_gk.append([tenors[i], var0, vv, kappa, theta, rho, lambda_, IV, SSE])
-
+    
+    var0, vv, kappa, theta, rho, lambda_, IV, SSE = heston_fit_vanilla_fx_smile(Δ, Δ_convention, σ_market, S0, r_f[i], r_d[i], tau[i], cp, pricing_method='heston_cosine')        
+    var0 = round(var0.item(), 6)
+    vv = round(vv.item(), 6)
+    theta = round(theta.item(), 6)
+    rho = round(rho.item(), 6)
+    
+    IV = [round(100 * v.item(), 6) for v in list(IV)]
+    SSE = round(100 * SSE.item(), 6) 
+    
+    
+    IV_MATLAB = MATLAB_IV_SSE[i][:-1]
+    
+    if False:
+    
+    
         # Displaying output
         print(f'=== {tenors[i]} calibration results ===')
         print(f'v0, vv, kappa, theta, rho: {var0, vv, kappa, theta, rho}')
-        print(f'[IV (10, 25, ATM, 75, 90), SSE] * 100%: {IV*100, SSE*100}')
+        print(f'[IV (10, 25, ATM, 75, 90), SSE] * 100%: {IV, SSE}')
         
-        # Plotting
+        # Plot 
         plt.figure(i+1)
-        plt.plot(delta_plt * 100, σ_market * 100, 'ko-', linewidth=1)
-        plt.plot(delta_plt * 100, IV * 100, 'rs--', linewidth=1)
-        plt.legend([f'{tenors[i]} smile', 'Heston fit'], loc='upper left')
+        plt.plot(Δ_for_plt * 100, σ_market * 100, 'ko-', linewidth=1)
+        plt.plot(Δ_for_plt * 100, IV, 'bs-', linewidth=1)
+        plt.plot(Δ_for_plt * 100, MATLAB_IV_SSE[i][:-1], 'rs--', linewidth=1)
+        plt.legend([f'{tenors[i]} smile', f'frm - Heston fit via {pricing_method}', 'MATLAB - Heston fit'], loc='upper left')
         plt.xlabel('Delta [%]')
         plt.ylabel('Implied volatility [%]')
-        plt.xticks(delta_plt * 100)
-        plt.title(pricing_method)
+        plt.xticks(Δ_for_plt * 100)
+        plt.title('Comparison b/t market vols and calculated implied vols')
         plt.show()
 
-end_time = time()
-print(f"Elapsed time: {end_time - start_time:.2f} seconds")
+
 
 

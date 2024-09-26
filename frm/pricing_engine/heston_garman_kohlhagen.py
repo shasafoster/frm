@@ -96,7 +96,7 @@ def heston_fit_vanilla_fx_smile(
 
         vv, theta, rho = param
         if vv < 0.0 or theta < 0.0 or abs(rho) > 1.0:
-            warnings.warn("Invalid value for vv, theta or rho encountered")
+            # warnings.warn("Invalid value for vv, theta or rho encountered")
             return np.inf
                 
         P = np.zeros(nb_strikes)
@@ -163,8 +163,9 @@ def heston_fit_vanilla_fx_smile(
     
     if 2 * kappa * theta - vv**2 <= 0.0:
         # In the Heston model, the Feller condition is often required to be violated in order to get a good fit to market data
-        warnings.warn("Feller condition violated.") 
-
+        # warnings.warn("Feller condition violated.") 
+        pass
+    
     # Calculate the Heston model implied volatilities so we can chart and compare them to σ_market
     P = np.zeros(nb_strikes)
     IV = np.zeros(nb_strikes)
