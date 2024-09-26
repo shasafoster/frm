@@ -48,6 +48,7 @@ start_time = time()
 results_gk = []
 results_cos = []
 
+# THIS SHOULD BE A CONSTANT THAT IS IMPORTED 
 pricing_method = 'heston_analytical_1993'
 #pricing_method = 'heston_carr_madan_gauss_kronrod_quadrature'
 #pricing_method = 'heston_carr_madan_fft_w_simpsons'
