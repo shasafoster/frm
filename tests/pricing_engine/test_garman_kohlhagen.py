@@ -5,12 +5,10 @@ if __name__ == "__main__":
 
 from frm.pricing_engine.garman_kohlhagen import gk_price, gk_solve_strike, gk_solve_implied_σ
 
-
 def test_gk_price_and_solve_implied_σ():
 
     epsilon_px = 0.0006 # 0.06% of notional
-    epsilon_σ = 0.0001 # 0.0001%
-    
+    epsilon_σ = 0.0001 # 0.0001%    
     ##### AUDUSD Tests, function results in USD per 1 AUD ######
     
     # 1Y AUDUSD Call, 30 June 2023, London 8am

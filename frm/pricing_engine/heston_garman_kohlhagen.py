@@ -195,8 +195,6 @@ def heston_fit_vanilla_fx_smile(
     else:    
         return var0, vv, kappa, theta, rho, lambda_, IV, SSE
 
-#%% Heston 1993 analytical pricing implementation (2nd version of the Characteristic function)
-
 #@njit(fastmath=True, cache=True)
 def heston_1993_fx_vanilla_european_integral(φ, m, S0, K, tau, r_f, r_d, var0, vv, kappa, theta, rho, lambda_):
     """
@@ -310,13 +308,13 @@ def heston1993_price_fx_vanilla_european(S0, tau, r_f, r_d, cp, K, var0, vv, kap
     
     return X
 
-#%%  Heston model using Carr-Madan via: 
-# (method=0) Gauss-Kronrod quadrature
-# (method=1) Fast Fourier Transform + Simpson method 
+
 
 def heston_carr_madan_price_fx_vanilla_european(S0, tau, r_f, r_d, cp, K, var0, vv, kappa, theta, rho, integration_method=0):    
     """
      Calculate European FX option price using the Heston model via Carr-Madan approach.
+     integration_method=0) Gauss-Kronrod quadrature
+     # (integration_method=1) Fast Fourier Transform + Simpson method 
      
      Parameters:
      kappa, theta, vv, rho, var0 (float): Heston parameters.
@@ -377,7 +375,7 @@ def heston_carr_madan_price_fx_vanilla_european(S0, tau, r_f, r_d, cp, K, var0, 
 
 
 def get_simpson_weights(n):
-    # 1/3, then alternating 2/3, 4/3, 2/3, 4/3, 2/3, 4/3, .... 
+    # 1/3, then alternating 2/3, 4/3. i.e 1/3, 2/3, 4/3, 2/3, 4/3, 2/3, 4/3, .... 
     weights = np.array([1] + [4, 2] * ((n-2) // 2) + [1])
     return weights / 3
 
@@ -468,6 +466,7 @@ def chf_heston_albrecher2007(u, log_S0, tau, r_f, r_d, var0, vv, kappa, theta, r
     
     return np.exp(A + B + C)
 
+
 # Note this function (chf_heston_fang2008) is NOT speed up by use of numba/jit
 @njit(fastmath=True, cache=True)
 def chf_heston_fang2008(u, tau, r_f, r_d, var0, vv, kappa, theta, rho):
@@ -513,6 +512,7 @@ def chf_heston_fang2008(u, tau, r_f, r_d, var0, vv, kappa, theta, rho):
     chf = np.exp(inner_exp_1 + inner_exp_2)
     
     return chf
+
 
 def calculate_Uk_european_options(cp, a, b, k):
     """
@@ -564,7 +564,6 @@ def calculate_Uk_european_options(cp, a, b, k):
 
 
 def heston_cosine_price_fx_vanilla_european(S0, tau, r_f, r_d, cp, K, var0, vv, kappa, theta, rho, N=160, L=10, calculate_via_put_call_parity=True):
-    
     """
     Computes the call or put option prices using the COS method.
     
