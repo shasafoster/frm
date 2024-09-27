@@ -1,12 +1,7 @@
 # -*- coding: utf-8 -*-
-
-
+import os
 if __name__ == "__main__":
-    import os
-    import pathlib
-    import sys
-    os.chdir(pathlib.Path(__file__).parent.parent.parent.resolve())     
-    print('__main__ - current working directory:', os.getcwd())
+    os.chdir(os.environ.get('PROJECT_DIR_FRM')) 
 
 from typing import Literal
 

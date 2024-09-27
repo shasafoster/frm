@@ -1,11 +1,7 @@
 # -*- coding: utf-8 -*-
-
-
+import os
 if __name__ == "__main__":
-    import os
-    import pathlib
-    os.chdir(pathlib.Path(__file__).parent.parent.parent.resolve())     
-    print('__main__ - current working directory:', os.getcwd())
+    os.chdir(os.environ.get('PROJECT_DIR_FRM')) 
     
 from frm.frm.market_data.ir_zero_curve import ZeroCurve
 from frm.frm.pricing_engine.garman_kohlhagen import gk_price, gk_solve_implied_σ, gk_solve_strike

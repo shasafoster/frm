@@ -16,7 +16,6 @@ from frm.schedule.daycounter import DayCounter, VALID_DAY_COUNT_BASIS_TYPES
 from frm.schedule.business_day_calendar import get_calendar        
 from frm.utilities.utilities import convert_column_to_consistent_data_type, generic_market_data_input_cleanup_and_validation    
 
-#%%
 
 import numpy as np
 import pandas as pd
