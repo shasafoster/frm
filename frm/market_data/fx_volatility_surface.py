@@ -1,24 +1,20 @@
 # -*- coding: utf-8 -*-
-
-
+import os
 if __name__ == "__main__":
-    import os
-    import pathlib
-    os.chdir(pathlib.Path(__file__).parent.parent.parent.parent.resolve())     
-    print('__main__ - current working directory:', os.getcwd())
+    os.chdir(os.environ.get('PROJECT_DIR_FRM')) 
     
-from frm.frm.market_data.fx_volatility_surface_helpers import fx_σ_input_helper, VALID_DELTA_CONVENTIONS, interp_fx_forward_curve
-from frm.frm.market_data.ir_zero_curve import ZeroCurve
-from frm.frm.pricing_engine.garman_kohlhagen import gk_price, gk_solve_implied_σ, gk_solve_strike
-from frm.frm.pricing_engine.heston_garman_kohlhagen import heston_fit_vanilla_fx_smile, heston1993_price_fx_vanilla_european, heston_carr_madan_price_fx_vanilla_european, heston_cosine_price_fx_vanilla_european
-from frm.frm.pricing_engine.monte_carlo_generic import generate_rand_nbs
-from frm.frm.pricing_engine.geometric_brownian_motion import simulate_gbm_path
-from frm.frm.pricing_engine.heston import simulate_heston
+from frm.market_data.fx_volatility_surface_helpers import fx_σ_input_helper, VALID_DELTA_CONVENTIONS, interp_fx_forward_curve
+from frm.market_data.ir_zero_curve import ZeroCurve
+from frm.pricing_engine.garman_kohlhagen import gk_price, gk_solve_implied_σ, gk_solve_strike
+from frm.pricing_engine.heston_garman_kohlhagen import heston_fit_vanilla_fx_smile, heston1993_price_fx_vanilla_european, heston_carr_madan_price_fx_vanilla_european, heston_cosine_price_fx_vanilla_european
+from frm.pricing_engine.monte_carlo_generic import generate_rand_nbs
+from frm.pricing_engine.geometric_brownian_motion import simulate_gbm_path
+from frm.pricing_engine.heston import simulate_heston
 
-from frm.frm.schedule.tenor import calc_tenor_date, get_spot_offset
-from frm.frm.schedule.daycounter import DayCounter, VALID_DAY_COUNT_BASIS_TYPES
-from frm.frm.schedule.business_day_calendar import get_calendar        
-from frm.frm.utilities.utilities import convert_column_to_consistent_data_type, generic_market_data_input_cleanup_and_validation    
+from frm.schedule.tenor import calc_tenor_date, get_spot_offset
+from frm.schedule.daycounter import DayCounter, VALID_DAY_COUNT_BASIS_TYPES
+from frm.schedule.business_day_calendar import get_calendar        
+from frm.utilities.utilities import convert_column_to_consistent_data_type, generic_market_data_input_cleanup_and_validation    
 
 #%%
 

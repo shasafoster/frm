@@ -7,8 +7,6 @@ import numpy as np
 from scipy.stats import norm
 
 
-
-
 #%% Test COS method function with the normal distribution
 
 def cos_method(p, cf, dt, a, b, N=160):
@@ -132,13 +130,12 @@ def get_cos_truncation_range(model, L, model_param):
                 
         c4 = 0
         
-        #print("SF: c1,c2", c1, c2)
           
     elif model == 'VG':
-        # Detailed in paper but not priority for this project
+        # Detailed in paper but not priority for this project at this time.
         pass
     elif model == 'CGMY':
-        # Detailed in paper but not priority for this project
+        # Detailed in paper but not priority for this project at this time.
         pass    
         
     a = c1 - L * np.sqrt(np.abs(c2) + np.sqrt(np.abs(c4))) # Per Equantion 49 from [1]
