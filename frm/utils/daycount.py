@@ -13,20 +13,20 @@ from frm.utils.enums import DayCountBasis
 
             
 def convert_to_same_shape_DatetimeIndex(start_date, end_date):
-    start_date_dtidx = to_datetimeindex(start_date)
-    end_date_dtidx = to_datetimeindex(end_date)
+    start_DatetimeIndex = to_datetimeindex(start_date)
+    end_DatetimeIndex = to_datetimeindex(end_date)
     
-    if len(start_date_dtidx) == 1 or len(end_date_dtidx) == 1:
+    if len(start_DatetimeIndex) == 1 and len(end_DatetimeIndex) == 1:
         scalar_output = True
     else:
         scalar_output = False
     
-    if len(start_date_dtidx) == 1 and len(end_date_dtidx) > 1:
-        start_date_dtidx = pd.DatetimeIndex([start_date_dtidx.values[i] for i in range(len(end_date_dtidx))])
-    elif len(start_date_dtidx) > 1 and len(end_date_dtidx) == 1:
-        end_date_dtidx = pd.DatetimeIndex([end_date_dtidx.values[i] for i in range(len(start_date_dtidx))])
+    if len(start_DatetimeIndex) == 1 and len(end_DatetimeIndex) > 1:
+        start_DatetimeIndex = pd.DatetimeIndex([start_DatetimeIndex.values[0] for _ in range(len(end_DatetimeIndex))])
+    elif len(start_DatetimeIndex) > 1 and len(end_DatetimeIndex) == 1:
+        end_DatetimeIndex = pd.DatetimeIndex([end_DatetimeIndex.values[0] for _ in range(len(start_DatetimeIndex))])
     
-    return start_date_dtidx, end_date_dtidx, scalar_output
+    return start_DatetimeIndex, end_DatetimeIndex, scalar_output
 
 
 def day_count(start_date,

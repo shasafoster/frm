@@ -3,10 +3,10 @@ import os
 if __name__ == "__main__":
     os.chdir(os.environ.get('PROJECT_DIR_FRM')) 
     
-from frm.frm.schedule.daycounter import DayCounter, VALID_DAY_COUNT_BASIS
-from frm.frm.schedule.schedule import payment_schedule, VALID_DAY_ROLL, VALID_LAST_STUB, VALID_PAYMENT_TYPE, VALID_PAYMENT_FREQUENCY, VALID_STUB, VALID_ROLL_CONVENTION
-from frm.frm.schedule.business_day_calendar import get_calendar
-from frm.frm.instruments.ir.leg import Leg
+from frm.utils.daycount import day_count, year_fraction
+from frm.utils.schedule import schedule, VALID_DAY_ROLL, VALID_LAST_STUB, VALID_PAYMENT_TYPE, VALID_PAYMENT_FREQUENCY, VALID_STUB, VALID_ROLL_CONVENTION
+from frm.utils.business_day_calendar import get_busdaycal
+from frm.instruments.ir.leg import Leg
 
 import numpy as np
 import pandas as pd

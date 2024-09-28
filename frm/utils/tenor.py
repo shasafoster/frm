@@ -52,7 +52,6 @@ def get_spot_offset(curve_ccy: str=None) -> int:
 @np.vectorize
 def clean_tenor(tenor: str) -> str:
     if not isinstance(tenor, str):
-        logging.error("function input 'tenor' must be a string")
         raise TypeError("function input 'tenor' must be a string")      
     
     tenor = unicodedata.normalize('NFKD', tenor)
@@ -78,10 +77,9 @@ def clean_tenor(tenor: str) -> str:
    
 
 @np.vectorize
-def tenor_name_to_date_offset(tenor_name: str) -> pd.DateOffset:    
-    if not isinstance(tenor_name, str):
-        logging.error("function input 'tenor_name' must be a string")
-        raise TypeError("function input 'tenor_name' must be a string")      
+def tenor_to_date_offset(tenor: str) -> pd.DateOffset:    
+    if not isinstance(tenor, str):
+        raise TypeError("'tenor' must be a string")      
         
     misc_tenors_offset = {
         'on' : DateOffset(days=1), # 1 day (overnight)
@@ -91,59 +89,61 @@ def tenor_name_to_date_offset(tenor_name: str) -> pd.DateOffset:
         'sw' : DateOffset(days=5), # 5 days (spot week)        
         }
     
-    if tenor_name in misc_tenors_offset.keys():
-        offset = misc_tenors_offset[tenor_name]
+    if tenor in misc_tenors_offset.keys():
+        offset = misc_tenors_offset[tenor]
     else:
         # Identity tenors specified in integer days only; 1D, 30D , 360D
-        if re.search('^\d+d$',tenor_name) is not None:
-            offset = DateOffset(days=int(tenor_name[:-1]))
+        if re.search('^\d+d$',tenor) is not None:
+            offset = DateOffset(days=int(tenor[:-1]))
         # Identity tenors specified in integer weeks only; 1W, 52W, 104W
-        elif re.search('^\d+w$',tenor_name) is not None:
-            offset = DateOffset(weeks=int(tenor_name[:-1]))
+        elif re.search('^\d+w$',tenor) is not None:
+            offset = DateOffset(weeks=int(tenor[:-1]))
         # Identity tenors specified in integer months only; 1M, 12M, 120M
-        elif re.search('^\d+m$',tenor_name) is not None:
-            offset = DateOffset(months=int(tenor_name[:-1]))       
+        elif re.search('^\d+m$',tenor) is not None:
+            offset = DateOffset(months=int(tenor[:-1]))       
         # Identity tenors specified in integer years only; 1Y, 10Y, 100Y
-        elif re.search('^\d+y$',tenor_name) is not None:
-            offset = DateOffset(years=int(tenor_name[:-1]))   
+        elif re.search('^\d+y$',tenor) is not None:
+            offset = DateOffset(years=int(tenor[:-1]))   
         # Identity tenors specified in integer years and integer monthly only; 1Y3M, 10Y6M, 100Y1M
-        elif re.search('^\d+y\d+m$',tenor_name) is not None:
-            years,months = tenor_name[:-1].split('y')
+        elif re.search('^\d+y\d+m$',tenor) is not None:
+            years,months = tenor[:-1].split('y')
             total_months = int(years)*12 + int(months)
             offset = DateOffset(months=total_months)   
         else: 
-            logging.error("invalid 'tenor' value: " + tenor_name)      
-            raise ValueError("invalid 'tenor' value: " + tenor_name)
+            logging.error(f"invalid 'tenor' value: {tenor}")      
+            raise ValueError(f"invalid 'tenor' value: {tenor}" )
         
     return offset
 
 @np.vectorize
 def offset_market_data_date(curve_date: np.datetime64,
                 spot_date: np.datetime64,
-                tenor_name: str) -> np.datetime64:     
+                tenor: str) -> np.datetime64:     
     # offset from 
     # (i) the curve_date for the ON and TN tenors and from;
     # (ii) the spot date for all other tenors   
     
-    date_offset = tenor_name_to_date_offset(tenor_name)
+    date_offset = tenor_to_date_offset(tenor)
     
-    if tenor_name in {'on', 'tn'}:
+    if tenor in {'on', 'tn'}:
         return curve_date + date_offset.item() 
     else:
         return spot_date + date_offset.item()
 
 @np.vectorize
-def get_tenor_effective_date(tenor_name, curve_date, spot_date):
-    if tenor_name in {'on'}:
+def get_tenor_effective_date(tenor, curve_date, spot_date):
+    if tenor in {'on'}:
         return curve_date 
     else:
         return spot_date 
 
-def calc_tenor_date(curve_date: pd.Timestamp,
-                    tenor_name: Union[str, np.ndarray], 
-                    curve_ccy: str=None, 
-                    busdaycal: np.busdaycalendar=None,
-                    spot_offset: bool=True):
+def get_tenor_settlement_date(
+        curve_date: pd.Timestamp,
+        tenor: Union[str, np.ndarray], 
+        curve_ccy: str=None, 
+        busdaycal: np.busdaycalendar=None,
+        spot_offset: bool=True
+        ):
         
     if busdaycal == None or pd.isna(busdaycal):
         busdaycal = np.busdaycalendar()
@@ -158,11 +158,11 @@ def calc_tenor_date(curve_date: pd.Timestamp,
     else: 
         spot_date = curve_date
         
-    cleaned_tenor_name = clean_tenor(tenor_name)
-    if cleaned_tenor_name.size == 1:
-        cleaned_tenor_name = cleaned_tenor_name.item()
+    cleaned_tenor = clean_tenor(tenor)
+    if cleaned_tenor.size == 1:
+        cleaned_tenor = cleaned_tenor.item()
     
-    offset_date = offset_market_data_date(curve_date, spot_date, cleaned_tenor_name)
+    offset_date = offset_market_data_date(curve_date, spot_date, cleaned_tenor)
     
     holiday_rolled_offset_date = np.busday_offset(offset_date.astype('datetime64[D]'), offsets=0, roll='following', busdaycal=busdaycal)
     
@@ -173,5 +173,5 @@ def calc_tenor_date(curve_date: pd.Timestamp,
     
     
     
-    return holiday_rolled_offset_date, cleaned_tenor_name, pd.Timestamp(spot_date)  
+    return holiday_rolled_offset_date, cleaned_tenor, pd.Timestamp(spot_date)  
         

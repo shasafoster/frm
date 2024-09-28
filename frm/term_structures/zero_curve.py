@@ -3,13 +3,13 @@ import os
 if __name__ == "__main__":
     os.chdir(os.environ.get('PROJECT_DIR_FRM')) 
         
-from frm.instruments.ir.swap import Swap
-from frm.instruments.ir.leg import Leg
-from frm.schedule.daycount import day_count, year_fraction
-from frm.schedule.tenor import calc_tenor_date
+#from frm.instruments.ir.swap import Swap
+#from frm.instruments.ir.leg import Leg
+from frm.utils.daycount import day_count, year_fraction
+from frm.utils.tenor import get_tenor_settlement_date
 from frm.utils.utilities import convert_column_to_consistent_data_type
 from frm.utils.enums import DayCountBasis, CompoundingFrequency
-from frm.utils.rate_helpers import zero_rate_from_discount_factor, discount_factor_from_zero_rate, forward_rate
+from frm.term_structures.zero_curve_helpers import zero_rate_from_discount_factor, discount_factor_from_zero_rate, forward_rate
 
 import scipy 
 import pandas as pd
@@ -30,38 +30,42 @@ class ZeroCurve:
     
     # Curve settings
     day_count_basis: DayCountBasis=DayCountBasis.ACT_ACT
-    busdaycal: np.busdaycalendar=np.busdaycalendar()
     interpolation_method: VALID_INTERPOLATION_METHOD = 'cubic_spline_on_zero_rates'
     extrapolation_method: VALID_EXTRAPOLATION_METHOD = 'none'
     
-    # Curve data 
+    # Optional initialisation parameters
     historical_fixings: InitVar[Optional[pd.DataFrame]]=None
     zero_data: InitVar[Optional[pd.DataFrame]] = None
-    compounding_frequency: CompoundingFrequency = None
     instruments: InitVar[Optional[dict]] = None
     dsc_crv: InitVar[Optional['ZeroCurve']] = None
     fwd_crv: InitVar[Optional['ZeroCurve']] = None
-    cubic_spline_definition = None
+    cubic_spline_definition: InitVar[Optional] = None
+    compounding_frequency: InitVar[Optional[CompoundingFrequency]] = None    
     
     # Non initialisation arguments
     daily_data: pd.DataFrame = field(init=False, repr=False)
     
-    def __post_init__(self, historical_fixings, day_count_basis, zero_data, compounding_frequency, instruments, dsc_crv, fwd_crv):
+    def __post_init__(self, historical_fixings, zero_data, instruments, dsc_crv, fwd_crv, cubic_spline_definition, compounding_frequency, busdaycal=None):
                            
+        busdaycal = busdaycal if busdaycal is not None else np.busdaycalendar()
+        
+        if compounding_frequency is None and 'zero_rate' in zero_data.columns:
+            raise ValueError('compounding_frequency must be specified')        
+        
         if historical_fixings is not None:
             assert 'date' in historical_fixings.columns and 'fixing' in historical_fixings.columns 
             self.historical_fixings = dict(zip(historical_fixings.date, historical_fixings.fixing)) 
             
         if zero_data is not None:
             # Zero curve is defined by specified zero rates/discount factors
-            self.__process_input_zero_data(zero_data)
+            self.__process_input_zero_data(zero_data, compounding_frequency, busdaycal)
             self.__df_of_daily_zero_data_setup()
         else:
             # Bootstrap zero curve from par instruments
             self.__bootstrap(instruments=instruments, dsc_crv=dsc_crv, fwd_crv=fwd_crv)
     
 
-    def __process_input_zero_data(self, zero_data):
+    def __process_input_zero_data(self, zero_data, compounding_frequency, busdaycal):
         
         only_one_of_columns_X = ['days', 'tenor', 'years', 'date']
         only_one_of_columns_Y = ['zero_rate','discount_factor']
@@ -81,21 +85,27 @@ class ZeroCurve:
             raise ValueError('Exactly one of the following columns must be specified: ' + ', '.join(only_one_of_columns_Y))
         Y_column_name = Y_columns[0]
 
+        def __calculate_days(): 
+            zero_data['days'] = (zero_data['date'] - self.curve_date).dt.days
+        def __calculate_years(): 
+            zero_data['years'] = year_fraction(self.curve_date, zero_data['date'], self.day_count_basis)
+        
         match X_column_name:
             case 'tenor':
-                date, tenor, spot_date = calc_tenor_date(self.curve_date, zero_data['tenor'].values, self.curve_ccy, self.busdaycal)
+                date, tenor, spot_date = get_tenor_settlement_date(self.curve_date, zero_data['tenor'].values, self.curve_ccy, busdaycal)
                 zero_data['tenor'] = tenor
                 zero_data['date'] = date
-                zero_data['days'] = (zero_data['date'] - self.curve_date).days
-                zero_data['years'] = year_fraction(self.curve_date, zero_data['date'])
+                __calculate_days()
+                __calculate_years()
             case 'date':
-                zero_data['days'] = (zero_data['date'] - self.curve_date).days
-                zero_data['years'] = year_fraction(self.curve_date, zero_data['date'])
+                __calculate_days()
+                __calculate_years()
             case 'days':
                 zero_data['date'] =  zero_data['days'].apply(lambda days: self.curve_date + dt.timedelta(days=days))
-                zero_data['years'] = year_fraction(self.curve_date, zero_data['date'])
+                __calculate_years()
             case 'years':
                 pass
+            
         zero_data = zero_data.sort_values(by='years', ascending=True)       
         zero_data = zero_data.reset_index(drop=True)
         zero_data = convert_column_to_consistent_data_type(zero_data)
@@ -105,13 +115,16 @@ class ZeroCurve:
                 zero_data['discount_factor'] = discount_factor_from_zero_rate(
                     years=zero_data['years'],
                     zero_rate=zero_data['zero_rate'],
-                    compounding_frequency=self.compounding_frequency)
+                    compounding_frequency=compounding_frequency)
             case 'discount_factor':
                 pass
             
         # Add nominal annual continuously compounded interest rate for internal use
         zero_data['nacc'] = -1 * np.log(zero_data['discount_factor']) / zero_data['years']
-        zero_data.drop(columns=['zero_rate'], inplace=True)
+        zero_data = zero_data.dropna(subset=['nacc']) 
+        
+        if 'zero_rate' in zero_data.columns:
+            zero_data.drop(columns=['zero_rate'], inplace=True)
         
         # Add pillar point at t=0 to improve interpolation if linear interpolation is applied
         # If cubic splines interpolation is applied this method can cause unstable splines
@@ -175,6 +188,8 @@ class ZeroCurve:
                   dsc_crv: Optional['ZeroCurve']=None,
                   fwd_crv: Optional['ZeroCurve']=None):
         
+        pass
+        
         # When dsc_crv is specified, we apply the dsc_crv to all relevent instruments and solve the fwd_crv that gives them a par value 
         # Example: 
         # Solving for the USD LIBOR 3M forward curve from USD LIBOR 3M fix-flt par swaps quoted from LCH (i.e that are fully collatarised). 
@@ -193,145 +208,145 @@ class ZeroCurve:
         # a set of instruments reference this curve as the forward curve
         # with another set of instruments that reference this curve as the discount curve. 
         
-        self.zero_data = {self.curve_date: 1.0}
-        self.zero_data_daily = pd.DataFrame({'date': [self.curve_date],
-                                     'years_to_date': [0.0], 
-                                     'discount_factor': [1.0]})
+        # self.zero_data = {self.curve_date: 1.0}
+        # self.zero_data_daily = pd.DataFrame({'date': [self.curve_date],
+        #                              'years_to_date': [0.0], 
+        #                              'discount_factor': [1.0]})
 
-        if 'deposits' in instruments.keys():
-            deposits = instruments['deposits']
-            deposits.sort(key=lambda x: x.maturity_date, reverse=False) 
-            for deposit in instruments['deposits']:
-                assert deposit.effective_date == self.curve_date, f"deposit.effective_date: {deposit.effective_date}, self.curve_date: {self.curve_date}"
-                self.zero_data[deposit.maturity_date] = deposit.implied_discount_factor()
-            self.__interpolate_zero_data()
+        # if 'deposits' in instruments.keys():
+        #     deposits = instruments['deposits']
+        #     deposits.sort(key=lambda x: x.maturity_date, reverse=False) 
+        #     for deposit in instruments['deposits']:
+        #         assert deposit.effective_date == self.curve_date, f"deposit.effective_date: {deposit.effective_date}, self.curve_date: {self.curve_date}"
+        #         self.zero_data[deposit.maturity_date] = deposit.implied_discount_factor()
+        #     self.__interpolate_zero_data()
 
-        if 'futures' in instruments.keys():
-            futures = instruments['futures']
-            futures.sort(key=lambda x: x.maturity_date, reverse=False) 
-            # Bootstrapping using futures/FRAs requires the futures to have overlap over the end and start dates of two successive futures
-            # For example, a future ends on 15 June 2022, the next future must start on 15 June 2022 or earlier            
-            for i,future in enumerate(futures):
-                self.zero_data[future.maturity_date] = self.discount_factor(pd.Timestamp(future.effective_date)).at[0] \
-                    / (future.forward_interest_rate * future.daycounter.year_fraction(future.effective_date,future.maturity_date) + 1)                                        
-                self.__interpolate_zero_data()
+        # if 'futures' in instruments.keys():
+        #     futures = instruments['futures']
+        #     futures.sort(key=lambda x: x.maturity_date, reverse=False) 
+        #     # Bootstrapping using futures/FRAs requires the futures to have overlap over the end and start dates of two successive futures
+        #     # For example, a future ends on 15 June 2022, the next future must start on 15 June 2022 or earlier            
+        #     for i,future in enumerate(futures):
+        #         self.zero_data[future.maturity_date] = self.discount_factor(pd.Timestamp(future.effective_date)).at[0] \
+        #             / (future.forward_interest_rate * future.daycounter.year_fraction(future.effective_date,future.maturity_date) + 1)                                        
+        #         self.__interpolate_zero_data()
         
-        if 'FRAs' in instruments.keys():
-            FRAs = instruments['FRAs']
-            FRAs.sort(key=lambda x: x.maturity_date, reverse=False) 
-            # Bootstrapping using futures/FRAs requires the futures to have overlap over the end and start dates of two successive futures
-            # For example, a future ends on 15 June 2022, the next future must start on 15 June 2022 or earlier            
-            for i,fra in enumerate(FRAs):
-                self.zero_data[fra.maturity_date] = self.discount_factor([pd.Timestamp(future.effective_date)]).at[0] \
-                    / (fra.forward_interest_rate * fra.daycounter.year_fraction(fra.effective_date,fra.maturity_date) + 1)                                        
-                self.__interpolate_zero_data()
+        # if 'FRAs' in instruments.keys():
+        #     FRAs = instruments['FRAs']
+        #     FRAs.sort(key=lambda x: x.maturity_date, reverse=False) 
+        #     # Bootstrapping using futures/FRAs requires the futures to have overlap over the end and start dates of two successive futures
+        #     # For example, a future ends on 15 June 2022, the next future must start on 15 June 2022 or earlier            
+        #     for i,fra in enumerate(FRAs):
+        #         self.zero_data[fra.maturity_date] = self.discount_factor([pd.Timestamp(future.effective_date)]).at[0] \
+        #             / (fra.forward_interest_rate * fra.daycounter.year_fraction(fra.effective_date,fra.maturity_date) + 1)                                        
+        #         self.__interpolate_zero_data()
              
-        if 'swaps' in instruments.keys():
-            swaps = instruments['swaps']
-            swaps.sort(key=lambda x: x.pay_leg.schedule['payment_date'].iloc[-1], reverse=False) 
+        # if 'swaps' in instruments.keys():
+        #     swaps = instruments['swaps']
+        #     swaps.sort(key=lambda x: x.pay_leg.schedule['payment_date'].iloc[-1], reverse=False) 
             
-            for i,swap in enumerate(swaps):
-                final_payment_date = swap.pay_leg.schedule['payment_date'].iloc[-1]
+        #     for i,swap in enumerate(swaps):
+        #         final_payment_date = swap.pay_leg.schedule['payment_date'].iloc[-1]
 
-                if final_payment_date > self.zero_data_daily['date'].iloc[-1]:
+        #         if final_payment_date > self.zero_data_daily['date'].iloc[-1]:
                     
-                    # Set the initial guess to be the swaps par coupon rate
-                    zero_rate = swap.pay_leg.fixed_rate if swap.pay_leg.leg_type == 'fixed' else swap.rec_leg.fixed_rate   
-                    self.zero_data[final_payment_date] = np.exp(-zero_rate * year_fraction(self.curve_date, final_payment_date, self.day_count_basis))
+        #             # Set the initial guess to be the swaps par coupon rate
+        #             zero_rate = swap.pay_leg.fixed_rate if swap.pay_leg.leg_type == 'fixed' else swap.rec_leg.fixed_rate   
+        #             self.zero_data[final_payment_date] = np.exp(-zero_rate * year_fraction(self.curve_date, final_payment_date, self.day_count_basis))
                     
-                    if dsc_crv is not None:
-                        swap.set_discount_curve(dsc_crv)
-                    if fwd_crv is not None:
-                        swap.set_forward_curve(fwd_crv)
+        #             if dsc_crv is not None:
+        #                 swap.set_discount_curve(dsc_crv)
+        #             if fwd_crv is not None:
+        #                 swap.set_forward_curve(fwd_crv)
                     
-                    def solve_to_par(zero_cpn_rate: [float],
-                                     swap: Swap,
-                                     zero_curve: ZeroCurve,
-                                     final_payment_date: pd.Timestamp,
-                                     solve_fwd_crv: bool,
-                                     solve_dsc_crv: bool):
+        #             def solve_to_par(zero_cpn_rate: [float],
+        #                              swap: Swap,
+        #                              zero_curve: ZeroCurve,
+        #                              final_payment_date: pd.Timestamp,
+        #                              solve_fwd_crv: bool,
+        #                              solve_dsc_crv: bool):
                         
-                        zero_curve.zero_data[final_payment_date] = \
-                            np.exp(-zero_cpn_rate[0] * zero_curve.daycounter.year_fraction(zero_curve.curve_date, final_payment_date))
-                        zero_curve.__interpolate_zero_data()
+        #                 zero_curve.zero_data[final_payment_date] = \
+        #                     np.exp(-zero_cpn_rate[0] * zero_curve.daycounter.year_fraction(zero_curve.curve_date, final_payment_date))
+        #                 zero_curve.__interpolate_zero_data()
               
-                        if solve_fwd_crv:
-                            swap.set_forward_curve(zero_curve)
-                        if solve_dsc_crv:
-                            swap.set_discount_curve(zero_curve)
+        #                 if solve_fwd_crv:
+        #                     swap.set_forward_curve(zero_curve)
+        #                 if solve_dsc_crv:
+        #                     swap.set_discount_curve(zero_curve)
 
-                        pricing = swap.price()
-                        return pricing['price']
+        #                 pricing = swap.price()
+        #                 return pricing['price']
                     
-                    solve_fwd_crv = fwd_crv is None
-                    solve_dsc_crv = dsc_crv is None    
-                    x, infodict, ier, msg = fsolve(solve_to_par, [
-                                                   zero_rate], 
-                                                   args=(swap, self, final_payment_date, solve_fwd_crv, solve_dsc_crv), 
-                                                   full_output=True)
+        #             solve_fwd_crv = fwd_crv is None
+        #             solve_dsc_crv = dsc_crv is None    
+        #             x, infodict, ier, msg = fsolve(solve_to_par, [
+        #                                            zero_rate], 
+        #                                            args=(swap, self, final_payment_date, solve_fwd_crv, solve_dsc_crv), 
+        #                                            full_output=True)
 
-                    self.zero_data[final_payment_date] = np.exp(-x[0] * year_fraction(self.curve_date, final_payment_date, self.day_count_basis))
-                    self.__interpolate_zero_data()
+        #             self.zero_data[final_payment_date] = np.exp(-x[0] * year_fraction(self.curve_date, final_payment_date, self.day_count_basis))
+        #             self.__interpolate_zero_data()
                     
-                    if ier != 1:
-                        print('Error bootstrapping swap with maturity', swap.pay_leg.maturity_date.strftime('%Y-%m-%d'), msg)                        
-                else:        
-                    print('Swap with maturity', swap.pay_leg.maturity_date.strftime('%Y-%m-%d'), \
-                          'excluded from bootstrapping as prior instruments have covered this period.')
+        #             if ier != 1:
+        #                 print('Error bootstrapping swap with maturity', swap.pay_leg.maturity_date.strftime('%Y-%m-%d'), msg)                        
+        #         else:        
+        #             print('Swap with maturity', swap.pay_leg.maturity_date.strftime('%Y-%m-%d'), \
+        #                   'excluded from bootstrapping as prior instruments have covered this period.')
 
-        if 'legs' in instruments.keys():
-            legs = instruments['legs']
-            legs.sort(key=lambda x: x.schedule['payment_date'].iloc[-1], reverse=False) 
+        # if 'legs' in instruments.keys():
+        #     legs = instruments['legs']
+        #     legs.sort(key=lambda x: x.schedule['payment_date'].iloc[-1], reverse=False) 
             
-            for i,leg in enumerate(legs):
-                final_payment_date = leg.schedule['payment_date'].iloc[-1]
+        #     for i,leg in enumerate(legs):
+        #         final_payment_date = leg.schedule['payment_date'].iloc[-1]
 
-                if final_payment_date > self.zero_data_daily['date'].iloc[-1]:
+        #         if final_payment_date > self.zero_data_daily['date'].iloc[-1]:
                     
-                    # Set the initial guess to be the swaps par coupon rate
-                    zero_rate = leg.fixed_rate if leg.leg_type == 'fixed' else leg.fixed_rate   
-                    self.zero_data[final_payment_date] = np.exp(-zero_rate * year_fraction(self.curve_date, final_payment_date, self.day_count_basis))
+        #             # Set the initial guess to be the swaps par coupon rate
+        #             zero_rate = leg.fixed_rate if leg.leg_type == 'fixed' else leg.fixed_rate   
+        #             self.zero_data[final_payment_date] = np.exp(-zero_rate * year_fraction(self.curve_date, final_payment_date, self.day_count_basis))
                     
-                    if dsc_crv is not None:
-                        leg.set_discount_curve(dsc_crv)
-                    if fwd_crv is not None:
-                        leg.set_forward_curve(fwd_crv)
+        #             if dsc_crv is not None:
+        #                 leg.set_discount_curve(dsc_crv)
+        #             if fwd_crv is not None:
+        #                 leg.set_forward_curve(fwd_crv)
                     
-                    def solve_to_par(zero_cpn_rate: [float],
-                                     leg: Leg,
-                                     zero_curve: ZeroCurve,
-                                     final_payment_date: pd.Timestamp,
-                                     solve_fwd_crv: bool,
-                                     solve_dsc_crv: bool):
+        #             def solve_to_par(zero_cpn_rate: [float],
+        #                              leg: Leg,
+        #                              zero_curve: ZeroCurve,
+        #                              final_payment_date: pd.Timestamp,
+        #                              solve_fwd_crv: bool,
+        #                              solve_dsc_crv: bool):
                         
-                        zero_curve.zero_data[final_payment_date] = \
-                            np.exp(-zero_cpn_rate[0] * zero_curve.daycounter.year_fraction(zero_curve.curve_date, final_payment_date))
-                        zero_curve.__interpolate_zero_data()
+        #                 zero_curve.zero_data[final_payment_date] = \
+        #                     np.exp(-zero_cpn_rate[0] * zero_curve.daycounter.year_fraction(zero_curve.curve_date, final_payment_date))
+        #                 zero_curve.__interpolate_zero_data()
               
-                        if solve_fwd_crv:
-                            leg.set_forward_curve(zero_curve)
-                        if solve_dsc_crv:
-                            leg.set_discount_curve(zero_curve)
+        #                 if solve_fwd_crv:
+        #                     leg.set_forward_curve(zero_curve)
+        #                 if solve_dsc_crv:
+        #                     leg.set_discount_curve(zero_curve)
 
                         
-                        pricing = leg.price()
-                        return pricing['price'] - leg.notional * (leg.transaction_price / 100.0)
+        #                 pricing = leg.price()
+        #                 return pricing['price'] - leg.notional * (leg.transaction_price / 100.0)
                     
-                    solve_fwd_crv = fwd_crv is None
-                    solve_dsc_crv = dsc_crv is None    
-                    x, infodict, ier, msg = fsolve(solve_to_par, [
-                                                   zero_rate], 
-                                                   args=(leg, self, final_payment_date, solve_fwd_crv, solve_dsc_crv), 
-                                                   full_output=True)
+        #             solve_fwd_crv = fwd_crv is None
+        #             solve_dsc_crv = dsc_crv is None    
+        #             x, infodict, ier, msg = fsolve(solve_to_par, [
+        #                                            zero_rate], 
+        #                                            args=(leg, self, final_payment_date, solve_fwd_crv, solve_dsc_crv), 
+        #                                            full_output=True)
 
-                    self.zero_data[final_payment_date] = np.exp(-x[0] * year_fraction(self.curve_date, final_payment_date, self.day_count_basis))
-                    self.__interpolate_zero_data()
+        #             self.zero_data[final_payment_date] = np.exp(-x[0] * year_fraction(self.curve_date, final_payment_date, self.day_count_basis))
+        #             self.__interpolate_zero_data()
                     
-                    if ier != 1:
-                        print('Error bootstrapping leg with maturity', leg.maturity_date.strftime('%Y-%m-%d'), msg)                        
-                else:        
-                    print('Leg with maturity', leg.maturity_date.strftime('%Y-%m-%d'), \
-                          'excluded from bootstrapping as prior instruments have covered this period.')
+        #             if ier != 1:
+        #                 print('Error bootstrapping leg with maturity', leg.maturity_date.strftime('%Y-%m-%d'), msg)                        
+        #         else:        
+        #             print('Leg with maturity', leg.maturity_date.strftime('%Y-%m-%d'), \
+        #                   'excluded from bootstrapping as prior instruments have covered this period.')
     
     def flat_shift(self, 
                    basis_points: float=1) -> 'ZeroCurve':
@@ -393,10 +408,10 @@ class ZeroCurve:
                 
             df = self.index_daily_zero_data(dates, days, years)
             
-            if compounding_frequency == 'continuously':
+            if compounding_frequency == CompoundingFrequency.CONTINUOUS:
                 return df['nacc'].values
             else: 
-                zero_rate = zero_rate_from_discount_factor(years, 
+                zero_rate = zero_rate_from_discount_factor(years=df['years'],
                                                            discount_factor=df['discount_factor'], 
                                                            compounding_frequency=compounding_frequency)
                 return zero_rate        
@@ -474,7 +489,7 @@ class ZeroCurve:
         max_date = self.zero_data_daily['date'].iloc[-1]
         date_range = pd.date_range(min_date,max_date,freq='d')
         years_zr = year_fraction(self.curve_date, date_range, self.day_count_basis)
-        zero_rates = pd.Series(self.zero_rate(dates=date_range)) * 100
+        zero_rates = pd.Series(self.zero_rate(compounding_frequency=CompoundingFrequency.CONTINUOUS, dates=date_range)) * 100
         
         fig, ax = plt.subplots()
         
@@ -486,7 +501,7 @@ class ZeroCurve:
             d2 = pd.date_range(min_date + pd.DateOffset(days=term),max_date ,freq='d')
         
             years_fwd = year_fraction(self.curve_date, d1, self.day_count_basis)
-            fwd_rates = pd.Series(self.forward_rate(d1,d2)) * 100       
+            fwd_rates = pd.Series(self.forward_rate(d1, d2, CompoundingFrequency.Simple)) * 100       
         
             ax.plot(years_fwd, fwd_rates, label=str(term)+' day forward rate') 
         

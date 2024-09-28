@@ -7,93 +7,18 @@ import sys
 import holidays
 import numpy as np
 import pandas as pd
+import dill
 from dateutil.relativedelta import relativedelta
 
-years = range(1990,2100)
 
-LOCALE_HOLIDAY = dict(sorted({
-    'AE-DUBAI': holidays.AE(categories=['public'], years=years),
-    'AR-BUENOS_AIRES': holidays.AR(categories=['public'], years=years),
-    'AU-SYDNEY': holidays.AU(subdiv='NSW', categories=['public', 'bank'], years=years),
-    'AU-MELBOURNE': holidays.AU(subdiv='VIC', categories=['public', 'bank'], years=years),
-    'BR-SAO_PAULO': holidays.BR(subdiv='SP', categories=['public'], years=years),
-    'CA-TORONTO': holidays.CA(subdiv='ON', categories=['public'], years=years),
-    'CH-ZURICH': holidays.CH(subdiv='ZH', categories=['public'], years=years),
-    'CL-SANTIAGO': holidays.CL(subdiv='RM', categories=['public', 'bank'], years=years),
-    'CN-SHANGHAI': holidays.CN(categories=['public'], years=years),
-    'CO-BOGOTA': holidays.CO(categories=['public'], years=years),
-    'CZ-PRAGUE': holidays.CZ(categories=['public'], years=years),
-    'DK-COPENHAGEN': holidays.DK(categories=['public'], years=years),
-    'DE-FRANKFURT': holidays.DE(subdiv='HH', categories=['public'], years=years),
-    'ES-MADRID': holidays.ES(subdiv='MD', categories=['public'], years=years),
-    'FR-PARIS': holidays.FR(categories=['public'], years=years),
-    'FI-HELSINKI': holidays.FI(categories=['public'], years=years),
-    'HK-HONG_KONG': holidays.HK(categories=['public'], years=years),
-    'HU-BUDAPEST': holidays.HU(categories=['public'], years=years),
-    'ID-JAKARTA': holidays.ID(categories=['public'], years=years),
-    'IN-MUMBAI': holidays.IN(subdiv='MH', categories=['public'], years=years),
-    'IL-TEL_AVIV': holidays.IL(categories=['public'], years=years),
-    'IS-REYKJAVIK': holidays.IS(categories=['public'], years=years),
-    'MY-KUALA_LUMPUR': holidays.MY(subdiv='KUL', categories=['public'], years=years),
-    'MX-MEXICO_CITY': holidays.MX(categories=['public'], years=years),
-    'NO-OSLO': holidays.NO(categories=['public'], years=years),
-    'NZ-AUCKLAND': holidays.NZ(subdiv='AUK', categories=['public'], years=years),
-    'PL-WARSAW': holidays.PL(categories=['public'], years=years),
-    'PH-MANILA': holidays.PH(categories=['public'], years=years),
-    'RU-MOSCOW': holidays.RU(categories=['public'], years=years),
-    'SA-RIYADH': holidays.SA(categories=['public'], years=years),
-    'SE-STOCKHOLM': holidays.SE(categories=['public'], years=years),
-    'SG-SINGAPORE': holidays.SG(categories=['public'], years=years),
-    'TH-BANKCOK': holidays.TH(categories=['public', 'bank'], years=years),
-    'TR-ISTANBUL': holidays.TR(categories=['public'], years=years),
-    'TW-TAPEI': holidays.TW(categories=['public'], years=years),
-    'UK-LONDON': holidays.UK(subdiv='ENG', categories=['public'], years=years),
-    'US-NEW_YORK': holidays.US(subdiv='NY', categories=['public'], years=years),
-    'VN-HO_CHI_MINH_CITY': holidays.VN(categories=['public'], years=years),
-    'ZA-JOHANNESBURG': holidays.ZA(categories=['public'], years=years),
-    'European_Central_Bank': holidays.ECB(categories=['public'], years=years),
-    'ICE_Futures_Europe': holidays.IFEU(categories=['public'], years=years), # Requires holidays >=0.49
-    'New_York_Stock_Exchange': holidays.XNYS(categories=['public'], years=years),
-}.items()))
+script_dir = os.path.dirname(os.path.abspath(__file__))
+file_path_locale_holiday = os.path.join(script_dir, 'LOCALE_HOLIDAY.pkl') 
+file_path_ccy_holiday = os.path.join(script_dir, 'CCY_HOLIDAY.pkl')
+with open(file_path_locale_holiday, 'rb') as f:
+    LOCALE_HOLIDAY = dill.load(f)
 
-
-CCY_HOLIDAY = dict(sorted({
-    'AED': holidays.AE(categories=['public'], years=years),
-    'ARS': holidays.AR(categories=['public'], years=years),
-    'AUD': holidays.AU(subdiv='NSW', categories=['public', 'bank'], years=years),
-    'BRL': holidays.BR(subdiv='SP', categories=['public'], years=years),
-    'CAD': holidays.CA(subdiv='ON', categories=['public'], years=years),
-    'CHF': holidays.CH(subdiv='ZH', categories=['public'], years=years),
-    'CLP': holidays.CL(subdiv='RM', categories=['public', 'bank'], years=years),
-    'CNY': holidays.CN(categories=['public'], years=years),
-    'COP': holidays.CO(categories=['public'], years=years),
-    'CZK': holidays.CZ(categories=['public'], years=years),
-    'DKK': holidays.DK(categories=['public'], years=years),
-    'HKD': holidays.HK(categories=['public'], years=years),
-    'HUF': holidays.HU(categories=['public'], years=years),
-    'IDR': holidays.ID(categories=['public'], years=years),
-    'INR': holidays.IN(subdiv='MH', categories=['public'], years=years),
-    'ILS': holidays.IL(categories=['public'], years=years),
-    'ISK': holidays.IS(categories=['public'], years=years),
-    'MYR': holidays.MY(subdiv='KUL', categories=['public'], years=years),
-    'MXN': holidays.MX(categories=['public'], years=years),
-    'NOK': holidays.NO(categories=['public'], years=years),
-    'NZD': holidays.NZ(subdiv='AUK', categories=['public'], years=years),
-    'PLN': holidays.PL(categories=['public'], years=years),
-    'PHP': holidays.PH(categories=['public'], years=years),
-    'RUB': holidays.RU(categories=['public'], years=years),
-    'SAR': holidays.SA(categories=['public'], years=years),
-    'SEK': holidays.SE(categories=['public'], years=years),
-    'SGD': holidays.SG(categories=['public'], years=years),
-    'THB': holidays.TH(categories=['public', 'bank'], years=years),
-    'TRY': holidays.TR(categories=['public'], years=years),
-    'TWD': holidays.TW(categories=['public'], years=years),
-    'GBP': holidays.UK(subdiv='ENG', categories=['public'], years=years),
-    'USD': holidays.US(subdiv='NY', categories=['public'], years=years),
-    'VND': holidays.VN(categories=['public'], years=years),
-    'ZAR': holidays.ZA(categories=['public'], years=years),
-    'EUR': holidays.ECB(categories=['public'], years=years),
-}.items()))
+with open(file_path_ccy_holiday, 'rb') as f:
+    CCY_HOLIDAY = dill.load(f)
 
 
 def get_holidays_object(key):
@@ -142,8 +67,104 @@ def get_busdaycal(keys) -> np.busdaycalendar:
     return np.busdaycalendar(weekmask=weekmasks, holidays=holidays)  
 
 
-# %% Create code for static holidays definition
 
+# Pickle variables 
+if __name__ == "__main__":
+    
+    years = range(1990,2100)
+
+    LOCALE_HOLIDAY = dict(sorted({
+        'AE-DUBAI': holidays.AE(categories=['public'], years=years),
+        'AR-BUENOS_AIRES': holidays.AR(categories=['public'], years=years),
+        'AU-SYDNEY': holidays.AU(subdiv='NSW', categories=['public', 'bank'], years=years),
+        'AU-MELBOURNE': holidays.AU(subdiv='VIC', categories=['public', 'bank'], years=years),
+        'BR-SAO_PAULO': holidays.BR(subdiv='SP', categories=['public'], years=years),
+        'CA-TORONTO': holidays.CA(subdiv='ON', categories=['public'], years=years),
+        'CH-ZURICH': holidays.CH(subdiv='ZH', categories=['public'], years=years),
+        'CL-SANTIAGO': holidays.CL(subdiv='RM', categories=['public', 'bank'], years=years),
+        'CN-SHANGHAI': holidays.CN(categories=['public'], years=years),
+        'CO-BOGOTA': holidays.CO(categories=['public'], years=years),
+        'CZ-PRAGUE': holidays.CZ(categories=['public'], years=years),
+        'DK-COPENHAGEN': holidays.DK(categories=['public'], years=years),
+        'DE-FRANKFURT': holidays.DE(subdiv='HH', categories=['public'], years=years),
+        'ES-MADRID': holidays.ES(subdiv='MD', categories=['public'], years=years),
+        'FR-PARIS': holidays.FR(categories=['public'], years=years),
+        'FI-HELSINKI': holidays.FI(categories=['public'], years=years),
+        'HK-HONG_KONG': holidays.HK(categories=['public'], years=years),
+        'HU-BUDAPEST': holidays.HU(categories=['public'], years=years),
+        'ID-JAKARTA': holidays.ID(categories=['public'], years=years),
+        'IN-MUMBAI': holidays.IN(subdiv='MH', categories=['public'], years=years),
+        'IL-TEL_AVIV': holidays.IL(categories=['public'], years=years),
+        'IS-REYKJAVIK': holidays.IS(categories=['public'], years=years),
+        'MY-KUALA_LUMPUR': holidays.MY(subdiv='KUL', categories=['public'], years=years),
+        'MX-MEXICO_CITY': holidays.MX(categories=['public'], years=years),
+        'NO-OSLO': holidays.NO(categories=['public'], years=years),
+        'NZ-AUCKLAND': holidays.NZ(subdiv='AUK', categories=['public'], years=years),
+        'PL-WARSAW': holidays.PL(categories=['public'], years=years),
+        'PH-MANILA': holidays.PH(categories=['public'], years=years),
+        'RU-MOSCOW': holidays.RU(categories=['public'], years=years),
+        'SA-RIYADH': holidays.SA(categories=['public'], years=years),
+        'SE-STOCKHOLM': holidays.SE(categories=['public'], years=years),
+        'SG-SINGAPORE': holidays.SG(categories=['public'], years=years),
+        'TH-BANKCOK': holidays.TH(categories=['public', 'bank'], years=years),
+        'TR-ISTANBUL': holidays.TR(categories=['public'], years=years),
+        'TW-TAPEI': holidays.TW(categories=['public'], years=years),
+        'UK-LONDON': holidays.UK(subdiv='ENG', categories=['public'], years=years),
+        'US-NEW_YORK': holidays.US(subdiv='NY', categories=['public'], years=years),
+        'VN-HO_CHI_MINH_CITY': holidays.VN(categories=['public'], years=years),
+        'ZA-JOHANNESBURG': holidays.ZA(categories=['public'], years=years),
+        'European_Central_Bank': holidays.ECB(categories=['public'], years=years),
+        'ICE_Futures_Europe': holidays.IFEU(categories=['public'], years=years), # Requires holidays >=0.49
+        'New_York_Stock_Exchange': holidays.XNYS(categories=['public'], years=years),
+    }.items()))
+
+    CCY_HOLIDAY = dict(sorted({
+        'AED': holidays.AE(categories=['public'], years=years),
+        'ARS': holidays.AR(categories=['public'], years=years),
+        'AUD': holidays.AU(subdiv='NSW', categories=['public', 'bank'], years=years),
+        'BRL': holidays.BR(subdiv='SP', categories=['public'], years=years),
+        'CAD': holidays.CA(subdiv='ON', categories=['public'], years=years),
+        'CHF': holidays.CH(subdiv='ZH', categories=['public'], years=years),
+        'CLP': holidays.CL(subdiv='RM', categories=['public', 'bank'], years=years),
+        'CNY': holidays.CN(categories=['public'], years=years),
+        'COP': holidays.CO(categories=['public'], years=years),
+        'CZK': holidays.CZ(categories=['public'], years=years),
+        'DKK': holidays.DK(categories=['public'], years=years),
+        'HKD': holidays.HK(categories=['public'], years=years),
+        'HUF': holidays.HU(categories=['public'], years=years),
+        'IDR': holidays.ID(categories=['public'], years=years),
+        'INR': holidays.IN(subdiv='MH', categories=['public'], years=years),
+        'ILS': holidays.IL(categories=['public'], years=years),
+        'ISK': holidays.IS(categories=['public'], years=years),
+        'MYR': holidays.MY(subdiv='KUL', categories=['public'], years=years),
+        'MXN': holidays.MX(categories=['public'], years=years),
+        'NOK': holidays.NO(categories=['public'], years=years),
+        'NZD': holidays.NZ(subdiv='AUK', categories=['public'], years=years),
+        'PLN': holidays.PL(categories=['public'], years=years),
+        'PHP': holidays.PH(categories=['public'], years=years),
+        'RUB': holidays.RU(categories=['public'], years=years),
+        'SAR': holidays.SA(categories=['public'], years=years),
+        'SEK': holidays.SE(categories=['public'], years=years),
+        'SGD': holidays.SG(categories=['public'], years=years),
+        'THB': holidays.TH(categories=['public', 'bank'], years=years),
+        'TRY': holidays.TR(categories=['public'], years=years),
+        'TWD': holidays.TW(categories=['public'], years=years),
+        'GBP': holidays.UK(subdiv='ENG', categories=['public'], years=years),
+        'USD': holidays.US(subdiv='NY', categories=['public'], years=years),
+        'VND': holidays.VN(categories=['public'], years=years),
+        'ZAR': holidays.ZA(categories=['public'], years=years),
+        'EUR': holidays.ECB(categories=['public'], years=years),
+    }.items()))
+
+    # Pickle the variable
+    with open(file_path_locale_holiday, 'wb') as f:
+        dill.dump(LOCALE_HOLIDAY, f)
+
+    # Pickle the variable
+    with open(file_path_ccy_holiday, 'wb') as f:
+        dill.dump(CCY_HOLIDAY, f)
+        
+# Create code for static holidays definition
 if __name__ == "__main__":
     current_dir = os.path.dirname(os.path.abspath(__file__))
     sys.path.append(current_dir)
@@ -195,3 +216,6 @@ if __name__ == "__main__":
     print(holiday_dict_str)
     print("\n")
     print(ccy_holiday_dict_str)
+
+
+

@@ -2,20 +2,21 @@
 import os
 if __name__ == "__main__":
     os.chdir(os.environ.get('PROJECT_DIR_FRM')) 
-    
+  
+from frm.utils.schedule import schedule, generate_date_schedule, PeriodFrequency
+import pandas as pd
+import pytest    
+  
 # For importing the test cases defined in excel
 import sys
 current_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(current_dir)
 
-from frm.utils.schedule import schedule, generate_date_schedule, Frequency
-import pandas as pd
-import pytest
 
 
 def test_schedule():
     # Step 1: Read in the test cases defined in the excel spreadsheet 
-    df = pd.read_excel(current_dir + "\\payment_schedule_test_definitions.xlsx", sheet_name='test_cases')
+    df = pd.read_excel(current_dir + '\\payment_schedule_test_definitions.xlsx', sheet_name='test_cases')
     df_test_description = df[['test_#','test_bucket','description']]
     function_parameters = ['start_date', 'end_date', 'frequency', 'roll_convention', 'day_roll', 'first_cpn_end_date', 'last_cpn_start_date', 'first_stub_type', 'last_stub_type', 'roll_user_specified_dates']
     df_input = df[['test_#'] + function_parameters]
@@ -57,7 +58,7 @@ def test_schedule():
 def test_generate_date_schedule_forward_months():
     start_date = pd.Timestamp('2023-01-01')
     end_date = pd.Timestamp('2023-06-30')
-    frequency = Frequency.from_value('monthly')
+    frequency = PeriodFrequency.from_value('monthly')
     direction = 'forward'
 
     expected_start_dates = pd.Series([
@@ -78,7 +79,7 @@ def test_generate_date_schedule_forward_months():
 def test_generate_date_schedule_backward_months():
     start_date = pd.Timestamp('2023-01-01')
     end_date = pd.Timestamp('2023-06-30')
-    frequency = Frequency.from_value('monthly')
+    frequency = PeriodFrequency.from_value('monthly')
     direction = 'backward'
 
     expected_start_dates = pd.Series([
@@ -99,7 +100,7 @@ def test_generate_date_schedule_backward_months():
 def test_generate_date_schedule_forward_years():
     start_date = pd.Timestamp('2020-01-01')
     end_date = pd.Timestamp('2023-01-01')
-    frequency = Frequency.from_value('annual')
+    frequency = PeriodFrequency.from_value('annual')
     direction = 'forward'
 
     expected_start_dates = pd.Series([pd.Timestamp('2020-01-01'), pd.Timestamp('2021-01-01'), pd.Timestamp('2022-01-03')])
@@ -114,7 +115,7 @@ def test_generate_date_schedule_forward_years():
 def test_generate_date_schedule_forward_days():
     start_date = pd.Timestamp('2023-01-01')
     end_date = pd.Timestamp('2023-01-05')
-    freq = Frequency.from_value('daily')
+    freq = PeriodFrequency.from_value('daily')
     direction = 'forward'
 
     expected_start_dates = [
@@ -134,7 +135,7 @@ def test_generate_date_schedule_forward_days():
 def test_generate_date_schedule_same_start_and_end_date():
     start_date = pd.Timestamp('2023-01-01')
     end_date = pd.Timestamp('2023-01-01')
-    frequency = Frequency.from_value('daily')
+    frequency = PeriodFrequency.from_value('daily')
     direction = 'forward'
     
     with pytest.raises(ValueError, match="'start_date' must be earlier than 'end_date'"):
@@ -144,7 +145,7 @@ def test_generate_date_schedule_same_start_and_end_date():
 def test_generate_date_schedule_invalid_direction():
     start_date = pd.Timestamp('2023-01-01')
     end_date = pd.Timestamp('2023-12-31')
-    frequency = Frequency.from_value('m')
+    frequency = PeriodFrequency.from_value('monthly')
     direction = 'sideways'  # invalid direction
     
     with pytest.raises(ValueError, match="Invalid direction 'sideways'. Must be 'forward' or 'backward'."):
