@@ -29,7 +29,7 @@ def validate_input(var, var_name, validation_fn):
             raise ValueError(f"'{var_name}' has invalid values: {var}")
 
 
-def heston_fit_vanilla_fx_smile(
+def heston_calibrate_vanilla_fx_smile(
         Δ: np.array, 
         Δ_convention: str, 
         σ_market: np.array, 

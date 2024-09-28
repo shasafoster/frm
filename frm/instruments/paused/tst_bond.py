@@ -1,10 +1,7 @@
 # -*- coding: utf-8 -*-
-
-
 import os
-import pathlib
-
-os.chdir(pathlib.Path(__file__).parent.parent.parent.resolve()) 
+if __name__ == "__main__":
+    os.chdir(os.environ.get('PROJECT_DIR_FRM')) 
 
 from instruments.bond import Bond
 from market_data.zero_curve import ZeroCurve

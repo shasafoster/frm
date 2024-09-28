@@ -1,11 +1,7 @@
 # -*- coding: utf-8 -*-
-
-
+import os
 if __name__ == "__main__":
-    import os
-    import pathlib
-    os.chdir(pathlib.Path(__file__).parent.parent.parent.parent.resolve())     
-    print('__main__ - current working directory:', os.getcwd())
+    os.chdir(os.environ.get('PROJECT_DIR_FRM')) 
     
 from frm.frm.schedule.daycounter import DayCounter, VALID_DAY_COUNT_BASIS
 from frm.frm.schedule.schedule import payment_schedule, VALID_DAY_ROLL, VALID_LAST_STUB, VALID_PAYMENT_TYPE, VALID_PAYMENT_FREQUENCY, VALID_STUB, VALID_ROLL_CONVENTION

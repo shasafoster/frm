@@ -1,12 +1,7 @@
 # -*- coding: utf-8 -*-
-
-
 import os
-import pathlib
-
 if __name__ == "__main__":
-    os.chdir(pathlib.Path(__file__).parent.parent.parent.resolve()) # path to ./frm/ 
-    print(__file__.split('\\')[-1], os.getcwd()) 
+    os.chdir(os.environ.get('PROJECT_DIR_FRM')) 
 
 import numpy as np
 import pandas as pd    
