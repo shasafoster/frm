@@ -11,6 +11,7 @@ from frm.utils.utilities import convert_column_to_consistent_data_type
 from frm.utils.enums import DayCountBasis, CompoundingFrequency
 from frm.term_structures.zero_curve_helpers import zero_rate_from_discount_factor, discount_factor_from_zero_rate, forward_rate
 
+from enum import Enum
 import scipy 
 import pandas as pd
 import numpy as np
@@ -24,8 +25,15 @@ from dateutil.relativedelta import relativedelta
 VALID_INTERPOLATION_METHOD = Literal['linear_on_log_of_discount_factors','cubic_spline_on_zero_rates']
 VALID_EXTRAPOLATION_METHOD = Literal['none','flat']
 
+
 @dataclass
 class ZeroCurve: 
+    """
+    Generic class to support 
+        (i) Term and OIS swap curves
+        (ii) Bond curves
+    """
+
     curve_date: pd.Timestamp
     
     # Curve settings

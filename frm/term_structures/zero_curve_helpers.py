@@ -1,15 +1,17 @@
 # -*- coding: utf-8 -*-
-
+import os
+if __name__ == "__main__":
+    os.chdir(os.environ.get('PROJECT_DIR_FRM')) 
+    
+    
 from enum import Enum
 import numpy as np
 import pandas as pd
-from frm.utils.enums import CompoundingFrequency, DayCountBasis
+from frm.utils.enums import PeriodFrequency, CompoundingFrequency, DayCountBasis, RollConvention
+from frm.utils.daycount import year_fraction
+from frm.utils.schedule import schedule
+from frm.utils.business_day_calendar import get_busdaycal
 
-
-class OISCouponCalcMethod(Enum):
-    DailyCompounded = 'dailycompounded'
-    WeightedAverage = 'weightedaverage'
-    SimpleAverage = 'simpleaverage'
 
 
 def zero_rate_from_discount_factor(
@@ -75,39 +77,19 @@ def forward_rate(discount_factor_period_start,
         raise ValueError(f"Invalid compounding_frequency {compounding_frequency}")
 
             
-def calc_ois_historical_coupon(accrual_period_start_date: pd.Timestamp,
-                               accrual_period_end_date: pd.Timestamp,
-                               ois_fixings: pd.DataFrame,
-                               calc_method: OISCouponCalcMethod,
-                               days_per_year):
 
-    observation_start = accrual_period_start_date
-    observation_end = accrual_period_end_date - pd.DateOffset(days=1)
-    
-    mask = np.logical_and(ois_fixings['observation_date'] >= observation_start, 
-                          ois_fixings['observation_date'] <= observation_end)    
-    
-    ois_fixings = ois_fixings.loc[mask,:]
-    ois_fixings = ois_fixings.sort_values('observation_date', ascending=True).reset_index(drop=True)
-    
-    if calc_method == OISCouponCalcMethod.SimpleAverage:
-        cpn_rate = ois_fixings['fixing'].mean()
-    else:
-        date_range = pd.date_range(start=observation_start, end=observation_end, freq='D')
-        date_df = pd.DataFrame({'observation_date': date_range})
-        df = pd.merge_asof(date_df, ois_fixings, on='observation_date', direction='backward')
-        df = df.sort_values('observation_date', ascending=False).reset_index(drop=True)
 
-        match calc_method:
-            case OISCouponCalcMethod.DailyCompounded:
-                df['daily_interest'] = 1.0 + df['fixing'] / days_per_year
-                cpn_rate = (df['daily_interest'].prod() - 1.0) *  days_per_year / len(date_range)
-            case OISCouponCalcMethod.WeightedAverage:
-                cpn_rate = df['fixing'].mean()
-            case _:
-                raise ValueError
-    
-    return cpn_rate
+
+# For importing the test cases defined in excel
+import sys, os
+current_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(current_dir)
+
+#%%
+
+
+            
+            
             
             
             

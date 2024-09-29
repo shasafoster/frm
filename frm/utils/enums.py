@@ -5,7 +5,7 @@ if __name__ == "__main__":
     
 from enum import Enum
 import pandas as pd
-
+import numpy as np
 
 
 def clean_enum_value(value):
@@ -18,6 +18,17 @@ def clean_enum_value(value):
     return value
         
 
+class SwapType(Enum):
+    TERM = 'term'
+    OIS = 'ois'
+
+
+class OISCouponCalcMethod(Enum):
+    DAILY_COMPOUNDED = 'dailycompounded'
+    WEIGHTED_AVERAGE = 'weightedaverage'
+    SIMPLE_AVERAGE = 'simpleaverage'
+    
+
 class DayCountBasis(Enum):
     # If storing instrument definitions in CDM, use 'code' to define valid fieldnames
     _30_360 = '30/360'
@@ -27,6 +38,18 @@ class DayCountBasis(Enum):
     ACT_365 = 'act/365'
     ACT_ACT = 'act/act'
     ACT_366 = 'act/366'
+
+    def __init__(self, value):        
+        days_per_year = {
+            '30/360': 360,
+            '30e/360': 360,
+            '30e/360isda': 360,
+            'act/360': 360,
+            'act/365': 365,
+            'act/act': np.nan,
+            'act/366': 366,
+            }
+        self.days_per_year = days_per_year[self.value]
 
     @classmethod
     def default(cls):
@@ -135,7 +158,7 @@ class PeriodFrequency(Enum):
     @classmethod
     def from_value(cls, value):
         """Create an enum member from the given value, if valid."""
-        cleaned_value= clean_enum_value(value)
+        cleaned_value = clean_enum_value(value)
         for enum_member in cls:
             if enum_member.value == cleaned_value:
                 return enum_member

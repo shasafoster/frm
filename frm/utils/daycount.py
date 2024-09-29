@@ -31,7 +31,7 @@ def convert_to_same_shape_DatetimeIndex(start_date, end_date):
 
 def day_count(start_date,
               end_date, 
-              day_count_basis,
+              day_count_basis: DayCountBasis,
               is_end_date_on_termination: bool=None)->np.array:
     # If the start_date and end_date are scalars assumption is end_date is the termination date
     # If end_date is a vector, the final value of the vector is assumed to be the termination date
@@ -128,7 +128,7 @@ def day_count(start_date,
 
 def year_fraction(start_date,
                   end_date,
-                  day_count_basis,
+                  day_count_basis: DayCountBasis,
                   is_end_date_on_termination: bool=None)->np.array:
     
     # If the start_date and end_date are scalars assumption is end_date is the termination date
@@ -162,6 +162,8 @@ def year_fraction(start_date,
             return total_sum.item()
         else:
             return total_sum
+    else:
+        raise ValueError
 
 
 def to_datetimeindex(date_object) -> 'pd.DatetimeIndex':
