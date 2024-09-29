@@ -57,8 +57,10 @@ df = pd.DataFrame([[pd.Timestamp(2022,1,1), 0.05],
                    [pd.Timestamp(2023,1,1), 0.05],
                    [pd.Timestamp(2024,1,1), 0.05],
                    [pd.Timestamp(2025,1,1), 0.05]],columns=['date','zero_rate'])
-zc = ZeroCurve(curve_date=pd.Timestamp(2021, 12, 31),zero_data=df, compounding_frequency=CompoundingFrequency.CONTINUOUS)
+zc = ZeroCurve(curve_date=pd.Timestamp(2021, 12, 31),data=df, compounding_frequency=CompoundingFrequency.CONTINUOUS)
 
+
+#%%
 # Test zero rate
 date = pd.Timestamp(2022, 12, 31)
 simple      = zc.zero_rate(CompoundingFrequency.SIMPLE, dates=date)
