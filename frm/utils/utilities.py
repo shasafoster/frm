@@ -8,7 +8,7 @@ import numpy as np
 from frm.utils.business_day_calendar import get_busdaycal
 from frm.utils.tenor import get_tenor_settlement_date, get_spot_offset
 from frm.utils.daycount import day_count, year_fraction
-from frm.utils.enums import DayCountBasis
+from frm.enums.utils import DayCountBasis
 
 def convert_column_to_consistent_data_type(df: pd.DataFrame):
     for col in df.columns:

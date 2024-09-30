@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 from dataclasses import dataclass
 from typing import Optional
-from frm.utils.enums import DayCountBasis
+from frm.enums.utils import DayCountBasis
 
             
 def convert_to_same_shape_DatetimeIndex(start_date, end_date):

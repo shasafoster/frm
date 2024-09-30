@@ -6,9 +6,6 @@ if __name__ == "__main__":
 import numpy as np
 from scipy.stats import norm
 
-
-#%% Test COS method function with the normal distribution
-
 def cos_method(p, cf, dt, a, b, N=160):
     """
     PROBLEM STATEMENT: The charactheristic function (or moment generating function, or

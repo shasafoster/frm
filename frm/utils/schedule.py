@@ -6,7 +6,7 @@ if __name__ == "__main__":
 import numpy as np
 import pandas as pd
 from typing import Literal, Optional, Union, List, Tuple
-from frm.utils.enums import RollConvention, PaymentType, StubType, PeriodFrequency, DayRoll
+from frm.enums.utils import RollConvention, PaymentType, StubType, PeriodFrequency, DayRoll
 
 
 def set_default(value, default):

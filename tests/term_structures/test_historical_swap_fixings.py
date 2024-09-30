@@ -5,9 +5,11 @@ if __name__ == "__main__":
 
 import numpy as np
 import pandas as pd
-from frm.term_structures.historical_swap_fixings import HistoricalSwapRateFixings
-from frm.utils.enums import DayCountBasis, OISCouponCalcMethod, SwapType
-
+from frm.term_structures.historical_swap_fixings import HistoricalOISSwapRateFixings, HistoricalTermSwapRateFixings
+from frm.term_structures.zero_curve import ZeroCurve
+from frm.enums.utils import DayCountBasis, OISCouponCalcMethod, ForwardRate
+from frm.utils.business_day_calendar import get_busdaycal
+from frm.utils.daycount import day_count, year_fraction
 
 # For importing the test cases defined in excel
 import sys
@@ -25,14 +27,14 @@ def test_HistoricalSwapRateFixings():
     value_date = pd.Timestamp(2024,6,28)
     day_count_basis = DayCountBasis.from_value('act/360')
     
-    historical_fixings = HistoricalSwapRateFixings(SwapType.OIS, historical_fixings_df, OISCouponCalcMethod.DAILY_COMPOUNDED, DayCountBasis.ACT_360)
+    historical_fixings = HistoricalOISSwapRateFixings(historical_fixings_df, OISCouponCalcMethod.DAILY_COMPOUNDED, DayCountBasis.ACT_360)
     
     # Test single
-    d1 = pd.DatetimeIndex([pd.Timestamp(2022,10,4)]) # accrual_period_start_date
-    d2 = pd.DatetimeIndex([pd.Timestamp(2023,10,3)]) # accrual_period_end_date
-    daily_compounded = historical_fixings.calc_OIS_historical_coupon_rate(d1, d2, value_date, day_count_basis, OISCouponCalcMethod.DAILY_COMPOUNDED)
-    weighted_average = historical_fixings.calc_OIS_historical_coupon_rate(d1, d2, value_date, day_count_basis, OISCouponCalcMethod.WEIGHTED_AVERAGE)
-    simple_average = historical_fixings.calc_OIS_historical_coupon_rate(d1, d2, value_date, day_count_basis, OISCouponCalcMethod.SIMPLE_AVERAGE)
+    d1 = pd.DatetimeIndex([pd.Timestamp(2022,10,4)]) 
+    d2 = pd.DatetimeIndex([pd.Timestamp(2023,10,3)]) 
+    daily_compounded = historical_fixings.get_historical_coupon_rate(d1, d2, value_date, day_count_basis, OISCouponCalcMethod.DAILY_COMPOUNDED)
+    weighted_average = historical_fixings.get_historical_coupon_rate(d1, d2, value_date, day_count_basis, OISCouponCalcMethod.WEIGHTED_AVERAGE)
+    simple_average = historical_fixings.get_historical_coupon_rate(d1, d2, value_date, day_count_basis, OISCouponCalcMethod.SIMPLE_AVERAGE)
     
     assert abs(daily_compounded - 0.047019224) < epsilon
     assert abs(weighted_average - 0.045938736) < epsilon
@@ -71,9 +73,9 @@ def test_HistoricalSwapRateFixings():
     d1 = df['fixing_start']
     d2 = df['fixing_end']
     
-    daily_compounded = historical_fixings.calc_OIS_historical_coupon_rate(d1, d2, value_date, day_count_basis, OISCouponCalcMethod.DAILY_COMPOUNDED)
-    weighted_average = historical_fixings.calc_OIS_historical_coupon_rate(d1, d2, value_date, day_count_basis, OISCouponCalcMethod.WEIGHTED_AVERAGE)
-    simple_average = historical_fixings.calc_OIS_historical_coupon_rate(d1, d2, value_date, day_count_basis, OISCouponCalcMethod.SIMPLE_AVERAGE)
+    daily_compounded = historical_fixings.get_historical_coupon_rate(d1, d2, value_date, day_count_basis, OISCouponCalcMethod.DAILY_COMPOUNDED)
+    weighted_average = historical_fixings.get_historical_coupon_rate(d1, d2, value_date, day_count_basis, OISCouponCalcMethod.WEIGHTED_AVERAGE)
+    simple_average = historical_fixings.get_historical_coupon_rate(d1, d2, value_date, day_count_basis, OISCouponCalcMethod.SIMPLE_AVERAGE)
     
     assert (abs(daily_compounded - df['daily_compounded']) < epsilon).all()
     assert (abs(weighted_average - df['weighted_average']) < epsilon).all()
@@ -90,9 +92,9 @@ def test_HistoricalSwapRateFixings():
     epsilon = 1e-8
     value_date = pd.Timestamp(2024,6,28)
     
-    historical_fixings = HistoricalSwapRateFixings(SwapType.TERM, historical_fixings_df)
+    historical_fixings = HistoricalTermSwapRateFixings(historical_fixings_df)
     dates = pd.DatetimeIndex([pd.Timestamp(2024,9,25), pd.Timestamp(2024,6,25), pd.Timestamp(2024,9,25), pd.Timestamp(2024,6,25)])
-    fixings = historical_fixings.index_term_fixings(dates)
+    fixings = historical_fixings.get_historical_coupon_rate(dates)
     
     assert (fixings == np.array([0.0492, 0.0561, 0.0492, 0.0561])).any()
 
@@ -102,28 +104,13 @@ if __name__ == "__main__":
     
 
 
-
-
-#%%
-
-
-
-
-
-
-#%%
-
-
-
-
-
 data = {
-    'date': ['30-Jun-2024', '9-Jul-2024', '16-Jul-2024', '23-Jul-2024', '2-Aug-2024', '3-Sep-2024', '2-Oct-2024', '4-Nov-2024', 
+    'date': ['9-Jul-2024', '16-Jul-2024', '23-Jul-2024', '2-Aug-2024', '3-Sep-2024', '2-Oct-2024', '4-Nov-2024', 
              '2-Dec-2024', '2-Jan-2025', '3-Feb-2025', '3-Mar-2025', '2-Apr-2025', '2-May-2025', '2-Jun-2025', '2-Jul-2025', 
              '2-Oct-2025', '2-Jan-2026', '2-Apr-2026', '2-Jul-2026', '2-Jul-2027', '3-Jul-2028', '2-Jul-2029', '2-Jul-2030', 
              '2-Jul-2031', '2-Jul-2032', '5-Jul-2033', '3-Jul-2034', '2-Jul-2035', '2-Jul-2036', '5-Jul-2039', '5-Jul-2044', 
              '2-Jul-2049', '2-Jul-2054', '2-Jul-2064', '2-Jul-2074'],
-    'discount_factor': [1.00000, 0.99837, 0.99734, 0.99631, 0.99484, 0.99017, 0.98600, 0.98134, 0.97746, 0.97326, 
+    'discount_factor': [0.99837, 0.99734, 0.99631, 0.99484, 0.99017, 0.98600, 0.98134, 0.97746, 0.97326, 
                         0.96902, 0.96543, 0.96164, 0.95795, 0.95422, 0.95071, 0.94036, 0.93052, 0.92138, 0.91239, 
                         0.87852, 0.84665, 0.81616, 0.78615, 0.75693, 0.72859, 0.70089, 0.67432, 0.64824, 0.62304, 
                         0.55286, 0.45724, 0.38931, 0.33641, 0.26723, 0.22828]
@@ -133,100 +120,147 @@ df = pd.DataFrame(data)
 df['date'] = pd.to_datetime(df['date'], format='%d-%b-%Y')
 
 curve_date = pd.Timestamp(2024,6,28)
+day_count_basis = DayCountBasis.ACT_360
+busdaycal = get_busdaycal('USD')
 
-zero_curve = ZeroCurve(curve_date=curve_date, zero_data=df, historical_fixings=historical_fixings)
+zero_curve = ZeroCurve(curve_date=curve_date, 
+                       data=df, 
+                       day_count_basis=day_count_basis,
+                       busdaycal=busdaycal,
+                       interpolation_method='linear_on_log_of_discount_factors')
 
-data = {
-    'fixing_start': ['18-Mar-2020', '18-Jun-2020', '18-Sep-2020', '18-Dec-2020', '18-Mar-2021',
-                     '21-Jun-2021', '20-Sep-2021', '20-Dec-2021', '18-Mar-2022', '21-Jun-2022',
-                     '19-Sep-2022', '19-Dec-2022', '20-Mar-2023', '20-Jun-2023', '18-Sep-2023',
-                     '18-Dec-2023', '18-Mar-2024', '18-Jun-2024', '18-Sep-2024', '18-Dec-2024',
-                     '18-Mar-2025', '18-Jun-2025', '18-Sep-2025', '18-Dec-2025', '18-Mar-2026',
-                     '18-Jun-2026', '18-Sep-2026', '18-Dec-2026', '18-Mar-2027', '21-Jun-2027',
-                     '20-Sep-2027', '20-Dec-2027', '20-Mar-2028', '20-Jun-2028', '18-Sep-2028',
-                     '18-Dec-2028', '19-Mar-2029', '18-Jun-2029', '18-Sep-2029', '18-Dec-2029',
-                     '18-Mar-2030', '18-Jun-2030', '18-Sep-2030', '18-Dec-2030', '18-Mar-2031',
-                     '18-Jun-2031'],
-    'fixing_end': ['18-Jun-2020', '18-Sep-2020', '18-Dec-2020', '18-Mar-2021', '21-Jun-2021',
-                   '20-Sep-2021', '20-Dec-2021', '18-Mar-2022', '21-Jun-2022', '19-Sep-2022',
-                   '19-Dec-2022', '20-Mar-2023', '20-Jun-2023', '18-Sep-2023', '18-Dec-2023',
-                   '18-Mar-2024', '18-Jun-2024', '18-Sep-2024', '18-Dec-2024', '18-Mar-2025',
-                   '18-Jun-2025', '18-Sep-2025', '18-Dec-2025', '18-Mar-2026', '18-Jun-2026',
-                   '18-Sep-2026', '18-Dec-2026', '18-Mar-2027', '21-Jun-2027', '20-Sep-2027',
-                   '20-Dec-2027', '20-Mar-2028', '20-Jun-2028', '18-Sep-2028', '18-Dec-2028',
-                   '19-Mar-2029', '18-Jun-2029', '18-Sep-2029', '18-Dec-2029', '18-Mar-2030',
-                   '18-Jun-2030', '18-Sep-2030', '18-Dec-2030', '18-Mar-2031', '18-Jun-2031',
-                   '18-Sep-2031'],
-    'cpn_daily_compounded': [0.0003989331, 0.0009348930, 0.0008473425, 0.0005233671, 0.0001168439,
-                             0.0005000313, 0.0004923380, 0.0005216237, 0.0056409785, 0.0197134170,
-                             0.0342778710, 0.0445295400, 0.0495897402, 0.0523547964, 0.0535263822,
-                             0.0535386318, 0.0535383703, 0.0545176793, 0.0515994888, 0.0488073021,
-                             0.0459646033, 0.0432822870, 0.0416368219, 0.0399620679, 0.0390964133,
-                             0.0377162365, 0.0374871518, 0.0374852062, 0.0374949355, 0.0365428742,
-                             0.0364130535, 0.0364130535, 0.0364148894, 0.0364349026, 0.0364407400,
-                             0.0364407400, 0.0364407400, 0.0370208178, 0.0371227051, 0.0371207971,
-                             0.0371246133, 0.0374741343, 0.0375349215, 0.0375329709, 0.0375368721,
-                             0.0376875902]
+schedule_data = {
+    'forward_coupon_#': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28],
+    'period_start': ['18-Sep-2024', '18-Dec-2024', '18-Mar-2025', '18-Jun-2025', '18-Sep-2025', '18-Dec-2025', '18-Mar-2026', '18-Jun-2026', 
+                     '18-Sep-2026', '18-Dec-2026', '18-Mar-2027', '21-Jun-2027', '20-Sep-2027', '20-Dec-2027', '20-Mar-2028', '20-Jun-2028', 
+                     '18-Sep-2028', '18-Dec-2028', '19-Mar-2029', '18-Jun-2029', '18-Sep-2029', '18-Dec-2029', '18-Mar-2030', '18-Jun-2030', 
+                     '18-Sep-2030', '18-Dec-2030', '18-Mar-2031', '18-Jun-2031'],
+    'period_end': ['18-Dec-2024', '18-Mar-2025', '18-Jun-2025', '18-Sep-2025', '18-Dec-2025', '18-Mar-2026', '18-Jun-2026', '18-Sep-2026',
+                   '18-Dec-2026', '18-Mar-2027', '21-Jun-2027', '20-Sep-2027', '20-Dec-2027', '20-Mar-2028', '20-Jun-2028', '18-Sep-2028',
+                   '18-Dec-2028', '19-Mar-2029', '18-Jun-2029', '18-Sep-2029', '18-Dec-2029', '18-Mar-2030', '18-Jun-2030', '18-Sep-2030',
+                   '18-Dec-2030', '18-Mar-2031', '18-Jun-2031', '18-Sep-2031'],
+    'daily_compounded': [0.051599488767, 0.048807302137, 0.045964603346, 0.043282287042, 0.041636821893, 0.039962067880, 
+                            0.039096413292, 0.037716236485, 0.037487151772, 0.037485206188, 0.037494935452, 0.036542874174, 
+                            0.036413053467, 0.036413053467, 0.036414889447, 0.036434902560, 0.036440739976, 0.036440739976, 
+                            0.036440739976, 0.037020817800, 0.037122705130, 0.037120797133, 0.037124613258, 0.037474134315, 
+                            0.037534921465, 0.037532970927, 0.037536872137, 0.037687590187],
+    'weighted_average': [0.051269526458, 0.048515203444, 0.045699638723, 0.043047238198, 0.041421619647, 0.039765963358, 
+                                      0.038904494568, 0.037537587641, 0.037312586799, 0.037312586799, 0.037312586799, 0.036376966917, 
+                                      0.036248319184, 0.036248319184, 0.036248319184, 0.036271792774, 0.036275755848, 0.036275755848, 
+                                      0.036275755848, 0.036848675720, 0.036951507492, 0.036951507492, 0.036951507492, 0.037297764085, 
+                                      0.037359912704, 0.037359912704, 0.037359912704, 0.037509211371],
+    'simple_average': [0.051263319428, 0.048473164697, 0.045710030419, 0.043034297258, 0.041438481046, 0.039742259630, 
+                                    0.038908795327, 0.037523812079, 0.037312586799, 0.037312586799, 0.037312586799, 0.036400357415, 
+                                    0.036248319184, 0.036248319184, 0.036248319184, 0.036271773106, 0.036275755848, 0.036275755848, 
+                                    0.036275755848, 0.036854971543, 0.036951507492, 0.036951507492, 0.036951507492, 0.037301569102, 
+                                    0.037359912704, 0.037359912704, 0.037359912704, 0.037510852015]
 }
 
-df = pd.DataFrame(data)
-df['fixing_start'] = pd.to_datetime(df['fixing_start'], format='%d-%b-%Y')
-df['fixing_end'] = pd.to_datetime(df['fixing_end'], format='%d-%b-%Y')
+schedule = pd.DataFrame(schedule_data)
+schedule['period_start'] = pd.to_datetime(schedule['period_start'], format='%d-%b-%Y')
+schedule['period_end'] = pd.to_datetime(schedule['period_end'], format='%d-%b-%Y')
+schedule['days'] = day_count(schedule['period_start'], schedule['period_end'], zero_curve.day_count_basis)
+schedule['years'] = year_fraction(schedule['period_start'], schedule['period_end'], zero_curve.day_count_basis)
 
-%%
+dates = pd.date_range(start=schedule['period_start'].min(), end=schedule['period_end'].max(), freq='D')
 
-value_date = pd.Timestamp(2024,6,28)
-mask_historical = df['fixing_end'] < value_date
-mask_crossover = np.logical_and(df['fixing_end'] >= value_date, df['fixing_start'] < value_date)
-mask_forward = df['fixing_start'] >= value_date
+discount_factors = zero_curve.discount_factor(dates=dates)
 
+daily_interest_multiplier = discount_factors[:-1] / discount_factors[1:]
+daily_simple_interest_rate = (daily_interest_multiplier - 1) * zero_curve.day_count_basis.days_per_year
+helper_data = {
+        'date': dates[:-1],
+        'daily_interest_multiplier': daily_interest_multiplier,
+        'simple_daily_rate': daily_simple_interest_rate
+    }
+helper_df = pd.DataFrame(helper_data)
 
-
-#%%
-DF_t1 = zero_curve.discount_factor(df['fixing_start'])
-DF_t2 = zero_curve.discount_factor(df['fixing_end'])
-
-
-
-
-%%
-
+dates_np = dates.to_numpy(dtype='datetime64[D]')
+busday_flag = pd.Series(np.is_busday(dates_np, busdaycal=busdaycal), index=dates)
+helper_df['business_day_flag'] = busday_flag.values[:-1]
 
 
+result = schedule.copy()
+result['daily_compounded'] = np.nan
+result['weighted_average'] = np.nan
+result['simple_average'] = np.nan
 
-start_date = pd.Timestamp(2023,1,17)
-curve_date = pd.Timestamp(2023,6,30)
-end_date = pd.Timestamp(2024,1,17)
+for i,row in result.iterrows():  
+    mask = np.logical_and(helper_df['date'] >= row['period_start'], 
+                          helper_df['date'] < row['period_end']) 
 
-hist_component_cpn_rate = 4.820573 * 0.01
-fwd_component_cpn_rate = 5.381977 * 0.01    
+    nb_days_in_period = sum(mask)
+    
+    result.at[i,'daily_compounded'] = (helper_df.loc[mask,'daily_interest_multiplier'].product() - 1) / row['years']
 
-hist_component_year_frac = year_fraction(start_date, curve_date, day_count_basis)
-fwd_component_year_frac = year_fraction(curve_date, end_date, day_count_basis)
+    result.at[i,'weighted_average'] = helper_df.loc[mask,'simple_daily_rate'].mean()
+    
+    mask = np.logical_and(mask, helper_df['business_day_flag'])
+    
+    result.at[i,'simple_average'] = helper_df.loc[mask,'simple_daily_rate'].mean()
 
-cpn_multiplier = hist_component_year_frac * hist_component_cpn_rate \
-                 + (1 + hist_component_year_frac * hist_component_cpn_rate) * fwd_component_year_frac * fwd_component_cpn_rate
+
+
+period_start = schedule['period_start']
+period_end = schedule['period_end']
+
+fixings = zero_curve.forward_rate(period_start=period_start, period_end=period_end, forward_rate_type=ForwardRate.DAILY_COMPOUNDED)
+
+
+# %%
+
+# value_date = pd.Timestamp(2024,6,28)
+# mask_historical = df['fixing_end'] < value_date
+# mask_crossover = np.logical_and(df['fixing_end'] >= value_date, df['fixing_start'] < value_date)
+# mask_forward = df['fixing_start'] >= value_date
+
+
+
+# #%%
+# DF_t1 = zero_curve.discount_factor(df['fixing_start'])
+# DF_t2 = zero_curve.discount_factor(df['fixing_end'])
+
+
+
+
+# %%
+
+
+
+
+# start_date = pd.Timestamp(2023,1,17)
+# curve_date = pd.Timestamp(2023,6,30)
+# end_date = pd.Timestamp(2024,1,17)
+
+# hist_component_cpn_rate = 4.820573 * 0.01
+# fwd_component_cpn_rate = 5.381977 * 0.01    
+
+# hist_component_year_frac = year_fraction(start_date, curve_date, day_count_basis)
+# fwd_component_year_frac = year_fraction(curve_date, end_date, day_count_basis)
+
+# cpn_multiplier = hist_component_year_frac * hist_component_cpn_rate \
+#                  + (1 + hist_component_year_frac * hist_component_cpn_rate) * fwd_component_year_frac * fwd_component_cpn_rate
             
-cpn_rate = cpn_multiplier / year_fraction(start_date, end_date, day_count_basis)
+# cpn_rate = cpn_multiplier / year_fraction(start_date, end_date, day_count_basis)
            
 
 
 
-ois_fixings = pd.read_excel('C:/Users/shasa/Documents/frm_project/tests/term_structures/ois_publications.xlsx', sheet_name='sofr')
-ois_fixings = ois_fixings.sort_values('observation_date', ascending=True).reset_index(drop=True)
-ois_fixings['fixing'] = ois_fixings['fixing'] / 100.0
+# ois_fixings = pd.read_excel('C:/Users/shasa/Documents/frm_project/tests/term_structures/ois_publications.xlsx', sheet_name='sofr')
+# ois_fixings = ois_fixings.sort_values('observation_date', ascending=True).reset_index(drop=True)
+# ois_fixings['fixing'] = ois_fixings['fixing'] / 100.0
 
-day_count_basis = DayCountBasis.from_value('act/360')
-busdaycal = get_busdaycal('USD')
-calc_method = OISCouponCalcMethod.DailyCompounded
+# day_count_basis = DayCountBasis.from_value('act/360')
+# busdaycal = get_busdaycal('USD')
+# calc_method = OISCouponCalcMethod.DailyCompounded
 
-fixing_schedule = schedule(start_date=pd.Timestamp(2020,3,18),
-                           end_date=pd.Timestamp(2031,9,18),
-                           frequency='quarterly',
-                           roll_convention='modifiedfollowing',
-                           busdaycal=busdaycal)
+# fixing_schedule = schedule(start_date=pd.Timestamp(2020,3,18),
+#                            end_date=pd.Timestamp(2031,9,18),
+#                            frequency='quarterly',
+#                            roll_convention='modifiedfollowing',
+#                            busdaycal=busdaycal)
 
-result = calc_ois_historical_coupon(fixing_schedule['period_start'], fixing_schedule['period_end'], ois_fixings, calc_method, day_count_basis)
+# result = calc_ois_historical_coupon(fixing_schedule['period_start'], fixing_schedule['period_end'], ois_fixings, calc_method, day_count_basis)
 
 
 

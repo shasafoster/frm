@@ -4,7 +4,6 @@ if __name__ == "__main__":
     os.chdir(os.environ.get('PROJECT_DIR_FRM'))
 
 
-
 # from frm.instruments.ir.swap import Swap
 # from frm.instruments.ir.swap_defaults import USD_LIBOR_SWAP_ABOVE_1Y, USD_LIBOR_SWAP_1Y
 

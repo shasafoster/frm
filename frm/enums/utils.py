@@ -17,18 +17,7 @@ def clean_enum_value(value):
         value = None
     return value
         
-
-class SwapType(Enum):
-    TERM = 'term'
-    OIS = 'ois'
-
-
-class OISCouponCalcMethod(Enum):
-    DAILY_COMPOUNDED = 'dailycompounded'
-    WEIGHTED_AVERAGE = 'weightedaverage'
-    SIMPLE_AVERAGE = 'simpleaverage'
     
-
 class DayCountBasis(Enum):
     # If storing instrument definitions in CDM, use 'code' to define valid fieldnames
     _30_360 = '30/360'
@@ -83,6 +72,27 @@ class DayCountBasis(Enum):
         # List all valid codes in case of an error
         valid_values = [enum_member.value for enum_member in cls]
         raise ValueError(f"Invalid value: {value}. Valid codes are: {valid_values}") 
+
+
+class OISCouponCalcMethod(Enum):
+    DAILY_COMPOUNDED = 'dailycompounded'
+    WEIGHTED_AVERAGE = 'weightedaverage'
+    SIMPLE_AVERAGE = 'simpleaverage'    
+    
+class ForwardRate(Enum):
+    SIMPLE = 'simple'
+    CONTINUOUS = 'continuous'
+    DAILY = 'daily'
+    WEEKLY = 'weekly'
+    MONTHLY = 'monthly'
+    QUARTERLY = 'quarterly'
+    SEMIANNUAL = 'semiannual'
+    ANNUAL = 'annual'
+    
+    # OIS (overnight index swaps) forward rate calculation methods  
+    DAILY_COMPOUNDED = OISCouponCalcMethod.DAILY_COMPOUNDED
+    WEIGHTED_AVERAGE =  OISCouponCalcMethod.WEIGHTED_AVERAGE
+    SIMPLE_AVERAGE = OISCouponCalcMethod.SIMPLE_AVERAGE
 
 
 class CompoundingFrequency(Enum):

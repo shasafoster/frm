@@ -124,9 +124,8 @@ def simulate_heston(S0: float,
                     rand_nbs: np.array,
                     method: str='quadratic_exponential'):
     """
-     Simulate trajectories of the spot price and volatility processes using the Heston model. Is Vectorised.
-
-
+    Simulation trajectories of the spot price and volatility processes using the Heston model. 
+    Vectorised for multiple strikes.
      
     Parameters:
     ----------

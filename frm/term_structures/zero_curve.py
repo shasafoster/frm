@@ -3,13 +3,11 @@ import os
 if __name__ == "__main__":
     os.chdir(os.environ.get('PROJECT_DIR_FRM')) 
         
-#from frm.instruments.ir.swap import Swap
-#from frm.instruments.ir.leg import Leg
 from frm.utils.daycount import day_count, year_fraction
 from frm.utils.tenor import get_tenor_settlement_date
 from frm.utils.utilities import convert_column_to_consistent_data_type
-from frm.utils.enums import DayCountBasis, CompoundingFrequency
-from frm.term_structures.zero_curve_helpers import zero_rate_from_discount_factor, discount_factor_from_zero_rate, forward_rate
+from frm.enums.utils import DayCountBasis, CompoundingFrequency, ForwardRate
+from frm.term_structures.zero_curve_helpers import zero_rate_from_discount_factor, discount_factor_from_zero_rate
 
 from enum import Enum
 import scipy 
@@ -27,6 +25,7 @@ VALID_EXTRAPOLATION_METHOD = Literal['none','flat']
 
 
 
+
 @dataclass
 class ZeroCurve: 
     # Required inputs
@@ -34,30 +33,28 @@ class ZeroCurve:
     data: pd.DataFrame
     
     # Used in the __post_init__ but not set as attributes
-    compounding_frequency: InitVar[str]=None
-    busdaycal: InitVar[np.busdaycalendar]=None
+    compounding_frequency: InitVar[str]=None # defines the zero_rate compounding frequency in 'data'
     
-    # Optional inputs
+    # Optional init inputs
     day_count_basis: DayCountBasis=DayCountBasis.ACT_ACT
+    busdaycal: np.busdaycalendar=np.busdaycalendar() # used in simple-average forward rate calculation
     interpolation_method: str='cubic_spline_on_zero_rates'
     extrapolation_method: str='none'
     
     # Attributes set in __post_init__
     cubic_spline_definition: str=field(init=False)
     
-    def __post_init__(self, compounding_frequency, busdaycal):
-        busdaycal = busdaycal if busdaycal is not None else np.busdaycalendar()
+    def __post_init__(self, compounding_frequency):
         
         data = self.data
         if compounding_frequency is None and 'zero_rate' in data.columns:
             raise ValueError("'compounding_frequency' must be specified zero rates specified in data")        
             
-        self.__process_input_data(data, compounding_frequency, busdaycal)
+        self.__process_input_data(data, compounding_frequency)
         self.__df_of_daily_data_setup()
 
     
-
-    def __process_input_data(self, data, compounding_frequency, busdaycal):
+    def __process_input_data(self, data, compounding_frequency):
         
         only_one_of_columns_X = ['days', 'tenor', 'years', 'date']
         only_one_of_columns_Y = ['zero_rate','discount_factor']
@@ -84,7 +81,7 @@ class ZeroCurve:
         
         match X_column_name:
             case 'tenor':
-                date, tenor, spot_date = get_tenor_settlement_date(self.curve_date, data['tenor'].values, self.curve_ccy, busdaycal)
+                date, tenor, spot_date = get_tenor_settlement_date(self.curve_date, data['tenor'].values, self.curve_ccy, self.busdaycal)
                 data['tenor'] = tenor
                 data['date'] = date
                 __calculate_days()
@@ -189,21 +186,66 @@ class ZeroCurve:
                          day_count_basis = self.day_count_basis)
                    
     def forward_rate(self,
-                     period_start: Union[pd.Timestamp, pd.Series],
-                     period_end: Union[pd.Timestamp, pd.Series],
-                     compounding_frequency: CompoundingFrequency=CompoundingFrequency.SIMPLE) -> pd.Series:
+                     period_start: pd.Series,
+                     period_end: pd.Series,
+                     forward_rate_type: ForwardRate=ForwardRate.SIMPLE) -> pd.Series:
 
         assert len(period_start) == len(period_end)
         assert type(period_start) == type(period_end)
         assert (period_start >= self.curve_date).all()
                     
-        Δt = pd.Series(year_fraction(period_start, period_end, self.day_count_basis))            
-        DF_T1 = self.discount_factor(period_start)
-        DF_T2 = self.discount_factor(period_end)
-        forward_fixings = forward_rate(DF_T1, DF_T2, Δt, compounding_frequency)
+        if forward_rate_type in {ForwardRate.WEIGHTED_AVERAGE, ForwardRate.SIMPLE_AVERAGE}:
+            
+            dates = pd.date_range(start=period_start.min(), end=period_end.max(), freq='D')
+            discount_factors = self.discount_factor(dates=dates)
+            daily_interest_multiplier = discount_factors[:-1] / discount_factors[1:]
+            daily_simple_interest_rate = (daily_interest_multiplier - 1) * self.day_count_basis.days_per_year
+            dates_np = dates.to_numpy(dtype='datetime64[D]')
+            busday_flag = pd.Series(np.is_busday(dates_np, busdaycal=self.busdaycal), index=dates)
+            
+            helper_data = {
+                    'date': dates[:-1],
+                    'daily_interest_multiplier': daily_interest_multiplier,
+                    'simple_daily_rate': daily_simple_interest_rate,
+                    'business_day_flag': busday_flag.values[:-1]
+                }
+            helper_df = pd.DataFrame(helper_data)
+            
+            result = np.full(period_start.shape, np.nan)
+
+            for i,(start_date,end_date) in enumerate(zip(period_start, period_end)):
+                mask = np.logical_and(helper_df['date'] >= start_date,
+                                      helper_df['date'] < end_date)
+                match forward_rate_type:
+                    case ForwardRate.WEIGHTED_AVERAGE:
+                        result[i] = helper_df.loc[mask,'simple_daily_rate'].mean()
+                    case ForwardRate.SIMPLE_AVERAGE:
+                        mask = np.logical_and(mask, helper_df['business_day_flag'])
+                        result[i] = helper_df.loc[mask,'simple_daily_rate'].mean()
+                        
+                    # Returns same result as ForwardRate.SIMPLE formulae
+                    # case ForwardRate.DAILY_COMPOUNDED:
+                    #     year_frac = year_fraction(start_date, end_date, self.day_count_basis)
+                    #     result[i] = (helper_df.loc[mask,'daily_interest_multiplier'].product() - 1) / year_frac
+                        
+            return result
         
-        return pd.Series(forward_fixings.to_list())
-       
+        else:
+            Δt = pd.Series(year_fraction(period_start, period_end, self.day_count_basis))            
+            DF_t1 = self.discount_factor(period_start)
+            DF_t2 = self.discount_factor(period_end)
+        
+            # https://en.wikipedia.org/wiki/Forward_rate
+            if forward_rate_type in {ForwardRate.SIMPLE, ForwardRate.DAILY_COMPOUNDED}:
+                return (1.0 / Δt) * (DF_t1 / DF_t2 - 1.0)
+            elif forward_rate_type == ForwardRate.CONTINUOUS:
+                return (1.0 / Δt) * (np.log(DF_t1) - np.log(DF_t2))
+            elif forward_rate_type == ForwardRate.ANNUAL:
+                return (DF_t1 / DF_t2) ** (1.0 / Δt)  - 1.0 
+            else:
+                raise ValueError(f"Invalid forward_rate_type {forward_rate_type}")        
+
+        
     def instantaneous_forward_rate(self, years):        
         if self.interpolation_method == 'cubic_spline_on_zero_rates':
             zero_rate = self.zero_rate(years=years)
