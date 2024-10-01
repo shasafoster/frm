@@ -39,71 +39,67 @@ def test_construction_from_discount_factors():
                         [pd.Timestamp(2061,1,4),0.451],
                         [pd.Timestamp(2071,1,4),0.410],
                         [pd.Timestamp(2081,1,6),0.354]],columns=['date','discount_factor'])
-    historical_fixings = pd.DataFrame({pd.Timestamp(2021,9,d):1+d/100 for d in range(1,30)}.items(), columns=['date','fixing'])
     
     zc = ZeroCurve(curve_date=pd.Timestamp(2021,9,30),data=df)
     for i,row in df.iterrows():
         assert abs(row['discount_factor'] - zc.discount_factor(row['date'])[0]) < epsilon  
   
 
-#def test_construction_from_zero_rates():
-    
-epsilon = 1e-8 
+def test_construction_from_zero_rates():
+    epsilon = 1e-8
 
-# Construct zero curve term structure     
-df = pd.DataFrame([[pd.Timestamp(2022,1,1), 0.05],
-                   [pd.Timestamp(2023,1,1), 0.05],
-                   [pd.Timestamp(2024,1,1), 0.05],
-                   [pd.Timestamp(2025,1,1), 0.05]],columns=['date','zero_rate'])
-zc = ZeroCurve(curve_date=pd.Timestamp(2021, 12, 31),data=df, compounding_frequency=CompoundingFrequency.CONTINUOUS)
+    # Construct zero curve term structure
+    df = pd.DataFrame([[pd.Timestamp(2022,1,1), 0.05],
+                       [pd.Timestamp(2023,1,1), 0.05],
+                       [pd.Timestamp(2024,1,1), 0.05],
+                       [pd.Timestamp(2025,1,1), 0.05]],columns=['date','zero_rate'])
+    zc = ZeroCurve(curve_date=pd.Timestamp(2021, 12, 31),data=df, compounding_frequency=CompoundingFrequency.CONTINUOUS)
 
+    # Test zero rate
+    date = pd.Timestamp(2022, 12, 31)
+    simple      = zc.zero_rate(CompoundingFrequency.SIMPLE, dates=date)
+    continuous  = zc.zero_rate(CompoundingFrequency.CONTINUOUS, dates=date)
+    daily       = zc.zero_rate(CompoundingFrequency.DAILY, dates=date)
+    monthly     = zc.zero_rate(CompoundingFrequency.MONTHLY, dates=date)
+    quarterly   = zc.zero_rate(CompoundingFrequency.QUARTERLY, dates=date)
+    semi_annual = zc.zero_rate(CompoundingFrequency.SEMIANNUAL, dates=date)
+    annual      = zc.zero_rate(CompoundingFrequency.ANNUAL, dates=date)
 
-#%%
-# Test zero rate
-date = pd.Timestamp(2022, 12, 31)
-simple      = zc.zero_rate(CompoundingFrequency.SIMPLE, dates=date)
-continuous  = zc.zero_rate(CompoundingFrequency.CONTINUOUS, dates=date)
-daily       = zc.zero_rate(CompoundingFrequency.DAILY, dates=date)
-monthly     = zc.zero_rate(CompoundingFrequency.MONTHLY, dates=date)
-quarterly   = zc.zero_rate(CompoundingFrequency.QUARTERLY, dates=date)
-semi_annual = zc.zero_rate(CompoundingFrequency.SEMIANNUAL, dates=date)
-annual      = zc.zero_rate(CompoundingFrequency.ANNUAL, dates=date)
+    assert abs(simple[0]      - 0.05127109637602412) < epsilon
+    assert abs(continuous[0]  - 0.05) < epsilon
+    assert abs(daily[0]       - 0.05000342481392583) < epsilon
+    assert abs(monthly[0]     - 0.05010431149342143) < epsilon
+    assert abs(quarterly[0]   - 0.05031380616253766) < epsilon
+    assert abs(semi_annual[0] - 0.05063024104885771) < epsilon
+    assert abs(annual[0]      - 0.05127109637602412) < epsilon
 
-assert abs(simple[0]      - 0.05127109637602412) < epsilon
-assert abs(continuous[0]  - 0.05) < epsilon
-assert abs(daily[0]       - 0.05000342481392583) < epsilon
-assert abs(monthly[0]     - 0.05010431149342143) < epsilon
-assert abs(quarterly[0]   - 0.05031380616253766) < epsilon
-assert abs(semi_annual[0] - 0.05063024104885771) < epsilon
-assert abs(annual[0]      - 0.05127109637602412) < epsilon
+    #% Test forward rates
+    epsilon = 1e-8
 
-#% Test forward rates
-epsilon = 1e-8
+    d1 = pd.Series([pd.Timestamp(2022,1,15)])
+    d2 = pd.Series([pd.Timestamp(2023,1,15)])
+    fwd_rate = zc.forward_rate(d1,d2, ForwardRate.SIMPLE)
+    assert abs(fwd_rate[0] - simple[0]) < epsilon
 
-d1 = pd.Series([pd.Timestamp(2022,1,15)])
-d2 = pd.Series([pd.Timestamp(2023,1,15)])
-fwd_rate = zc.forward_rate(d1,d2, ForwardRate.SIMPLE)
-assert abs(fwd_rate[0] - simple[0]) < epsilon
-
-d1 = pd.Series([pd.Timestamp(2022,1,15),pd.Timestamp(2022,1,15)])
-d2 = pd.Series([pd.Timestamp(2022,1,15),pd.Timestamp(2023,1,15)])
-fwd_rate = zc.forward_rate(d1,d2, ForwardRate.SIMPLE)
-assert abs(fwd_rate[1] - simple[0]) < epsilon
+    d1 = pd.Series([pd.Timestamp(2022,1,15),pd.Timestamp(2022,1,15)])
+    d2 = pd.Series([pd.Timestamp(2022,1,15),pd.Timestamp(2023,1,15)])
+    fwd_rate = zc.forward_rate(d1,d2, ForwardRate.SIMPLE)
+    assert abs(fwd_rate[1] - simple[0]) < epsilon
 
 
-# Test zero curve construction from zero rates
-df = pd.DataFrame([[pd.Timestamp(2022,1,1), 0.0033254],
-                   [pd.Timestamp(2022,1,4), 0.0033946],
-                   [pd.Timestamp(2022,1,11),0.0042867],
-                   [pd.Timestamp(2022,4,5), 0.0096205]],columns=['date','zero_rate'])
-zc = ZeroCurve(curve_date=pd.Timestamp(2021,12,31),data=df, compounding_frequency=CompoundingFrequency.ANNUAL)
+    # Test zero curve construction from zero rates
+    df = pd.DataFrame([[pd.Timestamp(2022,1,1), 0.0033254],
+                       [pd.Timestamp(2022,1,4), 0.0033946],
+                       [pd.Timestamp(2022,1,11),0.0042867],
+                       [pd.Timestamp(2022,4,5), 0.0096205]],columns=['date','zero_rate'])
+    zc = ZeroCurve(curve_date=pd.Timestamp(2021,12,31),data=df, compounding_frequency=CompoundingFrequency.ANNUAL)
 
-for i,row in df.iterrows():
-    assert abs(row['zero_rate'] - zc.zero_rate(CompoundingFrequency.ANNUAL, row['date'])[0]) < epsilon  
+    for i,row in df.iterrows():
+        assert abs(row['zero_rate'] - zc.zero_rate(CompoundingFrequency.ANNUAL, row['date'])[0]) < epsilon
+
 
 if __name__ == "__main__":
     test_construction_from_discount_factors()
-    zc.plot()
 
 
 #%%

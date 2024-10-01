@@ -22,8 +22,6 @@ VALID_INTERPOLATION_METHOD = Literal['linear_on_log_of_discount_factors','cubic_
 VALID_EXTRAPOLATION_METHOD = Literal['none','flat']
 
 
-
-
 @dataclass
 class ZeroCurve: 
     # Required inputs
@@ -163,11 +161,12 @@ class ZeroCurve:
                                                  'discount_factor': np.exp(-1 * zero_rate_interpolated * years)})
             
         elif self.interpolation_method == 'linear_on_log_of_discount_factors':            
-            ln_df_interpolated = np.interp(x=years, xp=self.data['years'], fp= np.log(self.data['discount_factor']))            
+            ln_df_interpolated = np.interp(x=years, xp=self.data['years'], fp= np.log(self.data['discount_factor']))
+            nacc = -1 * ln_df_interpolated / years
             self.data_daily = pd.DataFrame({'date': date_range.to_list(),  
                                                  'days': days,
                                                  'years': years,
-                                                 'nacc': -1 * ln_df_interpolated / years,
+                                                 'nacc': nacc,
                                                  'discount_factor': np.exp(ln_df_interpolated)})        
        
     def flat_shift(self, 
@@ -184,12 +183,11 @@ class ZeroCurve:
                          day_count_basis = self.day_count_basis)
                    
     def forward_rate(self,
-                     period_start: pd.Series,
-                     period_end: pd.Series,
-                     forward_rate_type: ForwardRate=ForwardRate.SIMPLE) -> pd.Series:
+                     period_start: pd.DatetimeIndex,
+                     period_end: pd.DatetimeIndex,
+                     forward_rate_type: ForwardRate=ForwardRate.SIMPLE) -> np.array:
 
         assert len(period_start) == len(period_end)
-        assert type(period_start) is type(period_end)
         assert (period_start >= self.curve_date).all()
                     
         if forward_rate_type in {ForwardRate.WEIGHTED_AVERAGE, ForwardRate.SIMPLE_AVERAGE}:
@@ -235,14 +233,15 @@ class ZeroCurve:
         
             # https://en.wikipedia.org/wiki/Forward_rate
             if forward_rate_type in {ForwardRate.SIMPLE, ForwardRate.DAILY_COMPOUNDED}:
-                return (1.0 / Δt) * (DF_t1 / DF_t2 - 1.0)
+                result = (1.0 / Δt) * (DF_t1 / DF_t2 - 1.0)
             elif forward_rate_type == ForwardRate.CONTINUOUS:
-                return (1.0 / Δt) * (np.log(DF_t1) - np.log(DF_t2))
+                result = (1.0 / Δt) * (np.log(DF_t1) - np.log(DF_t2))
             elif forward_rate_type == ForwardRate.ANNUAL:
-                return (DF_t1 / DF_t2) ** (1.0 / Δt)  - 1.0 
+                result = (DF_t1 / DF_t2) ** (1.0 / Δt)  - 1.0
             else:
                 raise ValueError(f"Invalid forward_rate_type {forward_rate_type}")        
 
+            return result.values
         
     def instantaneous_forward_rate(self, years):        
         if self.interpolation_method == 'cubic_spline_on_zero_rates':
