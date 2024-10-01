@@ -14,9 +14,9 @@ def to_np_array(*args):
 
 
 def gk_price(S0: float, 
-             tau: float, 
-             r_f: float,  
-             r_d: float,               
+             tau: float,
+             r_d: float,
+             r_f: float,
              cp: int,
              K: float,
              σ: float, 
@@ -29,7 +29,6 @@ def gk_price(S0: float,
     Garman-Kohlhagen European FX option pricing formula for:
     - option total, intrinsic, and time value (in the domestic currency per 1 unit of foreign currency notional).
     - analytical and numerical greeks (normalized to shifts applied per market convention).
-    
 
     Parameters
     ----------
@@ -37,10 +36,10 @@ def gk_price(S0: float,
         FX spot rate (specified in # of units of domestic currency per 1 unit of foreign currency).
     tau : float
         Time to expiry (in years).
-    r_f : float
-        Foreign risk-free interest rate (annualized continuously compounded).
     r_d : float
         Domestic risk-free interest rate (annualized continuously compounded).
+    r_f : float
+        Foreign risk-free interest rate (annualized continuously compounded).
     cp : int
         Option type: 1 for call option, -1 for put option.
     K : float
@@ -68,11 +67,10 @@ def gk_price(S0: float,
     
     Examples
     --------
-    >>> gk_price(S0=1.25, tau=0.5, r_f=0.02, r_d=0.05, cp=1, K=1.3, σ=0.1)
+    >>> gk_price(S0=1.25, tau=0.5, r_d=0.05, r_f=0.02, cp=1, K=1.3, σ=0.1)
     {'option_value': array([...])}
     
-    >>> gk_price(S0=1.25, tau=0.5, r_f=0.02, r_d=0.05, cp=-1, K=1.2, σ=0.15, 
-                 analytical_greeks_flag=True)
+    >>> gk_price(S0=1.25, tau=0.5, r_d=0.05, r_f=0.02, cp=-1, K=1.2, σ=0.15, analytical_greeks_flag=True)
     {'option_value': array([...]), 'analytical_greeks': DataFrame([...])}
     
     Notes
@@ -84,7 +82,7 @@ def gk_price(S0: float,
     5. If tau equals 0, time value is set to zero. 
     """
     # Convert to arrays. Function is vectorised.
-    S0, tau, r_f, r_d, cp, K, σ = to_np_array(S0, tau, r_f, r_d, cp, K, σ)
+    S0, tau, r_d, r_f, cp, K, σ = to_np_array(S0, tau, r_d, r_f, cp, K, σ)
     
     # Sensical value checks
     # No >0 check for σ, as when doing numerical solving, need to allow for -ve σ
@@ -95,7 +93,7 @@ def gk_price(S0: float,
     assert cp.shape == K.shape
     
     if F is not None: 
-        # Use market forward rate and imply the curry basis-adjusted domestic interest rate  
+        # Use market forward rate and imply the currency basis-adjusted domestic interest rate
         F = np.atleast_1d(F).astype(float)
         r_d_basis_adj = np.log(F / S0) / tau + r_f # from F = S0 * exp((r_d - r_f) * tau)
         r = r_d_basis_adj
@@ -119,12 +117,10 @@ def gk_price(S0: float,
     
     if intrinsic_time_split_flag:
         X_intrinsic = np.full_like(X, np.nan)
-        X_time = np.full_like(X, np.nan)          
         X_intrinsic[tau>0] = np.maximum(0, cp * (S0 * np.exp(-q * tau) - K * np.exp(-r * tau)))[tau>0]
         X_intrinsic[tau==0] = X[tau==0]
-        X_time = X - X_intrinsic 
         results['intrinsic_value'] = X_intrinsic
-        results['time_value'] = X_time      
+        results['time_value'] = X - X_intrinsic
 
     # Checks to alternative formulae
     epsilon = 1e-10
@@ -192,33 +188,33 @@ def gk_price(S0: float,
         if numerical_greeks_flag:
             numerical_greeks = {}
             
-            if F != None:
+            if F is None:
                 F_upshift = F*(1+Δ_shift)
                 F_downshift = F*(1-Δ_shift)
             else:
                 F_upshift = None
                 F_downshift = None
-            results_S0_plus = gk_price(S0=S0*(1+Δ_shift), tau=tau, r_f=r_f, r_d=r_d, cp=cp, K=K, σ=σ, F=F_upshift,analytical_greeks_flag=True) 
+            results_S0_plus = gk_price(S0=S0*(1+Δ_shift), tau=tau, r_d=r_d, r_f=r_f , cp=cp, K=K, σ=σ, F=F_upshift,analytical_greeks_flag=True)
             X_S_plus, analytical_greeks_S0_plus = results_S0_plus['option_value'], results_S0_plus['analytical_greeks']
-            results_S0_minus = gk_price(S0=S0*(1-Δ_shift), tau=tau, r_f=r_f, r_d=r_d, cp=cp, K=K, σ=σ, F=F_downshift,analytical_greeks_flag=True)
+            results_S0_minus = gk_price(S0=S0*(1-Δ_shift), tau=tau, r_d=r_d, r_f=r_f, cp=cp, K=K, σ=σ, F=F_downshift,analytical_greeks_flag=True)
             X_S_minus, analytical_greeks_S0_minus = results_S0_minus['option_value'], results_S0_minus['analytical_greeks']
             
             numerical_greeks['spot_delta'] = (X_S_plus - X_S_minus) / (2 * S0 * Δ_shift)
             numerical_greeks['forward_delta'] = numerical_greeks['spot_delta'] / np.exp(-r_f * tau)
             
-            X_σ_plus = gk_price(S0=S0, tau=tau, r_f=r_f, r_d=r_d, cp=cp, K=K, σ=σ+σ_shift, F=F)['option_value']
-            X_σ_minus = gk_price(S0=S0, tau=tau, r_f=r_f, r_d=r_d, cp=cp, K=K, σ=σ-σ_shift, F=F)['option_value'] 
+            X_σ_plus = gk_price(S0=S0, tau=tau, r_d=r_d, r_f=r_f, cp=cp, K=K, σ=σ+σ_shift, F=F)['option_value']
+            X_σ_minus = gk_price(S0=S0, tau=tau, r_d=r_d, r_f=r_f, cp=cp, K=K, σ=σ-σ_shift, F=F)['option_value']
             numerical_greeks['vega'] = (X_σ_plus - X_σ_minus) / (2 * (σ_shift / 0.01))
             
-            X_plus = gk_price(S0=S0, tau=tau+θ_shift, r_f=r_f, r_d=r_d, cp=cp, K=K, σ=σ, F=F)['option_value']     
-            X_minus = gk_price(S0=S0, tau=tau-θ_shift, r_f=r_f, r_d=r_d, cp=cp, K=K, σ=σ, F=F)['option_value']  
+            X_plus = gk_price(S0=S0, tau=tau+θ_shift, r_d=r_d, r_f=r_f, cp=cp, K=K, σ=σ, F=F)['option_value']
+            X_minus = gk_price(S0=S0, tau=tau-θ_shift, r_d=r_d, r_f=r_f, cp=cp, K=K, σ=σ, F=F)['option_value']
             numerical_greeks['theta'] = (X_minus - X_plus) / 2 
             
             numerical_greeks['gamma'] = (analytical_greeks_S0_plus['spot_delta'] - analytical_greeks_S0_minus['spot_delta']) / (2 * (Δ_shift / 0.01))
             
             # This formulae will yield meaningfully different results on whether the forward rate is an input (or if it is calculated from the interest rate differential)
-            X_ρ_plus = gk_price(S0=S0, tau=tau, r_f=r_f+ρ_shift, r_d=r_d, cp=cp, K=K, σ=σ+σ_shift, F=F)['option_value'] 
-            X_ρ_minus = gk_price(S0=S0, tau=tau, r_f=r_f+ρ_shift, r_d=r_d, cp=cp, K=K, σ=σ-σ_shift, F=F)['option_value'] 
+            X_ρ_plus = gk_price(S0=S0, tau=tau, r_d=r_d, r_f=r_f+ρ_shift, cp=cp, K=K, σ=σ+σ_shift, F=F)['option_value']
+            X_ρ_minus = gk_price(S0=S0, tau=tau, r_d=r_d, r_f=r_f+ρ_shift, cp=cp, K=K, σ=σ-σ_shift, F=F)['option_value']
             numerical_greeks['rho'] = (X_ρ_plus - X_ρ_minus) / 2 
             
             numerical_greeks = pd.DataFrame.from_dict(numerical_greeks)
@@ -227,9 +223,9 @@ def gk_price(S0: float,
         return results
             
 def gk_solve_strike(S0: float, 
-                   tau: float,                
-                   r_f: float,                    
-                   r_d: float,  
+                   tau: float,
+                   r_d: float,
+                   r_f: float,
                    σ: float,                     
                    Δ: float,
                    Δ_convention: str,
@@ -244,10 +240,10 @@ def gk_solve_strike(S0: float,
         FX spot rate (specified in # of units of domestic currency per 1 unit of foreign currency).
     tau : float
         Time to expiry (in years).
-    r_f : float
-        Foreign risk-free interest rate (annualized continuously compounded).
     r_d : float
         Domestic risk-free interest rate (annualized continuously compounded).
+    r_f : float
+        Foreign risk-free interest rate (annualized continuously compounded).
     σ : float
         Volatility (annualized standard deviation of FX returns).
     Δ : float
@@ -331,7 +327,7 @@ def gk_solve_strike(S0: float,
                     # The strike of a premium adjusted Δ-σ quote is ALWAYS below the regular (non premium adjusted) Δ-σ quote
                     # Hence, we analytically calculate the K, assuming the σ was a regular Δ quote
                     Δ_convention_adj = Δ_convention.replace('premium_adjusted','regular')
-                    K_max = gk_solve_strike(S0=S0,tau=tau, r_f=r_f, r_d=r_d, σ=σ[i], Δ=Δ[i], Δ_convention=Δ_convention_adj, F=F)
+                    K_max = gk_solve_strike(S0=S0,tau=tau, r_d=r_d, r_f=r_f, σ=σ[i], Δ=Δ[i], Δ_convention=Δ_convention_adj, F=F)
                     K_max = K_max.item()
     
                     # Put Option
@@ -372,9 +368,9 @@ def gk_solve_strike(S0: float,
                     
 
 def gk_solve_implied_σ(S0: float, 
-                       tau: float, 
-                       r_f: float,                       
-                       r_d: float, 
+                       tau: float,
+                       r_d: float,
+                       r_f: float,
                        cp: int,
                        K: float, 
                        X: float, 
@@ -392,10 +388,10 @@ def gk_solve_implied_σ(S0: float,
         FX spot price (specified in # of units of domestic currency per 1 unit of foreign currency).
     tau : float
         Time to expiry in years.
-    r_f : float
-        Foreign risk-free interest rate (annualized continuously compounded).
     r_d : float
         Domestic risk-free interest rate (annualized continuously compounded).
+    r_f : float
+        Foreign risk-free interest rate (annualized continuously compounded).
     cp : int
         Option type: 1 for call, -1 for put.
     K : float
@@ -425,11 +421,11 @@ def gk_solve_implied_σ(S0: float,
     """
     try:
         # Try Netwon's method first (it's faster but less robust)
-        return newton(lambda σ: (gk_price(S0=S0,tau=tau,r_f=r_f,r_d=r_d,cp=cp,K=K,σ=σ)['option_value']  - X), x0=σ_guess, tol=1e-4, maxiter=50).item()
+        return newton(lambda σ: (gk_price(S0=S0,tau=tau,r_d=r_d,r_f=r_f,cp=cp,K=K,σ=σ)['option_value']  - X), x0=σ_guess, tol=1e-4, maxiter=50).item()
     except RuntimeError:
         # Fallback to Brent's method
         try:
-            return root_scalar(lambda σ: (gk_price(S0=S0,tau=tau,r_f=r_f,r_d=r_d,cp=cp,K=K,σ=σ)['option_value']  - X), bracket=[0.0001, 2], method='brentq').root.item()
+            return root_scalar(lambda σ: (gk_price(S0=S0,tau=tau,r_d=r_d,r_f=r_f,cp=cp,K=K,σ=σ)['option_value']  - X), bracket=[0.0001, 2], method='brentq').root.item()
         except ValueError:
             return np.inf        
         
@@ -445,14 +441,14 @@ if __name__ == '__main__':
     cp=-1
     K=0.71000
     F = 0.646478
-    p1 = gk_price(S0=S0,tau=tau,r_f=r_f,r_d=r_d,cp=cp,K=K,σ=σ,F=F)['option_value']
+    p1 = gk_price(S0=S0,tau=tau,r_d=r_d,r_f=r_f,cp=cp,K=K,σ=σ,F=F)['option_value']
     print('F specified:', p1)
-    p2 = gk_price(S0=S0,tau=tau,r_f=r_f,r_d=r_d,cp=cp,K=K,σ=σ)['option_value']
+    p2 = gk_price(S0=S0,tau=tau,r_d=r_d,r_f=r_f,cp=cp,K=K,σ=σ)['option_value']
     print('IR parity', p2)
 
 
     # check if instrinisc value is returned. Use IR parity. 
-    p3 = gk_price(S0=S0,tau=tau,r_f=r_f,r_d=r_d,cp=cp,K=K,σ=σ)['option_value']
+    p3 = gk_price(S0=S0,tau=tau,r_d=r_d,r_f=r_f,cp=cp,K=K,σ=σ)['option_value']
     print('if tau=0 intrinisc?:', p3)    
 
 

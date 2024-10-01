@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-import datetime as dt
 from functools import reduce
 import os
 import sys
@@ -8,7 +7,6 @@ import holidays
 import numpy as np
 import pandas as pd
 import dill
-from dateutil.relativedelta import relativedelta
 
 
 script_dir = os.path.dirname(os.path.abspath(__file__))

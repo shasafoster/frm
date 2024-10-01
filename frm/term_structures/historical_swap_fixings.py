@@ -4,14 +4,11 @@ if __name__ == "__main__":
     os.chdir(os.environ.get('PROJECT_DIR_FRM'))
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field, InitVar
-from enum import Enum
+from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from frm.term_structures.zero_curve import ZeroCurve
 from frm.enums.utils import DayCountBasis, OISCouponCalcMethod
-from frm.term_structures.zero_curve import ZeroCurve
 
 
 

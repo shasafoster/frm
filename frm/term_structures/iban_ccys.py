@@ -3,7 +3,6 @@ import os
 if __name__ == "__main__":
     os.chdir(os.environ.get('PROJECT_DIR_FRM')) 
 
-from typing import Literal
 
 # https://www.iban.com/currency-codes
 iban_ccy_codes = [
@@ -277,4 +276,4 @@ iban_ccy_codes = [
     ['ZIMBABWE','Zimbabwe Dollar','ZWL',932],
     ['ÅLAND ISLANDS','Euro','EUR',978]]
 
-VALID_CCYS = {l[2] for l in iban_ccy_codes}
+VALID_CCYS = {v[2] for v in iban_ccy_codes}

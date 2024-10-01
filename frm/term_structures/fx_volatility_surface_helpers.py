@@ -3,25 +3,14 @@ import os
 if __name__ == "__main__":
     os.chdir(os.environ.get('PROJECT_DIR_FRM')) 
     
-from frm.frm.market_data.ir_zero_curve import ZeroCurve
-from frm.frm.pricing_engine.garman_kohlhagen import gk_price, gk_solve_implied_σ, gk_solve_strike
-from frm.frm.pricing_engine.heston_garman_kohlhagen import heston_fit_vanilla_fx_smile, heston1993_price_fx_vanilla_european, heston_carr_madan_price_fx_vanilla_european
 
-from frm.frm.schedule.tenor import calc_tenor_date, get_spot_offset
 from frm.frm.schedule.daycounter import VALID_DAY_COUNT_BASIS
-from frm.frm.schedule.business_day_calendar import get_calendar        
-from frm.frm.utilities.utilities import convert_column_to_consistent_data_type, clean_input_dataframe, move_col_after, copy_errors_and_warnings_to_input
 
 import numpy as np
 import pandas as pd
-import datetime as dt
-from scipy.optimize import fsolve, root_scalar
-from scipy.interpolate import CubicSpline, InterpolatedUnivariateSpline 
-from dataclasses import dataclass, field, InitVar
-from typing import Optional, Union, Literal
+from typing import Union
 import warnings
 import re
-import matplotlib.pyplot as plt
 
 VALID_DELTA_CONVENTIONS = ['regular_spot_delta','regular_forward_delta','premium_adjusted_spot_delta','premium_adjusted_forward_delta'] 
 
@@ -51,8 +40,8 @@ def interp_fx_forward_curve(fx_forward_curve: pd.DataFrame,
     if flat_extrapolation:
         try:                    
             result = result.interpolate(method='time', limit_area='inside').ffill().bfill()
-        except:
-            pass
+        except ValueError:
+            raise ValueError("Interpolation failed, check for missing values in the input data.")
         # Find out of range dates and warn
         out_of_range_dates = unique_dates[(unique_dates < start_date) | (unique_dates > end_date)]
         for date in out_of_range_dates:
@@ -67,8 +56,6 @@ def interp_fx_forward_curve(fx_forward_curve: pd.DataFrame,
 
 def fx_σ_input_helper(df):
     
-    df_input = df.copy()
-
     for i,column_name in enumerate(['errors','warnings','internal_id']):
         if column_name not in df.columns:
             df.insert(loc=i,column=column_name,value='')

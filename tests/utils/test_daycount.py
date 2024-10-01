@@ -9,7 +9,7 @@ import numpy as np
 import math
 
 from frm.utils.daycount import day_count, year_fraction, to_datetimeindex
-from frm.utils.utils_enums import DayCountBasis
+from frm.enums.utils import DayCountBasis
 
 def isclose_custom(a, b, abs_tol=1e-10):
     return math.isclose(a, b, abs_tol=abs_tol)

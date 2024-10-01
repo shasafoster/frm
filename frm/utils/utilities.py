@@ -6,8 +6,8 @@ if __name__ == "__main__":
 import pandas as pd
 import numpy as np
 from frm.utils.business_day_calendar import get_busdaycal
-from frm.utils.tenor import get_tenor_settlement_date, get_spot_offset
-from frm.utils.daycount import day_count, year_fraction
+from frm.utils.tenor import get_tenor_settlement_date
+from frm.utils.daycount import year_fraction
 from frm.enums.utils import DayCountBasis
 
 def convert_column_to_consistent_data_type(df: pd.DataFrame):
@@ -61,8 +61,7 @@ def move_col_after(df, col_to_move, ref_col):
 
 def generic_market_data_input_cleanup_and_validation(df : pd.DataFrame,
                                                      spot_offset: bool=True):
-    df_input = df.copy()
-
+    
     # mandatory column validation  
     mandatory_columns = [
         'curve_date',
@@ -76,7 +75,7 @@ def generic_market_data_input_cleanup_and_validation(df : pd.DataFrame,
 
     # tenor input validation 
     if 'tenor_date' not in df.columns and 'tenor_name' not in df.columns:
-        df['errors'] += f'a tenor input via tenor_name or tenor_date is mandatory\n'
+        df['errors'] += 'a tenor input via tenor_name or tenor_date is mandatory\n'
     elif 'tenor_date' not in df.columns and 'tenor_name' in df.columns:
         df['tenor_date'] = np.nan
         df = move_col_after(df=df, col_to_move='tenor_date', ref_col='tenor_name')

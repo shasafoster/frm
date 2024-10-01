@@ -15,7 +15,7 @@ import datetime as dt
 
 def get_spot_offset(curve_ccy: str=None) -> int:
     
-    if curve_ccy == None:
+    if curve_ccy is None:
         return 2
     
     if not isinstance(curve_ccy, str):
@@ -145,16 +145,17 @@ def get_tenor_settlement_date(
         spot_offset: bool=True
         ):
         
-    if busdaycal == None or pd.isna(busdaycal):
+    if busdaycal is None or pd.isna(busdaycal):
         busdaycal = np.busdaycalendar()
     
-    if type(curve_date) == dt.date:
+    if isinstance(curve_date, dt.date):
         curve_date = np.datetime64(curve_date)
     else:
         curve_date = np.datetime64(curve_date.date())
             
     if spot_offset:
-        spot_date = np.busday_offset(curve_date, offsets=get_spot_offset(curve_ccy), roll='following', busdaycal=busdaycal)
+
+        spot_date = np.busday_offset(curve_date.astype('datetime64[D]'), offsets=get_spot_offset(curve_ccy), roll='following', busdaycal=busdaycal)
     else: 
         spot_date = curve_date
         

@@ -20,7 +20,7 @@ def test_gk_price_and_solve_implied_σ():
     tau=1.0
     cp=1
     K=0.7882
-    px = gk_price(S0=S0,tau=tau,r_f=r_f,r_d=r_d,cp=cp,K=K,σ=σ)['option_value']
+    px = gk_price(S0=S0,tau=tau,r_d=r_d,r_f=r_f,cp=cp,K=K,σ=σ)['option_value']
     assert abs(px_test - px) < epsilon_px
     IV = gk_solve_implied_σ(S0=S0, tau=tau, r_f=r_f, r_d=r_d, cp=cp, K=K, X=px, σ_guess=0.1)
     assert 100* abs(σ - IV) < epsilon_σ
@@ -36,7 +36,7 @@ def test_gk_price_and_solve_implied_σ():
     K=0.7882
     px = gk_price(S0=S0,tau=tau,r_f=r_f,r_d=r_d,cp=cp,K=K,σ=σ)['option_value']
     assert abs(px_test - px) < epsilon_px
-    IV = gk_solve_implied_σ(S0=S0, tau=tau, r_f=r_f, r_d=r_d, cp=cp, K=K, X=px, σ_guess=0.1)
+    IV = gk_solve_implied_σ(S0=S0, tau=tau, r_d=r_d, r_f=r_f, cp=cp, K=K, X=px, σ_guess=0.1)
     assert 100* abs(σ - IV) < epsilon_σ 
     
     # 1Y AUDUSD Call, 30 June 2023, London 8am
@@ -48,9 +48,9 @@ def test_gk_price_and_solve_implied_σ():
     tau=1.0
     cp=1
     K=0.5405
-    px = gk_price(S0=S0,tau=tau,r_f=r_f,r_d=r_d,cp=cp,K=K,σ=σ)['option_value']     
+    px = gk_price(S0=S0,tau=tau,r_d=r_d,r_f=r_f,cp=cp,K=K,σ=σ)['option_value']
     assert abs(px_test - px) < epsilon_px  
-    IV = gk_solve_implied_σ(S0=S0, tau=tau, r_f=r_f, r_d=r_d, cp=cp, K=K, X=px, σ_guess=0.1)
+    IV = gk_solve_implied_σ(S0=S0, tau=tau, r_d=r_d, r_f=r_f, cp=cp, K=K, X=px, σ_guess=0.1)
     assert 100* abs(σ - IV) < epsilon_σ
           
     # 1Y AUDUSD Put, 30 June 2023, London 8am
@@ -62,9 +62,9 @@ def test_gk_price_and_solve_implied_σ():
     tau=1.0
     cp=-1
     K=0.5405
-    px = gk_price(S0=S0,tau=tau,r_f=r_f,r_d=r_d,cp=cp,K=K,σ=σ)['option_value']           
+    px = gk_price(S0=S0,tau=tau,r_d=r_d,r_f=r_f,cp=cp,K=K,σ=σ)['option_value']
     assert abs(px_test - px) < epsilon_px     
-    IV = gk_solve_implied_σ(S0=S0, tau=tau, r_f=r_f, r_d=r_d, cp=cp, K=K, X=px, σ_guess=0.1)
+    IV = gk_solve_implied_σ(S0=S0, tau=tau, r_d=r_d, r_f=r_f, cp=cp, K=K, X=px, σ_guess=0.1)
     assert 100* abs(σ - IV) < epsilon_σ    
     
     ##### AUDUSD Tests, function results in AUD per 1 USD ######
@@ -78,10 +78,10 @@ def test_gk_price_and_solve_implied_σ():
     tau=1.0
     cp=-1
     K=1/0.7882
-    px = gk_price(S0=S0,tau=tau,r_f=r_f,r_d=r_d,cp=cp,K=K,σ=σ)['option_value']    
+    px = gk_price(S0=S0,tau=tau,r_d=r_d,r_f=r_f,cp=cp,K=K,σ=σ)['option_value']
     px_in_AUD_per_1_AUD = px / S0 / K
     assert abs(px_test - px_in_AUD_per_1_AUD) < epsilon_px
-    IV = gk_solve_implied_σ(S0=S0, tau=tau, r_f=r_f, r_d=r_d, cp=cp, K=K, X=px, σ_guess=0.1)
+    IV = gk_solve_implied_σ(S0=S0, tau=tau, r_d=r_d, r_f=r_f, cp=cp, K=K, X=px, σ_guess=0.1)
     assert 100* abs(σ - IV) < epsilon_σ    
     
     # 1Y USDAUD Call, 30 June 2023, London 8am
@@ -93,10 +93,10 @@ def test_gk_price_and_solve_implied_σ():
     tau=1.0
     cp=1
     K=1/0.7882
-    px = gk_price(S0=S0,tau=tau,r_f=r_f,r_d=r_d,cp=cp,K=K,σ=σ)['option_value']      
+    px = gk_price(S0=S0,tau=tau,r_d=r_d,r_f=r_f,cp=cp,K=K,σ=σ)['option_value']
     px_in_AUD_per_1_AUD = px / S0 / K
     assert abs(px_test - px_in_AUD_per_1_AUD) < epsilon_px
-    IV = gk_solve_implied_σ(S0=S0, tau=tau, r_f=r_f, r_d=r_d, cp=cp, K=K, X=px, σ_guess=0.1)
+    IV = gk_solve_implied_σ(S0=S0, tau=tau, r_d=r_d, r_f=r_f, cp=cp, K=K, X=px, σ_guess=0.1)
     assert 100* abs(σ - IV) < epsilon_σ   
 
     # 1Y USDAUD Put, 30 June 2023, London 8am
@@ -108,10 +108,10 @@ def test_gk_price_and_solve_implied_σ():
     tau=1.0
     cp=-1
     K=1/0.5405
-    px = gk_price(S0=S0,tau=tau,r_f=r_f,r_d=r_d,cp=cp,K=K,σ=σ)['option_value']        
+    px = gk_price(S0=S0,tau=tau,r_d=r_d, r_f=r_f,cp=cp,K=K,σ=σ)['option_value']
     px_in_AUD_per_1_AUD = px / S0 / K
     assert abs(px_test - px_in_AUD_per_1_AUD) < epsilon_px 
-    IV = gk_solve_implied_σ(S0=S0, tau=tau, r_f=r_f, r_d=r_d, cp=cp, K=K, X=px, σ_guess=0.1)
+    IV = gk_solve_implied_σ(S0=S0, tau=tau,r_d=r_d, r_f=r_f, cp=cp, K=K, X=px, σ_guess=0.1)
     assert 100* abs(σ - IV) < epsilon_σ   
 
     # 1Y USDAUD Call, 30 June 2023, London 8am
@@ -123,10 +123,10 @@ def test_gk_price_and_solve_implied_σ():
     tau=1.0
     cp=1
     K=1/0.5405
-    px = gk_price(S0=S0,tau=tau,r_f=r_f,r_d=r_d,cp=cp,K=K,σ=σ)['option_value']    
+    px = gk_price(S0=S0,tau=tau,r_d=r_d,r_f=r_f,cp=cp,K=K,σ=σ)['option_value']
     px_in_AUD_per_1_AUD = px / S0 / K
     assert abs(px_test - px_in_AUD_per_1_AUD) < epsilon_px
-    IV = gk_solve_implied_σ(S0=S0, tau=tau, r_f=r_f, r_d=r_d, cp=cp, K=K, X=px, σ_guess=0.1)
+    IV = gk_solve_implied_σ(S0=S0, tau=tau, r_d=r_d, r_f=r_f, cp=cp, K=K, X=px, σ_guess=0.1)
     assert 100* abs(σ - IV) < epsilon_σ  
 
 
@@ -143,7 +143,7 @@ def test_gk_solve_strike():
     tau=1.0
     Δ = -0.3
     Δ_convention = 'regular_spot_Δ'
-    strike = gk_solve_strike(S0=S0,tau=tau,r_f=r_f,r_d=r_d,σ=σ,Δ=Δ,Δ_convention=Δ_convention)
+    strike = gk_solve_strike(S0=S0,tau=tau,r_d=r_d,r_f=r_f,σ=σ,Δ=Δ,Δ_convention=Δ_convention)
     assert abs(strike_test - strike) / strike_test < epsilon_px
 
     # AUDUSD 1Y 30 Δ Call, 30 June 2023 London 10pm 
@@ -155,7 +155,7 @@ def test_gk_solve_strike():
     tau=1.0
     Δ = 0.3
     Δ_convention = 'regular_spot_Δ'
-    strike = gk_solve_strike(S0=S0,tau=tau,r_f=r_f,r_d=r_d,σ=σ,Δ=Δ,Δ_convention=Δ_convention)
+    strike = gk_solve_strike(S0=S0,tau=tau,r_d=r_d,r_f=r_f,σ=σ,Δ=Δ,Δ_convention=Δ_convention)
     assert abs(strike_test - strike) / strike_test < epsilon_px
 
     # AUDUSD 1Y 5 Δ Put, 30 June 2023 London 10pm 
@@ -167,7 +167,7 @@ def test_gk_solve_strike():
     tau=1.0
     Δ = -0.05
     Δ_convention = 'regular_spot_Δ'
-    strike = gk_solve_strike(S0=S0,tau=tau,r_f=r_f,r_d=r_d,σ=σ,Δ=Δ,Δ_convention=Δ_convention)
+    strike = gk_solve_strike(S0=S0,tau=tau,r_d=r_d,r_f=r_f,σ=σ,Δ=Δ,Δ_convention=Δ_convention)
     assert abs(strike_test - strike) / strike_test < epsilon_px
 
 
@@ -181,7 +181,7 @@ def test_gk_solve_strike():
     tau = 1.0
     Δ = 0.05
     Δ_convention = 'regular_spot_Δ'
-    strike = gk_solve_strike(S0=S0,tau=tau,r_f=r_f,r_d=r_d,σ=σ,Δ=Δ,Δ_convention=Δ_convention)
+    strike = gk_solve_strike(S0=S0,tau=tau,r_d=r_d,r_f=r_f,σ=σ,Δ=Δ,Δ_convention=Δ_convention)
     assert abs(strike_test - strike) / strike_test < epsilon_px
     
     # AUDUSD 5Y 30 Δ Put, 30 June 2023 London 10pm 
@@ -194,7 +194,7 @@ def test_gk_solve_strike():
     tau = 5.0
     Δ = -0.3
     Δ_convention = 'regular_forward_Δ'
-    strike = gk_solve_strike(S0=S0,tau=tau,r_f=r_f,r_d=r_d,σ=σ,Δ=Δ,Δ_convention=Δ_convention)
+    strike = gk_solve_strike(S0=S0,tau=tau,r_d=r_d,r_f=r_f,σ=σ,Δ=Δ,Δ_convention=Δ_convention)
     assert abs(strike_test - strike) / strike_test < epsilon_px
     
     # AUDUSD 5Y 30 Δ Put, 30 June 2023 London 10pm 
@@ -207,7 +207,7 @@ def test_gk_solve_strike():
     tau = 5.0
     Δ = 0.3
     Δ_convention = 'regular_forward_Δ'
-    strike = gk_solve_strike(S0=S0,tau=tau,r_f=r_f,r_d=r_d,σ=σ,Δ=Δ,Δ_convention=Δ_convention)
+    strike = gk_solve_strike(S0=S0,tau=tau,r_d=r_d,r_f=r_f,σ=σ,Δ=Δ,Δ_convention=Δ_convention)
     assert abs(strike_test - strike) / strike_test < epsilon_px
 
 
@@ -223,7 +223,7 @@ def test_gk_solve_strike():
     F = 129.7958
     Δ = 0.2
     Δ_convention = 'premium_adjusted_forward_Δ'
-    strike = gk_solve_strike(S0=S0,tau=tau,r_f=r_f,r_d=r_d,σ=σ,Δ=Δ,Δ_convention=Δ_convention)
+    strike = gk_solve_strike(S0=S0,tau=tau,r_d=r_d,r_f=r_f,σ=σ,Δ=Δ,Δ_convention=Δ_convention)
     assert abs(strike_test - strike) / strike_test < epsilon_px
     
     # 9M USDJPY call, (USD call, JPY Put), 30 June 2023, London 10pm data
@@ -236,22 +236,23 @@ def test_gk_solve_strike():
     F = 138.031
     Δ = 0.2
     Δ_convention = 'premium_adjusted_spot_Δ'
-    strike = gk_solve_strike(S0=S0,tau=tau,r_f=r_f,r_d=r_d,σ=σ,Δ=Δ,Δ_convention=Δ_convention, F=F)
+    strike = gk_solve_strike(S0=S0,tau=tau,r_d=r_d,r_f=r_f,σ=σ,Δ=Δ,Δ_convention=Δ_convention, F=F)
     assert abs(strike_test - strike) / strike_test < epsilon_px
         
         
 def test_gk_price_greeks():
     
+    pass
     # 1Y AUDUSD Call, data from 30 June 2023, London 8am
-    S0=0.6629
-    σ=9.84251/100
-    r_f=0.0466
-    r_d=0.05381
-    tau=1.0
-    cp=1
-    K=0.7882
-    F=0.667962
-    result = gk_price(S0=S0, tau=tau, r_f=r_f, r_d=r_d, cp=cp, K=K, σ=σ, F=F, analytical_greeks_flag=True, numerical_greeks_flag=True)    
+    # S0=0.6629
+    # σ=9.84251/100
+    # r_f=0.0466
+    # r_d=0.05381
+    # tau=1.0
+    # cp=1
+    # K=0.7882
+    # F=0.667962
+    # result = gk_price(S0=S0, tau=tau, r_d=r_d,r_f=r_f, cp=cp, K=K, σ=σ, F=F, analytical_greeks_flag=True, numerical_greeks_flag=True)
     #print('X:',X)
     #print('greeks_analytical:',greeks_analytical)   
     #print('greeks_numerical:',greeks_numerical)   
@@ -272,11 +273,11 @@ if __name__ == '__main__':
     # cp=1
     # K=0.7882
     # F=0.667962
-    # result  = gk_price(S0=S0, tau=tau, r_f=r_f, r_d=r_d, cp=cp, K=K, σ=σ, F=F, analytical_greeks_flag=True, numerical_greeks_flag=True) 
+    # result  = gk_price(S0=S0, tau=tau, r_d=r_d, r_f=r_f, cp=cp, K=K, σ=σ, F=F, analytical_greeks_flag=True, numerical_greeks_flag=True)
     
     # X = result['option_value'].item()
     
-    # IV = gk_solve_implied_σ(S0=S0, tau=tau, r_f=r_f, r_d=r_d, cp=cp, K=K, X=X, σ_guess=0.1)
+    # IV = gk_solve_implied_σ(S0=S0, tau=tau, r_d=r_d, r_f=r_f, cp=cp, K=K, X=X, σ_guess=0.1)
 
     
 

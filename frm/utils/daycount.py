@@ -7,8 +7,6 @@ import calendar
 import datetime as dt
 import numpy as np
 import pandas as pd
-from dataclasses import dataclass
-from typing import Optional
 from frm.enums.utils import DayCountBasis
 
             
@@ -110,7 +108,7 @@ def day_count(start_date,
                      + d2 - d1
             return result
         
-        if is_end_date_on_termination == None:
+        if is_end_date_on_termination is None:
             N = len(end_DatetimeIndex)
             is_end_date_on_termination = [False if i < (N-1)  else True for i in range(N)]
         else:
@@ -187,15 +185,15 @@ def to_datetimeindex(date_object) -> 'pd.DatetimeIndex':
     - dt.date / dt.datetime: Converted to a DatetimeIndex containing one element.
     - pd.Series or list: Converted to a DatetimeIndex.
     """        
-    if type(date_object) == pd.DatetimeIndex:
+    if isinstance(date_object, pd.DatetimeIndex):
         return date_object
-    if type(date_object) == pd.Timestamp:
+    if isinstance(date_object, pd.Timestamp):
         return pd.DatetimeIndex([date_object.to_pydatetime()])
-    elif type(date_object) == np.datetime64:
+    elif isinstance(date_object, np.datetime64):
         return pd.DatetimeIndex([pd.to_datetime(date_object)])
-    elif type(date_object) == dt.date or type(date_object) == dt.datetime:
+    elif isinstance(date_object, dt.date) or isinstance(date_object, dt.datetime):
         return pd.DatetimeIndex([dt.datetime(date_object.year,date_object.month,date_object.day)])
-    elif type(date_object) == pd.Series or type(date_object) == list:
+    elif isinstance(date_object, pd.Series) or isinstance(date_object, list):
         return pd.DatetimeIndex(date_object)
     else:
         raise ValueError("Unsupported type", type(date_object), date_object)

@@ -9,8 +9,7 @@ if __name__ == "__main__":
 
 import pandas as pd
 from frm.term_structures.zero_curve import ZeroCurve
-from frm.utils.tenor import get_tenor_settlement_date
-from frm.utils.enums import CompoundingFrequency
+from frm.enums.utils import CompoundingFrequency, ForwardRate
 
 
 def test_construction_from_discount_factors():
@@ -42,7 +41,7 @@ def test_construction_from_discount_factors():
                         [pd.Timestamp(2081,1,6),0.354]],columns=['date','discount_factor'])
     historical_fixings = pd.DataFrame({pd.Timestamp(2021,9,d):1+d/100 for d in range(1,30)}.items(), columns=['date','fixing'])
     
-    zc = ZeroCurve(curve_date=pd.Timestamp(2021,9,30),zero_data=df, historical_fixings=historical_fixings)
+    zc = ZeroCurve(curve_date=pd.Timestamp(2021,9,30),data=df)
     for i,row in df.iterrows():
         assert abs(row['discount_factor'] - zc.discount_factor(row['date'])[0]) < epsilon  
   
@@ -83,12 +82,12 @@ epsilon = 1e-8
 
 d1 = pd.Series([pd.Timestamp(2022,1,15)])
 d2 = pd.Series([pd.Timestamp(2023,1,15)])
-fwd_rate = zc.forward_rate(d1,d2, CompoundingFrequency.SIMPLE)
+fwd_rate = zc.forward_rate(d1,d2, ForwardRate.SIMPLE)
 assert abs(fwd_rate[0] - simple[0]) < epsilon
 
 d1 = pd.Series([pd.Timestamp(2022,1,15),pd.Timestamp(2022,1,15)])
 d2 = pd.Series([pd.Timestamp(2022,1,15),pd.Timestamp(2023,1,15)])
-fwd_rate = zc.forward_rate(d1,d2, CompoundingFrequency.SIMPLE)
+fwd_rate = zc.forward_rate(d1,d2, ForwardRate.SIMPLE)
 assert abs(fwd_rate[1] - simple[0]) < epsilon
 
 
@@ -97,12 +96,14 @@ df = pd.DataFrame([[pd.Timestamp(2022,1,1), 0.0033254],
                    [pd.Timestamp(2022,1,4), 0.0033946],
                    [pd.Timestamp(2022,1,11),0.0042867],
                    [pd.Timestamp(2022,4,5), 0.0096205]],columns=['date','zero_rate'])
-zc = ZeroCurve(curve_date=pd.Timestamp(2021,12,31),zero_data=df, compounding_frequency=CompoundingFrequency.ANNUAL)
+zc = ZeroCurve(curve_date=pd.Timestamp(2021,12,31),data=df, compounding_frequency=CompoundingFrequency.ANNUAL)
 
 for i,row in df.iterrows():
     assert abs(row['zero_rate'] - zc.zero_rate(CompoundingFrequency.ANNUAL, row['date'])[0]) < epsilon  
 
-zc.plot()
+if __name__ == "__main__":
+    test_construction_from_discount_factors()
+    zc.plot()
 
 
 #%%

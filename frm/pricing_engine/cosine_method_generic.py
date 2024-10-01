@@ -44,7 +44,7 @@ def cos_method(p, cf, dt, a, b, N=160):
     References:
     [1] Fang, Fang & Oosterlee, Cornelis. (2008). A Novel Pricing Method for European Options Based on Fourier-Cosine Series Expansions. SIAM J. Scientific Computing. 31. 826-848. 10.1137/080718061. 
     """
-    
+
     assert dt > 0.0    
     assert (a + dt) <= b
     assert p >= a
@@ -55,9 +55,12 @@ def cos_method(p, cf, dt, a, b, N=160):
     k = np.arange(N + 1) # Array from [0, 1, 2, ... N, N+1]
 
     w = np.append(0.5, np.ones(N))
-    
-    Fk = 2 / (b-a) * np.real(cf(k * np.pi / (b-a)) * np.exp(-1j * k * np.pi * a / (b-a))) # Equation 8 in [1] 
-    C = lambda x: np.cos(k * np.pi * (x - a) / (b-a)) # Inner term of equation 11 in [1] 
+
+    Fk = 2 / (b-a) * np.real(cf(k * np.pi / (b-a)) * np.exp(-1j * k * np.pi * a / (b-a))) # Equation 8 in [1]
+
+    def C(x):
+        return np.cos(k * np.pi * (x - a) / (b-a)) # Inner term of equation 11 in [1]
+
     PDF_pts = np.array([np.sum(w * (Fk * C(x))) for x in pts]) # Equation 11 in [1]
 
     integral_of_a_to_b = np.sum(PDF_pts * dt_pts)

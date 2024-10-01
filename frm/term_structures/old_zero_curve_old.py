@@ -11,11 +11,9 @@ from frm.utils.utilities import convert_column_to_consistent_data_type
 from frm.utils.enums import DayCountBasis, CompoundingFrequency
 from frm.term_structures.zero_curve_helpers import zero_rate_from_discount_factor, discount_factor_from_zero_rate, forward_rate
 
-from enum import Enum
 import scipy 
 import pandas as pd
 import numpy as np
-from scipy.optimize import fsolve
 from dataclasses import dataclass, field, InitVar
 from typing import Optional, Union, Literal
 import matplotlib.pyplot as plt
@@ -375,7 +373,7 @@ class ZeroCurve:
                      compounding_frequency: CompoundingFrequency) -> pd.Series:
 
         assert len(d1) == len(d2)
-        assert type(d1) == type(d2)
+        assert type(d1) is type(d2)
         bool_cond = d1 < self.curve_date
         
         historical_fixings = []

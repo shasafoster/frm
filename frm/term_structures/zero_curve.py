@@ -9,11 +9,9 @@ from frm.utils.utilities import convert_column_to_consistent_data_type
 from frm.enums.utils import DayCountBasis, CompoundingFrequency, ForwardRate
 from frm.term_structures.zero_curve_helpers import zero_rate_from_discount_factor, discount_factor_from_zero_rate
 
-from enum import Enum
 import scipy 
 import pandas as pd
 import numpy as np
-from scipy.optimize import fsolve
 from dataclasses import dataclass, field, InitVar
 from typing import Optional, Union, Literal
 import matplotlib.pyplot as plt
@@ -33,7 +31,7 @@ class ZeroCurve:
     data: pd.DataFrame
     
     # Used in the __post_init__ but not set as attributes
-    compounding_frequency: InitVar[str]=None # defines the zero_rate compounding frequency in 'data'
+    compounding_frequency: InitVar[CompoundingFrequency]=None # defines the zero_rate compounding frequency in 'data'
     
     # Optional init inputs
     day_count_basis: DayCountBasis=DayCountBasis.ACT_ACT
@@ -191,7 +189,7 @@ class ZeroCurve:
                      forward_rate_type: ForwardRate=ForwardRate.SIMPLE) -> pd.Series:
 
         assert len(period_start) == len(period_end)
-        assert type(period_start) == type(period_end)
+        assert type(period_start) is type(period_end)
         assert (period_start >= self.curve_date).all()
                     
         if forward_rate_type in {ForwardRate.WEIGHTED_AVERAGE, ForwardRate.SIMPLE_AVERAGE}:
@@ -366,7 +364,7 @@ class ZeroCurve:
             d2 = pd.date_range(min_date + pd.DateOffset(days=term),max_date ,freq='d')
         
             years_fwd = year_fraction(self.curve_date, d1, self.day_count_basis)
-            fwd_rates = pd.Series(self.forward_rate(d1, d2, CompoundingFrequency.Simple)) * 100       
+            fwd_rates = pd.Series(self.forward_rate(d1, d2, ForwardRate.SIMPLE)) * 100
         
             ax.plot(years_fwd, fwd_rates, label=str(term)+' day forward rate') 
         
