@@ -17,28 +17,18 @@ This package will have a similar function set to Quantlib however we want to mak
 pip install --upgrade frm
 ```
 
+## Complete with examples
+- Clewlow-Strickland 1-factor simulation
+- Heston parameter calibration to European FX option volatility smile
+- Heston simulation
+
 ## In progress
-
-Interest rate swaps
-- pricing
-- schedule construction (including detailed stub logic) 
-- iterative single currency bootstrapping
-- fixed rate / spread par solvers
-
-Vanilla European FX options
-- pricing + greeks (under Garman-Kohlhagen)
-- volatility surface construction (smile construction via Heston or splines)  
+- Interest rate swaps pricing
+- Interest rate curve bootstrapping
 
 ## Pipeline
-- SABR volatility model
-- European interest rate swaption pricing
+- SABR volatility model calibration to European swaptions
+- Swaption and cap floor pricing using calibrated SABR model
 - CDS Bootstrapper
-
-## Hosted examples
-At <https://frmcalcs.com>, the following tools are are hosted:
-- FX forward valuations and exposure modelling for CVA/DVA 
-- Vanilla FX option valuations
-
-
 
 
