@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import os
 if __name__ == "__main__":
-    os.chdir(os.environ.get('PROJECT_DIqRM'))
+    os.chdir(os.environ.get('PROJECT_DIR_FRM'))
 
 from frm.pricing_engine.garman_kohlhagen import gk_solve_implied_σ, gk_solve_strike
 from frm.pricing_engine.cosine_method_generic import get_cos_truncation_range
@@ -55,7 +55,7 @@ def calibrate_vanilla_heston_smile(
     Returns:
     - Tuple: Initial variance (var0),
              vol of vol (vv),
-             mean reversion (kappa),
+             Mean reversion speed to the long-run variance (kappa),
              long-run mean variance (theta),
              market price of volatility risk (lambda_),
              correlation (rho),
@@ -72,7 +72,7 @@ def calibrate_vanilla_heston_smile(
     The Heston model is defined by six parameters,
     - var0: Initial variance.
     - vv: Volatility of volatility.
-    - kappa: rate of mean reversion to the long-run variance
+    - kappa: Mean reversion speed to the long-run variance
     - theta: Long-run variance.
     - lambda_: Market price of volatility risk.
     - rho: Correlation (between stock price and volatility).
@@ -390,7 +390,7 @@ def heston_fft_fx_vanilla_european_integral(v, cp, log_S0, log_K, tau, r, q, var
         q (float): Interest rate of the asset (Foreign interest rate for Garman-Kohlhagen)
         var0 (float): Initial variance.
         vv (float): Volatility of volatility.
-        kappa (float): Mean reversion speed to the longsrun variance
+        kappa (float): Mean reversion speed to the long-run variance
         theta (float): Long-run variance.
         rho (float): Correlation between asset price and asset volatility Wiener processes.
         alpha: Damping coefficient.
@@ -475,7 +475,7 @@ def chf_heston_fang2008(u, tau, r, q, var0, vv, kappa, theta, rho):
      q (float): Interest rate of the asset (Foreign interest rate for Garman-Kohlhagen)
     var0 (float): Initial variance.
     vv (float): Volatility of volatility.
-    kappa (float): Rate of mean reversion to the long-run variance
+    kappa (float): Mean reversion speed to the long-run variance
     theta (float): Long-run variance
     rho (float): Correlation between asset price and asset volatility Wiener processes.
 
@@ -571,7 +571,7 @@ def heston_cosine_price_fx_vanilla_european(S0, tau, r, q, cp, K, var0, vv, kapp
     K (list or np.array): List of strike prices
     var0 (float): Initial variance
     vv (float): Volatility of volatility
-    kappa (float): Rate of mean reversion to the long-run variance
+    kappa (float): Mean reversion speed to the long-run variance
     theta (float): Long-run variance
     rho (float): Correlation between asset price and asset volatility Wiener processes.
     N (int): Number of expansion terms (<160 should be sufficient per Fang, 2008)
@@ -653,7 +653,7 @@ def heston_lipton_price_fx_vanilla_european(S0, tau, r, q, cp, K, var0, vv, kapp
         K (float): Strike price.
         var0 (float): Initial variance.
         vv (float): Volatility of volatility.
-        kappa (float): Rate of mean reversion.
+        kappa (float): Mean reversion speed to the long-run variance.
         theta (float): Long-run variance.
         rho (float): Correlation between asset price and asset volatility Wiener processes.
 
