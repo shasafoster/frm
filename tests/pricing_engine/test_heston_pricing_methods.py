@@ -8,10 +8,10 @@ import matplotlib.pyplot as plt
 from time import time
 
 from frm.pricing_engine.heston import \
-    heston_carr_madan_price_fx_vanilla_european, \
-    heston_cosine_price_fx_vanilla_european, \
-    heston1993_price_fx_vanilla_european, \
-    heston_lipton_price_fx_vanilla_european
+    heston_carr_madan_price_vanilla_european, \
+    heston_cosine_price_vanilla_european, \
+    heston1993_price_vanilla_european, \
+    heston_lipton_price_vanilla_european
 
 
 
@@ -38,9 +38,9 @@ def test_heston_pricing_methods():
 
     # The COS method is can be applied to multiple strikes (i.e. vectorised to multiple strikes)
     cp = np.ones(shape=K.shape) 
-    COS_call = heston_cosine_price_fx_vanilla_european(S0, tau, r, q, cp, K, var0, vv, kappa, theta, rho, N=160, L=10)
+    COS_call = heston_cosine_price_vanilla_european(S0, tau, r, q, cp, K, var0, vv, kappa, theta, rho, N=160, L=10)
     cp = -1 * cp
-    COS_put = heston_cosine_price_fx_vanilla_european(S0, tau, r, q, cp, K, var0, vv, kappa, theta, rho, N=160, L=10)
+    COS_put = heston_cosine_price_vanilla_european(S0, tau, r, q, cp, K, var0, vv, kappa, theta, rho, N=160, L=10)
     
     
     # The original heston 1993 algorithm and the Carr-Madan algorithm require a scalar strike.
@@ -53,19 +53,19 @@ def test_heston_pricing_methods():
         
             # Call options
             cp_ = 1
-            heston_1993_call[i] = heston1993_price_fx_vanilla_european(S0, tau, r, q, cp_, K[i], var0, vv, kappa, theta, rho, lambda_)
-            cm_quad_call[i] = heston_carr_madan_price_fx_vanilla_european(S0, tau, r, q, cp_, K[i], var0, vv, kappa, theta, rho, integration_method=0)
-            cm_fft_call[i] = heston_carr_madan_price_fx_vanilla_european(S0, tau, r, q, cp_, K[i], var0, vv, kappa, theta, rho, integration_method=1)
-            lipton_call[i] = heston_lipton_price_fx_vanilla_european(S0, tau, r, q, cp_, K[i], var0, vv, kappa, theta, rho)
-            # COS_call[i] = heston_cosine_price_fx_vanilla_european(S0, tau, r, q, cp, K[i], var0, vv, kappa, theta, rho, N=160, L=10)
+            heston_1993_call[i] = heston1993_price_vanilla_european(S0, tau, r, q, cp_, K[i], var0, vv, kappa, theta, rho, lambda_)
+            cm_quad_call[i] = heston_carr_madan_price_vanilla_european(S0, tau, r, q, cp_, K[i], var0, vv, kappa, theta, rho, integration_method=0)
+            cm_fft_call[i] = heston_carr_madan_price_vanilla_european(S0, tau, r, q, cp_, K[i], var0, vv, kappa, theta, rho, integration_method=1)
+            lipton_call[i] = heston_lipton_price_vanilla_european(S0, tau, r, q, cp_, K[i], var0, vv, kappa, theta, rho)
+            # COS_call[i] = heston_cosine_price_vanilla_european(S0, tau, r, q, cp, K[i], var0, vv, kappa, theta, rho, N=160, L=10)
              
             # Put options
             cp_ = -1
-            heston_1993_put[i] = heston1993_price_fx_vanilla_european(S0, tau, r, q, cp_, K[i], var0, vv, kappa, theta, rho, lambda_)
-            cm_quad_put[i] = heston_carr_madan_price_fx_vanilla_european(S0, tau, r, q, cp_, K[i], var0, vv, kappa, theta, rho, integration_method=0)
-            cm_fft_put[i] = heston_carr_madan_price_fx_vanilla_european(S0, tau, r, q, cp_, K[i], var0, vv, kappa, theta, rho, integration_method=1)
-            lipton_put[i] = heston_lipton_price_fx_vanilla_european(S0, tau, r, q, cp_, K[i], var0, vv, kappa, theta, rho)
-            # COS_put[i] = heston_cosine_price_fx_vanilla_european(S0, tau, r, q, cp, K[i], var0, vv, kappa, theta, rho, N=160, L=10)
+            heston_1993_put[i] = heston1993_price_vanilla_european(S0, tau, r, q, cp_, K[i], var0, vv, kappa, theta, rho, lambda_)
+            cm_quad_put[i] = heston_carr_madan_price_vanilla_european(S0, tau, r, q, cp_, K[i], var0, vv, kappa, theta, rho, integration_method=0)
+            cm_fft_put[i] = heston_carr_madan_price_vanilla_european(S0, tau, r, q, cp_, K[i], var0, vv, kappa, theta, rho, integration_method=1)
+            lipton_put[i] = heston_lipton_price_vanilla_european(S0, tau, r, q, cp_, K[i], var0, vv, kappa, theta, rho)
+            # COS_put[i] = heston_cosine_price_vanilla_european(S0, tau, r, q, cp, K[i], var0, vv, kappa, theta, rho, N=160, L=10)
             
     
     # Calculate errors with respect to the Heston 1993 algorithm. 
@@ -149,34 +149,34 @@ def test_heston_pricing_methods():
 
         t1 = time()
         for i in range(nb_runs):
-            heston_cosine_price_fx_vanilla_european(S0, tau, r, q, cp, K, var0, vv, kappa, theta, rho, N=160, L=10)
+            heston_cosine_price_vanilla_european(S0, tau, r, q, cp, K, var0, vv, kappa, theta, rho, N=160, L=10)
         t2 = time()
         print("COS method: ", round(t2-t1,3))
         
         t1 = time()
         for j in range(nb_runs):
             for i in range(len(K)):
-                heston_carr_madan_price_fx_vanilla_european(S0, tau, r, q, cp, K[i], var0, vv, kappa, theta, rho, integration_method=0)
+                heston_carr_madan_price_vanilla_european(S0, tau, r, q, cp, K[i], var0, vv, kappa, theta, rho, integration_method=0)
         t2 = time()
         print("Carr-Madan GK: ", round(t2-t1,3))
         
         t1 = time()
         for j in range(nb_runs):
             for i in range(len(K)):
-                heston_carr_madan_price_fx_vanilla_european(S0, tau, r, q, cp, K[i], var0, vv, kappa, theta, rho, integration_method=1)
+                heston_carr_madan_price_vanilla_european(S0, tau, r, q, cp, K[i], var0, vv, kappa, theta, rho, integration_method=1)
         t2 = time()
         print("Carr-Madan FFT: ", round(t2-t1,3))
         
         t1 = time()
         for j in range(nb_runs):
             for i in range(len(K)):
-                heston_lipton_price_fx_vanilla_european(S0, tau, r, q, cp, K[i], var0, vv, kappa, theta, rho)
+                heston_lipton_price_vanilla_european(S0, tau, r, q, cp, K[i], var0, vv, kappa, theta, rho)
         t2 = time()
         print("Lipton: ", round(t2-t1,3))
         
         t1 = time()
         for j in range(nb_runs):
             for i in range(len(K)):
-                heston1993_price_fx_vanilla_european(S0, tau, r, q, cp, K[i], var0, vv, kappa, theta, rho)
+                heston1993_price_vanilla_european(S0, tau, r, q, cp, K[i], var0, vv, kappa, theta, rho)
         t2 = time()
         print("Heston 1993: ", round(t2-t1,3))

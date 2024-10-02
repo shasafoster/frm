@@ -3,7 +3,7 @@ import os
 if __name__ == "__main__":
     os.chdir(os.environ.get('PROJECT_DIR_FRM'))
 
-from frm.pricing_engine.garman_kohlhagen import gk_solve_implied_σ, gk_solve_strike
+from frm.pricing_engine.garman_kohlhagen import gk_solve_implied_volatility, gk_solve_strike
 from frm.pricing_engine.cosine_method_generic import get_cos_truncation_range
 
 import numpy as np
@@ -29,28 +29,29 @@ def validate_input(var, var_name, validation_fn):
             raise ValueError(f"'{var_name}' has invalid values: {var}")
 
 
-def calibrate_vanilla_heston_smile(
-        Δ: np.array,
-        Δ_convention: str,
-        σ_market: np.array,
+def heston_calibrate_vanilla_smile(
+        volatility_quotes: np.array,
+        delta_of_quotes: np.array,
         S0: float,
         r: float,
         q: float,
         tau: float,
         cp: np.array,
-        pricing_method='carr_madan_gauss_kronrod_quadrature') -> Tuple[float, float, float, float, float, float, np.array, float]:
+        delta_convention: str = None,
+        pricing_method='heston_cosine') -> Tuple[float, float, float, float, float, float, np.array, float]:
     """
     Fit the Heston model to the FX market implied volatility smile.
 
     Parameters:
-    - Δ (np.array): Vector of spot delta values
-    - Δ_convention (str): Delta convention ('prem-adj' or 'prem-adj-fwd')
-    - σ_market (np.array): Vector of market implied volatilities
+    - volatility_quotes (np.array): Vector of volatilities (i.e implied volatility quotes) to calibrate to.
+    - delta_of_quotes (np.array): Vector of delta values of the volatility quotes
     - S0 (float): Initial asset price (specified in # of units of domestic per 1 unit of foreign currency for Garman-Kohlhagen)
     - r (float): Risk-free interest rate (Domestic interest rate for Garman-Kohlhagen)
     - q (float): Interest rate of the asset (Foreign interest rate for Garman-Kohlhagen)
     - tau (float): Time to maturity in years
     - cp (np.array): Vector of option types (1 for call, -1 for put)
+    - delta_convention (str): Delta convention ('prem-adj' or 'prem-adj-fwd')
+    - pricing_method (str): Pricing method for the Heston model. Default is 'carr_madan_gauss_kronrod_quadrature'
 
     Returns:
     - Tuple: Initial variance (var0),
@@ -81,7 +82,7 @@ def calibrate_vanilla_heston_smile(
     It then optimizes the Heston parameters to minimize the sum of squared errors between market and model-implied volatilises.
     """
 
-    def calibration_helper(param, var0, kappa, S0, tau, r, q, cp, K, σ_market, method):
+    def calibration_helper(param, var0, kappa, S0, tau, r, q, cp, K, volatility_quotes, method):
         """
         Compute the sum of squared errors (SSE) between market and model implied volatilities.
 
@@ -139,10 +140,9 @@ def calibrate_vanilla_heston_smile(
             if P[i] < 0.0:
                 IV[i] = -1.0
             else:
-                IV[i] = gk_solve_implied_σ(S0=S0, tau=tau, r_d=r, r_f=q, cp=cp[i], K=strikes[i], X=P[i],
-                                           σ_guess=σ_market[i])
+                IV[i] = gk_solve_implied_volatility(S0=S0, tau=tau, r_d=r, r_f=q, cp=cp[i], K=strikes[i], X=P[i], vol_guess=volatility_quotes[i])
 
-        SSE = np.sum((σ_market - IV)**2)
+        SSE = np.sum((volatility_quotes - IV)**2)
 
         if method == 0:
             return SSE
@@ -159,12 +159,12 @@ def calibrate_vanilla_heston_smile(
         raise ValueError(f"'pricing_method' is invalid: {pricing_method}")
 
     # Calculate strikes for market deltas
-    strikes = gk_solve_strike(S0=S0,tau=tau,r_d=r,r_f=q,σ=σ_market,Δ=Δ,Δ_convention=Δ_convention)
+    strikes = gk_solve_strike(S0=S0,tau=tau,r_d=r,r_f=q,vol=volatility_quotes,delta=delta_of_quotes,delta_convention=delta_convention)
     nb_strikes = len(strikes)
 
     # Set the initial volatility, var0, to the implied ATM market volatility
     # var0 will NOT be solved in the calibration
-    var0 = np.power(σ_market[nb_strikes // 2], 2)
+    var0 = np.power(volatility_quotes[nb_strikes // 2], 2)
 
     # Set mean reversion to the long-run variance to constant value = 1.5
     # The influence of mean reversion can be compensated by a the volatility of variance
@@ -181,7 +181,9 @@ def calibrate_vanilla_heston_smile(
     # Set initial values for vv, theta, rho (the parameters we are solving for)
     init_param = np.array([2 * np.sqrt(var0), 2*var0, 0])
 
-    res = scipy.optimize.minimize(lambda param: calibration_helper(param, var0=var0, kappa=kappa, S0=S0, tau=tau, r=r, q=q, cp=cp, K=strikes, σ_market=σ_market, method=0), init_param)
+    res = scipy.optimize.minimize(
+        lambda param: calibration_helper(param, var0=var0, kappa=kappa, S0=S0, tau=tau, r=r, q=q, cp=cp, K=strikes, volatility_quotes=volatility_quotes, method=0),
+        init_param)
     vv, theta, rho = res.x
 
     if 2 * kappa * theta - vv**2 <= 0.0:
@@ -189,7 +191,7 @@ def calibrate_vanilla_heston_smile(
         # warnings.warn("Feller condition violated.")
         pass
 
-    P, IV, SSE = calibration_helper(param=[vv, theta, rho], var0=var0, kappa=kappa, S0=S0, tau=tau, r=r, q=q, cp=cp, K=strikes, σ_market=σ_market, method=1)
+    P, IV, SSE = calibration_helper(param=[vv, theta, rho], var0=var0, kappa=kappa, S0=S0, tau=tau, r=r, q=q, cp=cp, K=strikes, volatility_quotes=volatility_quotes, method=1)
 
     if SSE == np.inf:
         warnings.warn("Calibration failed, SSE==inf")
