@@ -46,7 +46,7 @@ def calibrate_vanilla_heston_smile(
     - Δ (np.array): Vector of spot delta values
     - Δ_convention (str): Delta convention ('prem-adj' or 'prem-adj-fwd')
     - σ_market (np.array): Vector of market implied volatilities
-    - S0 (float): Spot price
+    - S0 (float): Initial asset price (specified in # of units of domestic per 1 unit of foreign currency for Garman-Kohlhagen)
     - r (float): Risk-free interest rate (Domestic interest rate for Garman-Kohlhagen)
     - q (float): Interest rate of the asset (Foreign interest rate for Garman-Kohlhagen)
     - tau (float): Time to maturity in years
@@ -89,7 +89,7 @@ def calibrate_vanilla_heston_smile(
         param (list): [vol of vol (vv), long-run variance (theta), correlation (rho)]
         var0 (float): Initial variance.
         kappa (float): Mean reversion speed to the long-run variance
-        S0 (float): Spot price.
+        S0 (float): Initial asset price (specified in # of units of domestic per 1 unit of foreign currency for Garman-Kohlhagen)
         tau (float): Time to maturity in years.
         r (float): Risk-free interest rate (Domestic interest rate for Garman-Kohlhagen)
         q (float): Interest rate of the asset (Foreign interest rate for Garman-Kohlhagen)
@@ -110,28 +110,28 @@ def calibrate_vanilla_heston_smile(
         IV = np.zeros(nb_strikes)
 
         if pricing_method == 'heston_cosine':
-            P = heston_cosine_price_fx_vanilla_european(S0=S0, tau=tau, r=r, q=q, cp=cp, K=strikes, var0=var0,
-                                                        vv=vv, kappa=kappa, theta=theta, rho=rho)
+            P = heston_cosine_price_vanilla_european(S0=S0, tau=tau, r=r, q=q, cp=cp, K=strikes, var0=var0,
+                                                     vv=vv, kappa=kappa, theta=theta, rho=rho)
         else:
             # Integral required for each strike hence can't be vectorised
             for i in range(nb_strikes):
                 match pricing_method:
                     case 'heston_analytical_1993':
-                        P[i] = heston1993_price_fx_vanilla_european(S0=S0, tau=tau, r=r, q=q, cp=cp[i], K=K[i],
-                                                                    var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho,
-                                                                    lambda_=lambda_)
+                        P[i] = heston1993_price_vanilla_european(S0=S0, tau=tau, r=r, q=q, cp=cp[i], K=K[i],
+                                                                 var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho,
+                                                                 lambda_=lambda_)
                     case 'heston_carr_madan_gauss_kronrod_quadrature':
-                        P[i] = heston_carr_madan_price_fx_vanilla_european(S0=S0, tau=tau, r=r, q=q, cp=cp[i],
-                                                                           K=K[i], var0=var0, vv=vv, kappa=kappa,
-                                                                           theta=theta, rho=rho, integration_method=0)
+                        P[i] = heston_carr_madan_price_vanilla_european(S0=S0, tau=tau, r=r, q=q, cp=cp[i],
+                                                                        K=K[i], var0=var0, vv=vv, kappa=kappa,
+                                                                        theta=theta, rho=rho, integration_method=0)
                     case 'heston_carr_madan_fft_w_simpsons':
-                        P[i] = heston_carr_madan_price_fx_vanilla_european(S0=S0, tau=tau, r=r, q=q, cp=cp[i],
-                                                                           K=K[i], var0=var0, vv=vv, kappa=kappa,
-                                                                           theta=theta, rho=rho, integration_method=1)
+                        P[i] = heston_carr_madan_price_vanilla_european(S0=S0, tau=tau, r=r, q=q, cp=cp[i],
+                                                                        K=K[i], var0=var0, vv=vv, kappa=kappa,
+                                                                        theta=theta, rho=rho, integration_method=1)
                     case 'heston_lipton':
-                        P[i] = heston_lipton_price_fx_vanilla_european(S0=S0, tau=tau, r=r, q=q, cp=cp[i],
-                                                                       K=K[i], var0=var0, vv=vv, kappa=kappa,
-                                                                       theta=theta, rho=rho)
+                        P[i] = heston_lipton_price_vanilla_european(S0=S0, tau=tau, r=r, q=q, cp=cp[i],
+                                                                    K=K[i], var0=var0, vv=vv, kappa=kappa,
+                                                                    theta=theta, rho=rho)
                     case _:
                         raise ValueError("Invalid 'pricing_method:", pricing_method)
 
@@ -199,16 +199,16 @@ def calibrate_vanilla_heston_smile(
 
 
 @njit(fastmath=True, cache=True)
-def heston_1993_fx_vanilla_european_integral(φ, m, S0, K, tau, r, q, var0, vv, kappa, theta, rho, lambda_=0):
+def heston_1993_vanilla_european_integral(φ, m, S0, K, tau, r, q, var0, vv, kappa, theta, rho, lambda_=0):
     """
-    Defines the integral for pricing an FX Vanilla European option per the analytic Heston 1993 formula
+    Defines the integral for pricing an Vanilla European option per the analytic Heston 1993 formula
     This implementation uses the 2nd form of the Heston Characteristic function, detailed in Albrecher 2006 is used as it is more numerically stable.
     This in an auxiliary function for heston1993_price_fx_vanilla_european(), separated so @jit can be used
 
     Parameters:
     φ (complex): Point at which the auxiliary function is evaluated.
     m (int): Index for specific calculation (either 1 or 2).
-    S0 (float): Spot price of the underlying, specified in # of units of domestic per 1 unit of foreign currency
+    S0 (float): Initial asset price (specified in # of units of domestic per 1 unit of foreign currency for Garman-Kohlhagen)
     K (float): Strike price.
     var0 (float): Initial variance.
     vv (float): Volatility of volatility.
@@ -261,13 +261,13 @@ def heston_1993_fx_vanilla_european_integral(φ, m, S0, K, tau, r, q, var0, vv, 
     return F
 
 
-def heston1993_price_fx_vanilla_european(S0, tau, r, q, cp, K, var0, vv, kappa, theta, rho, lambda_=0):
+def heston1993_price_vanilla_european(S0, tau, r, q, cp, K, var0, vv, kappa, theta, rho, lambda_=0):
     """
-    Calculate the price of a European Vanilla FX option using the analytical Heston 1993 formulae
+    Calculate the price of a European Vanilla option using the analytical Heston 1993 formulae
     The 2nd form of the Heston Characteristic function, detailed in Albrecher 2006 is used as it is more numerically stable.
 
     Parameters:
-    S0 (float): FX spot price, specified in # of units of domestic per 1 unit of foreign currency
+    S0 (float): Initial asset price (specified in # of units of domestic per 1 unit of foreign currency for Garman-Kohlhagen)
     tau (float): Time to expiry in years.
     r (float): Risk-free interest rate (Domestic interest rate for Garman-Kohlhagen)
     q (float): Interest rate of the asset (Foreign interest rate for Garman-Kohlhagen).
@@ -293,8 +293,8 @@ def heston1993_price_fx_vanilla_european(S0, tau, r, q, cp, K, var0, vv, kappa, 
     """
 
     # Equation (18) from Heston, 1993
-    P1 = 0.5 + 1/np.pi * scipy.integrate.quad(func=lambda φ: heston_1993_fx_vanilla_european_integral(φ=φ, m=1, S0=S0, K=K, tau=tau, r=r, q=q, var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho, lambda_=lambda_), a=0, b=np.inf, epsrel=1e-8)[0]
-    P2 = 0.5 + 1/np.pi * scipy.integrate.quad(func=lambda φ: heston_1993_fx_vanilla_european_integral(φ=φ, m=2, S0=S0, K=K, tau=tau, r=r, q=q, var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho, lambda_=lambda_), a=0, b=np.inf, epsrel=1e-8)[0]
+    P1 = 0.5 + 1/np.pi * scipy.integrate.quad(func=lambda φ: heston_1993_vanilla_european_integral(φ=φ, m=1, S0=S0, K=K, tau=tau, r=r, q=q, var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho, lambda_=lambda_), a=0, b=np.inf, epsrel=1e-8)[0]
+    P2 = 0.5 + 1/np.pi * scipy.integrate.quad(func=lambda φ: heston_1993_vanilla_european_integral(φ=φ, m=2, S0=S0, K=K, tau=tau, r=r, q=q, var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho, lambda_=lambda_), a=0, b=np.inf, epsrel=1e-8)[0]
 
     Pplus = (1 - cp) / 2 + cp * P1   # Pplus = N(d1)
     Pminus = (1 - cp) / 2 + cp * P2  # Pminus = N(d2)
@@ -306,9 +306,9 @@ def heston1993_price_fx_vanilla_european(S0, tau, r, q, cp, K, var0, vv, kappa, 
 
 
 
-def heston_carr_madan_price_fx_vanilla_european(S0, tau, r, q, cp, K, var0, vv, kappa, theta, rho, integration_method=0):
+def heston_carr_madan_price_vanilla_european(S0, tau, r, q, cp, K, var0, vv, kappa, theta, rho, integration_method=0):
     """
-     Calculate European FX option price using the Heston model via Carr-Madan approach.
+     Calculate European option price using the Heston model via Carr-Madan approach.
 
      Parameters:
      kappa, theta, vv, rho, var0 (float): Heston parameters.
@@ -342,7 +342,7 @@ def heston_carr_madan_price_fx_vanilla_european(S0, tau, r, q, cp, K, var0, vv, 
     if integration_method == 0:
         # Integrate using adaptive Gauss-Kronrod quadrature
         args = (cp, log_S0, log_K, tau, r, q, var0, vv, kappa, theta, rho, alpha)
-        result, _ = scipy.integrate.quad(func=heston_fft_fx_vanilla_european_integral, a=0, b=np.inf, args=args)
+        result, _ = scipy.integrate.quad(func=heston_fft_vanilla_european_integral, a=0, b=np.inf, args=args)
         y = np.exp(-cp * log_K * alpha) * result / np.pi
     elif integration_method == 1:
         # Fast Fourier Transform with Simpson's rule (as suggested in [2])
@@ -376,14 +376,14 @@ def get_simpson_weights(n):
 
 
 @njit(fastmath=True, cache=True)
-def heston_fft_fx_vanilla_european_integral(v, cp, log_S0, log_K, tau, r, q, var0, vv, kappa, theta, rho, alpha):
+def heston_fft_vanilla_european_integral(v, cp, log_S0, log_K, tau, r, q, var0, vv, kappa, theta, rho, alpha):
     """
-    Auxiliary function for heston_carr_madan_fx_vanilla_european.
+    Auxiliary function for heston_carr_madan_vanilla_european.
 
     Parameters:
         v: Evaluation points for auxiliary function.
         cp: Option type (1 for call, -1 for put).
-        log_S0 (float): Natural Log of the initial spot price (in # of domestic currency units per 1 foreign currency unit)
+        log_S0 (float): Natural Log of the initial asset price (in # of domestic currency units per 1 foreign currency unit for Garman-Kohlhagen)
         log_K: Natural log of strike price (in # of domestic currency units per 1 foreign currency unit)
         tau (float): Time to maturity (in years)
         r (float): Risk-free interest rate (Domestic interest rate for Garman-Kohlhagen)
@@ -558,12 +558,12 @@ def calculate_Uk_european_options(cp, a, b, k):
         return Uk_put
 
 
-def heston_cosine_price_fx_vanilla_european(S0, tau, r, q, cp, K, var0, vv, kappa, theta, rho, N=160, L=10, calculate_via_put_call_parity=True):
+def heston_cosine_price_vanilla_european(S0, tau, r, q, cp, K, var0, vv, kappa, theta, rho, N=160, L=10, calculate_via_put_call_parity=True):
     """
     Computes the call or put option prices using the COS method.
 
     Parameters:
-    S0 (float): Initial FX spot price
+    S0 (float): Initial asset price
     tau (float): time to expiry
     r (float): Risk-free interest rate (Domestic interest rate for Garman-Kohlhagen)
     q (float): Interest rate of the asset (Foreign interest rate for Garman-Kohlhagen)
@@ -640,12 +640,12 @@ def heston_cosine_price_fx_vanilla_european(S0, tau, r, q, cp, K, var0, vv, kapp
     return result
 
 
-def heston_lipton_price_fx_vanilla_european(S0, tau, r, q, cp, K, var0, vv, kappa, theta, rho):
+def heston_lipton_price_vanilla_european(S0, tau, r, q, cp, K, var0, vv, kappa, theta, rho):
     """
-    European FX option price in the Heston model obtained using the Lewis-Lipton formula.
+    European option price in the Heston model obtained using the Lewis-Lipton formula.
 
     Parameters:
-        S0 (float): Spot price.
+        S0 (float): Initial asset price.
         tau (float): Time to maturity (in years).
         r (float): Risk-free interest rate (Domestic interest rate for Garman-Kohlhagen)
         q (float): Interest rate of the asset (Foreign interest rate for Garman-Kohlhagen)
@@ -661,7 +661,7 @@ def heston_lipton_price_fx_vanilla_european(S0, tau, r, q, cp, K, var0, vv, kapp
         float: Option price.
     """
 
-    integral_result, _ = scipy.integrate.quad(func=lambda v: heston_lipton_fx_vanilla_european_integral(v=v, S0=S0, tau=tau, r=r, q=q, K=K, var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho), a=0, b=np.inf, epsrel=1e-8)
+    integral_result, _ = scipy.integrate.quad(func=lambda v: heston_lipton_vanilla_european_integral(v=v, S0=S0, tau=tau, r=r, q=q, K=K, var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho), a=0, b=np.inf, epsrel=1e-8)
     C = np.exp(-q * tau) * S0 - np.exp(-r * tau) * K / np.pi * integral_result
 
     if cp == 1:
@@ -673,7 +673,7 @@ def heston_lipton_price_fx_vanilla_european(S0, tau, r, q, cp, K, var0, vv, kapp
     return P
 
 @njit(fastmath=True, cache=True)
-def heston_lipton_fx_vanilla_european_integral(v, S0, tau, r, q, K, var0, vv, kappa, theta, rho):
+def heston_lipton_vanilla_european_integral(v, S0, tau, r, q, K, var0, vv, kappa, theta, rho):
     """
     Auxiliary function used by HestonVanillaLipton.
 
