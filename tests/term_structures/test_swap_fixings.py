@@ -5,17 +5,12 @@ if __name__ == "__main__":
 
 import numpy as np
 import pandas as pd
-from frm.term_structures.historical_swap_index_fixings import HistoricalSwapIndexFixings
-from frm.enums.utils import DayCountBasis, OISCouponCalcMethod, ForwardRate
+from frm.term_structures.swap_fixings import OISFixings, TermFixings
+from frm.enums.utils import DayCountBasis
+from frm.enums.term_structures import  OISCouponCalcMethod
 
 
-# For importing the test cases defined in excel
-#import sys
-#current_dir = os.path.dirname(os.path.abspath(__file__))
-#sys.path.append(current_dir)
-
-
-def test_HistoricalSwapIndexFixings():
+def test_swap_fixings():
 
     fixings_fp = './tests/term_structures/historical_swap_index_fixings.xlsx'
 
@@ -27,14 +22,16 @@ def test_HistoricalSwapIndexFixings():
     epsilon = 1e-8
     value_date = pd.Timestamp(2024,6,28)
 
-    historical_fixings = HistoricalSwapIndexFixings(fixings=fixings_df, ois_coupon_calc_method=OISCouponCalcMethod.DAILY_COMPOUNDED, day_count_basis=DayCountBasis.ACT_360)
+    sofr_fixings = OISFixings(fixings=fixings_df,
+                              cpn_calc_method=OISCouponCalcMethod.DAILY_COMPOUNDED,
+                              day_count_basis=DayCountBasis.ACT_360)
     
     # Test single
     d1 = pd.DatetimeIndex([pd.Timestamp(2022,10,4)]) 
     d2 = pd.DatetimeIndex([pd.Timestamp(2023,10,3)]) 
-    daily_compounded = historical_fixings.calc_historical_ois_coupon_rate(d1, d2, OISCouponCalcMethod.DAILY_COMPOUNDED)
-    weighted_average = historical_fixings.calc_historical_ois_coupon_rate(d1, d2, OISCouponCalcMethod.WEIGHTED_AVERAGE)
-    simple_average = historical_fixings.calc_historical_ois_coupon_rate(d1, d2, OISCouponCalcMethod.SIMPLE_AVERAGE)
+    daily_compounded = sofr_fixings.get_coupon_rates(d1, d2, OISCouponCalcMethod.DAILY_COMPOUNDED)
+    weighted_average = sofr_fixings.get_coupon_rates(d1, d2, OISCouponCalcMethod.WEIGHTED_AVERAGE)
+    simple_average = sofr_fixings.get_coupon_rates(d1, d2, OISCouponCalcMethod.SIMPLE_AVERAGE)
     
     assert abs(daily_compounded - 0.047019224) < epsilon
     assert abs(weighted_average - 0.045938736) < epsilon
@@ -73,9 +70,9 @@ def test_HistoricalSwapIndexFixings():
     d1 = df['fixing_start']
     d2 = df['fixing_end']
     
-    daily_compounded = historical_fixings.calc_historical_ois_coupon_rate(d1, d2, OISCouponCalcMethod.DAILY_COMPOUNDED)
-    weighted_average = historical_fixings.calc_historical_ois_coupon_rate(d1, d2, OISCouponCalcMethod.WEIGHTED_AVERAGE)
-    simple_average = historical_fixings.calc_historical_ois_coupon_rate(d1, d2, OISCouponCalcMethod.SIMPLE_AVERAGE)
+    daily_compounded = sofr_fixings.get_coupon_rates(d1, d2, OISCouponCalcMethod.DAILY_COMPOUNDED)
+    weighted_average = sofr_fixings.get_coupon_rates(d1, d2, OISCouponCalcMethod.WEIGHTED_AVERAGE)
+    simple_average = sofr_fixings.get_coupon_rates(d1, d2, OISCouponCalcMethod.SIMPLE_AVERAGE)
     
     assert (abs(daily_compounded - df['daily_compounded']) < epsilon).all()
     assert (abs(weighted_average - df['weighted_average']) < epsilon).all()
@@ -87,15 +84,17 @@ def test_HistoricalSwapIndexFixings():
     fixings_df = fixings_df.sort_values('date', ascending=True).reset_index(drop=True)
     fixings_df['fixing'] = fixings_df['fixing'] / 100.0
     
-    historical_fixings = HistoricalSwapIndexFixings(fixings_df, day_count_basis=DayCountBasis.ACT_365)
-    dates = pd.DatetimeIndex([pd.Timestamp(2024,9,25), pd.Timestamp(2024,6,25), pd.Timestamp(2024,9,25), pd.Timestamp(2024,6,25)])
-    fixings = historical_fixings.index_historical_fixings(dates)
-    
-    assert (fixings == np.array([0.0492, 0.0561, 0.0492, 0.0561])).any()
+    bkbm_fixings = TermFixings(fixings=fixings_df)
+    dates = pd.DatetimeIndex([pd.Timestamp('2024-09-25'),
+                              pd.Timestamp('2024-06-25'),
+                              pd.Timestamp('2024-09-25'),
+                              pd.Timestamp('2024-06-25')])
+
+    assert (bkbm_fixings.index_historical_fixings(dates) == np.array([0.0492, 0.0561, 0.0492, 0.0561])).any()
 
 
 if __name__ == "__main__":    
-    test_HistoricalSwapIndexFixings()
+    test_swap_fixings()
 
 
 

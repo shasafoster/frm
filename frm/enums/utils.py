@@ -6,18 +6,9 @@ if __name__ == "__main__":
 from enum import Enum
 import pandas as pd
 import numpy as np
+from frm.enums.helper import  clean_enum_value, is_valid_enum_value, get_enum_member
 
 
-def clean_enum_value(value):
-    if isinstance(value, str):
-        value = value.lower().strip().replace(' ','_')
-        if value.isdigit():
-            value = int(value)
-    elif pd.isna(value) or value is None:
-        value = None
-    return value
-        
-    
 class DayCountBasis(Enum):
     # If storing instrument definitions in CDM, use 'code' to define valid fieldnames
     _30_360 = '30/360'
@@ -74,27 +65,6 @@ class DayCountBasis(Enum):
         raise ValueError(f"Invalid value: {value}. Valid codes are: {valid_values}") 
 
 
-class OISCouponCalcMethod(Enum):
-    DAILY_COMPOUNDED = 'dailycompounded'
-    WEIGHTED_AVERAGE = 'weightedaverage'
-    SIMPLE_AVERAGE = 'simpleaverage'    
-    
-class ForwardRate(Enum):
-    SIMPLE = 'simple'
-    CONTINUOUS = 'continuous'
-    DAILY = 'daily'
-    WEEKLY = 'weekly'
-    MONTHLY = 'monthly'
-    QUARTERLY = 'quarterly'
-    SEMIANNUAL = 'semiannual'
-    ANNUAL = 'annual'
-    
-    # OIS (overnight index swaps) forward rate calculation methods  
-    DAILY_COMPOUNDED = OISCouponCalcMethod.DAILY_COMPOUNDED
-    WEIGHTED_AVERAGE =  OISCouponCalcMethod.WEIGHTED_AVERAGE
-    SIMPLE_AVERAGE = OISCouponCalcMethod.SIMPLE_AVERAGE
-
-
 class CompoundingFrequency(Enum):
     # If storing instrument definitions in CDM, use 'code' to define valid fieldnames
     SIMPLE = 'simple'
@@ -121,19 +91,19 @@ class CompoundingFrequency(Enum):
 
     @classmethod
     def is_valid(cls, value):
-        value = clean_enum_value(value)
-        return value in {enum_member.value for enum_member in cls}
+        return is_valid_enum_value(cls, value)
 
     @classmethod
     def from_value(cls, value):
-        """Create an enum member from the given value, if valid."""
-        cleaned_value= clean_enum_value(value)
-        for enum_member in cls:
-            if enum_member.value == cleaned_value:
-                return enum_member
-        # List all valid codes in case of an error
-        valid_values = [enum_member.value for enum_member in cls]
-        raise ValueError(f"Invalid value: {value}. Valid codes are: {valid_values}")
+        return get_enum_member(cls, value)
+        # """Create an enum member from the given value, if valid."""
+        # cleaned_value= clean_enum_value(value)
+        # for enum_member in cls:
+        #     if enum_member.value == cleaned_value:
+        #         return enum_member
+        # # List all valid codes in case of an error
+        # valid_values = [enum_member.value for enum_member in cls]
+        # raise ValueError(f"Invalid value: {value}. Valid codes are: {valid_values}")
         
 
 class PeriodFrequency(Enum):
@@ -160,33 +130,17 @@ class PeriodFrequency(Enum):
             }
         self.date_offset = date_offset_map[self.value]
 
-    @classmethod
-    def is_valid(cls, value):
-        value = clean_enum_value(value)
-        return value in {enum_member.value for enum_member in cls}
-
-    @classmethod
-    def from_value(cls, value):
-        """Create an enum member from the given value, if valid."""
-        cleaned_value = clean_enum_value(value)
-        for enum_member in cls:
-            if enum_member.value == cleaned_value:
-                return enum_member
-        # List all valid codes in case of an error
-        valid_values = [enum_member.value for enum_member in cls]
-        raise ValueError(f"Invalid value: {value}. Valid codes are: {valid_values}")
-
     def multiply_date_offset(self, factor):
-        """Multiply the current date_offset by the given factor."""        
-        # The reason for this function is x * (date += offset) != date += (x * offset). 
+        """Multiply the current date_offset by the given factor."""
+        # The reason for this function is x * (date += offset) != date += (x * offset).
         # Proof:
         # pd.Timestamp('2023-08-31') + 3 * pd.DateOffset(months=3) == pd.Timestamp('2024-05-29')
         # pd.Timestamp('2023-08-31') + pd.DateOffset(months=3*3) == pd.Timestamp('2024-05-31')
         # The 1st calculation regresses to the shortest end-of-month (Feb)
-        
+
         if self.date_offset is None:
             return None  # Handle None for ZERO_COUPON case
-        
+
         return pd.DateOffset(
             days=self.date_offset.kwds.get('days', 0) * factor,
             weeks=self.date_offset.kwds.get('weeks', 0) * factor,
@@ -194,6 +148,14 @@ class PeriodFrequency(Enum):
             years=self.date_offset.kwds.get('years', 0) * factor
         )
 
+    @classmethod
+    def is_valid(cls, value):
+        value = clean_enum_value(value)
+        return value in {enum_member.value for enum_member in cls}
+
+    @classmethod
+    def from_value(cls, value):
+        return get_enum_member(cls, value)
 
 
 class DayRoll(Enum):
@@ -231,32 +193,19 @@ class DayRoll(Enum):
     _31 = 31
     EOM = 'eom' # End of month
 
-
     @classmethod
     def default(cls):
         return cls.NONE # Return the default enum value
 
     @classmethod
     def is_valid(cls, value):
-        value = clean_enum_value(value)
-        return value in {enum_member.value for enum_member in cls}
+        return is_valid_enum_value(cls, value)
 
     @classmethod
     def from_value(cls, value):
-        """Create an enum member from the given value, if valid."""
-        cleaned_value= clean_enum_value(value)
-        if cleaned_value is None:
-            return cls.default()        
-        for enum_member in cls:
-            if enum_member.value == cleaned_value:
-                return enum_member
-
-        # List all valid codes in case of an error
-        valid_values = [enum_member.value for enum_member in cls]
-        raise ValueError(f"Invalid value: {value}. Valid codes are: {valid_values}") 
+        return get_enum_member(cls, value)
         
         
-    
     
 class RollConvention(Enum):
     NO_ROLL = 'no_roll'
@@ -271,22 +220,11 @@ class RollConvention(Enum):
 
     @classmethod
     def is_valid(cls, value):
-        value = clean_enum_value(value)
-        return value in {enum_member.value for enum_member in cls}
- 
+        return is_valid_enum_value(cls, value)
+
     @classmethod
     def from_value(cls, value):
-        """Create an enum member from the given value, if valid."""
-        cleaned_value= clean_enum_value(value)
-        for enum_member in cls:
-            if enum_member.value == cleaned_value:
-                return enum_member
-        if cleaned_value is None:
-            return cls.default()
-            
-        # List all valid codes in case of an error
-        valid_values = [enum_member.value for enum_member in cls]
-        raise ValueError(f"Invalid value: {value}. Valid codes are: {valid_values}")  
+        return get_enum_member(cls, value)
 
 
 
@@ -300,22 +238,11 @@ class TimingConvention(Enum):
     
     @classmethod
     def is_valid(cls, value):
-        value = clean_enum_value(value)
-        return value in {enum_member.value for enum_member in cls} 
-    
+        return is_valid_enum_value(cls, value)
+
     @classmethod
     def from_value(cls, value):
-        """Create an enum member from the given value, if valid."""
-        cleaned_value= clean_enum_value(value)
-        for enum_member in cls:
-            if enum_member.value == cleaned_value:
-                return enum_member
-        if cleaned_value is None:
-            return cls.default()
-            
-        # List all valid codes in case of an error
-        valid_values = [enum_member.value for enum_member in cls]
-        raise ValueError(f"Invalid value: {value}. Valid codes are: {valid_values}") 
+        return get_enum_member(cls, value)
         
     
     
@@ -326,8 +253,7 @@ class StubType(Enum):
     DEFAULT = 'default'
     DEFINED_PER_FIRST_CPN_END_DATE = 'defined_per_first_cpn_end_date'
     DEFINED_PER_LAST_CPN_START_DATE = 'defined_per_last_cpn_start_date'
-        
-    
+
     @classmethod
     def default(cls):
         return cls.DEFAULT # Return the default enum value    
@@ -338,22 +264,11 @@ class StubType(Enum):
     
     @classmethod
     def is_valid(cls, value):
-        value = clean_enum_value(value)
-        return value in {enum_member.value for enum_member in cls}
+        return is_valid_enum_value(cls, value)
 
     @classmethod
     def from_value(cls, value):
-        """Create an enum member from the given value, if valid."""
-        cleaned_value= clean_enum_value(value)
-        if cleaned_value is None:
-            return cls.default()
-        for enum_member in cls:
-            if enum_member.value == cleaned_value:
-                return enum_member
-            
-        # List all valid codes in case of an error
-        valid_values = [enum_member.value for enum_member in cls]
-        raise ValueError(f"Invalid value: {value}. Valid codes are: {valid_values}")    
+        return get_enum_member(cls, value)
         
         
 

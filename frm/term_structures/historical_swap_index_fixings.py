@@ -12,11 +12,11 @@ from frm.enums.utils import DayCountBasis, OISCouponCalcMethod
 
 
 @dataclass
-class HistoricalSwapIndexFixings:
+class OISFixings:
     fixings: pd.DataFrame
     day_count_basis: DayCountBasis
     ois_coupon_calc_method: OISCouponCalcMethod=None
-
+    name: str = None
 
     def __post_init__(self):
         required_columns = {'date', 'fixing'}
@@ -115,5 +115,5 @@ class HistoricalSwapIndexFixings:
 
         return historical_coupon_rates
 
-    
+
     

@@ -52,7 +52,7 @@ class ZeroCurve:
     
     def __process_input_data(self, data, compounding_frequency):
         
-        only_one_of_columns_X = ['days', 'tenor', 'years', 'date']
+        only_one_of_columns_X = ['tenor', 'days', 'days', 'years']
         only_one_of_columns_Y = ['zero_rate','discount_factor']
         
         if len(data.columns.to_list()) != 2:
@@ -91,8 +91,7 @@ class ZeroCurve:
             case 'years':
                 pass
             
-        data = data.sort_values(by='years', ascending=True)       
-        data = data.reset_index(drop=True)
+        data = data.sort_values(by='years', ascending=True).reset_index(drop=True)
         data = convert_column_to_consistent_data_type(data)
             
         match Y_column_name:
