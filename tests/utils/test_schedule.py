@@ -3,49 +3,59 @@ import os
 if __name__ == "__main__":
     os.chdir(os.environ.get('PROJECT_DIR_FRM')) 
   
-from frm.utils.schedule import schedule, generate_date_schedule, PeriodFrequency
+from frm.utils.schedule import get_schedule, generate_date_schedule, PeriodFrequency, StubType, RollConvention, DayRoll, PaymentType
 import pandas as pd
 import pytest    
-  
-# For importing the test cases defined in excel
-import sys
-current_dir = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(current_dir)
-
-
 
 def test_schedule():
-    # Step 1: Read in the test cases defined in the excel spreadsheet 
-    df = pd.read_excel(current_dir + '\\payment_schedule_test_definitions.xlsx', sheet_name='test_cases')
+    # Step 1: Read in the test cases defined in the excel spreadsheet
+    fp = './tests/utils/payment_schedule_test_definitions.xlsx'
+
+    df = pd.read_excel(io=fp, sheet_name='test_cases')
     df_test_description = df[['test_#','test_bucket','description']]
     function_parameters = ['start_date', 'end_date', 'frequency', 'roll_convention', 'day_roll', 'first_cpn_end_date', 'last_cpn_start_date', 'first_stub_type', 'last_stub_type', 'roll_user_specified_dates']
+
     df_input = df[['test_#'] + function_parameters]
     df_input = df_input[~df_input.drop(columns=['test_#']).isna().all(axis=1)]
-    
-    df_correct_results = pd.read_excel(current_dir + "\\payment_schedule_test_definitions.xlsx", sheet_name='correct_test_results')
+    df_correct_results = pd.read_excel(io=fp, sheet_name='correct_test_results')
     df_correct_results = df_correct_results[['test_#','period_start','period_end']]
-    
+
     # Step 2: Build test case dictionaries from dataframe
     test_cases = []
-    for test_num in df_test_description['test_#'].unique(): 
+    for test_num in df_test_description['test_#'].unique():
         test_descriptions = df_test_description[df_test_description['test_#'] == test_num].iloc[0].to_dict()
         function_parameters = df_input[df_input['test_#'] == test_num].iloc[0].to_dict()
         correct_results = df_correct_results[df_correct_results['test_#'] == test_num].reset_index(drop=True)
-        
+
         test_cases.append({
             'test_descriptions': test_descriptions,
             'function_parameters': function_parameters,
             'correct_results': correct_results
         })
-    
+
     for case in test_cases:
         # Call the function with the test case inputs
         function_parameters = case['function_parameters']
         function_parameters.pop('test_#')
-        df_schedule = schedule(**function_parameters)
-    
+        function_parameters = {k:v for k,v in function_parameters.items() if not pd.isna(v)}
+
+        if 'frequency' in function_parameters.keys():
+            function_parameters['frequency'] = PeriodFrequency.from_value(function_parameters['frequency'])
+        if 'roll_convention' in function_parameters.keys():
+            function_parameters['roll_convention'] = RollConvention.from_value(function_parameters['roll_convention'])
+        if 'first_stub_type' in function_parameters.keys():
+            function_parameters['first_stub_type'] = StubType.from_value(function_parameters['first_stub_type'])
+        if 'last_stub_type' in function_parameters.keys():
+            function_parameters['last_stub_type'] = StubType.from_value(function_parameters['last_stub_type'])
+        if 'day_roll' in function_parameters.keys():
+            function_parameters['day_roll'] = DayRoll.from_value(function_parameters['day_roll'])
+        if 'payment_type' in function_parameters.keys():
+            function_parameters['payment_type'] = PaymentType.from_value(function_parameters['payment_type'])
+
+        df_schedule = get_schedule(**function_parameters)
+
         correct_result = case['correct_results'].drop('test_#', axis=1)
-    
+
         # Compare the result with the expected DataFrame
         try:
             pd.testing.assert_frame_equal(df_schedule, correct_result)
@@ -53,8 +63,8 @@ def test_schedule():
         except AssertionError as e:
             print(f"Test failed for inputs: {case['function_parameters']}")
             raise e
-        
-        
+
+
 def test_generate_date_schedule_forward_months():
     start_date = pd.Timestamp('2023-01-01')
     end_date = pd.Timestamp('2023-06-30')

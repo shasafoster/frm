@@ -290,7 +290,7 @@ class RollConvention(Enum):
 
 
 
-class PaymentType(Enum):
+class TimingConvention(Enum):
     IN_ARREARS = 'in_arrears'
     IN_ADVANCE = 'in_advance'
     

@@ -48,8 +48,11 @@ class SwapCurve:
         self.day_count_basis = self.zero_curve.day_count_basis
 
 
+    def get_discount_factors(self, dates):
+        return self.zero_curve.discount_factor(dates)
 
-    def get_fixings(self, period_start, period_end, forward_rate_type=None):
+
+    def get_fixings(self, period_start, period_end=None, forward_rate_type=None):
 
         if forward_rate_type is None:
             forward_rate_type = self.forward_rate_type

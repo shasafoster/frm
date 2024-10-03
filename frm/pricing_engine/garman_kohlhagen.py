@@ -142,14 +142,14 @@ def gk_price(S0: float,
             # where X is the option price (whose units is DOM),
             # and S0 is the fx spot price (whose units is DOM/FOR)
             # We multiply by S0 so to return the Δ a percentage applicable to the foreign currency notional
-            analytical_greeks['spot_delta'] = S0 * cp * np.exp(-r_f * tau) * norm.cdf(cp * d1)
+            analytical_greeks['spot_delta'] = S0 * cp * np.exp(-q * tau) * norm.cdf(cp * d1)
             analytical_greeks['forward_delta'] = S0 * cp * norm.cdf(cp * d1) 
     
             # Vega, ν, is the change in an options price for a small change in the volatility input
             # ν = ∂X/∂σ ≈ (X(σ_plus) − X(σ_minus)) / (σ_plus - σ_minus)
             # In practice, vega is normalised to measure the change in price for a 1% change in the volatility input
             # Hence we have scaled the numerical vega to a 1% change
-            analytical_formula = S0 * np.sqrt(tau) * norm.pdf(d1) * np.exp(-r_f * tau) # identical for calls and puts
+            analytical_formula = S0 * np.sqrt(tau) * norm.pdf(d1) * np.exp(-q * tau) # identical for calls and puts
             analytical_greeks['vega'] = analytical_formula * 0.01 # normalised to 1% change
     
             # Theta, θ, is the change in an options price for a small change in the time to expiry
@@ -159,22 +159,22 @@ def gk_price(S0: float,
             #               i.e., the time value price tomorrow minus the time value price today.
             # 2. Cost of carry: the interest rate sensitivity that causes the value of the portfolio to change as time progresses, 
             #                   e.g., the cost of carry on spots and forwards is included in the theta value.
-            analytical_formula = -(S0*np.exp(-r_d*tau)*norm.pdf(d1 * cp)*σ)/(2*np.sqrt(tau)) \
-                + r_f * np.exp(-r_f * tau) * S0 * norm.cdf(d1 * cp) \
-                - r_d * np.exp(-r_d * tau) * K * norm.cdf(d2 * cp)
+            analytical_formula = -(S0*np.exp(-r*tau)*norm.pdf(d1 * cp)*σ)/(2*np.sqrt(tau)) \
+                + r_f * np.exp(-q * tau) * S0 * norm.cdf(d1 * cp) \
+                - r_d * np.exp(-r * tau) * K * norm.cdf(d2 * cp)
             analytical_greeks['theta'] = analytical_formula * θ_shift
                 
             # Gamma, Γ, is the change in an option's delta for a small change in the underlying assets price.
             # Gamma := ∂Δ/∂S ≈ (Δ(S_plus) − Δ(S_minus)) / (S_plus - S_minus)
             # In practice, gamma is  normalised to measure the change in Δ, for a 1% change in the underlying assets price.
             # Hence we have multiplied the analytical gamma formula by 'S * 0.01'
-            analytical_formula = np.exp(-r_f * tau) * norm.pdf(d1)  / (S0 * σ * np.sqrt(tau)) # identical for calls and puts
+            analytical_formula = np.exp(-q * tau) * norm.pdf(d1)  / (S0 * σ * np.sqrt(tau)) # identical for calls and puts
             analytical_greeks['gamma'] = (0.01 * S0) * analytical_formula # normalised for 1% change
             
             # Rho, ρ, is the rate at which the price of an option changes relative to a change in the interest rate. 
             # In practice, Rho is normalised to measure the change in price for a 1% change in the underlying interest rate.
-            # Hence we have multiplied the analytical formula result by 0.01 (i.e 1%)
-            analytical_formula = K * tau * np.exp(-r_f * tau) * norm.cdf(cp * d2)
+            # Hence we have multiplied the analytical formula result by 0.01 (i.e. 1%)
+            analytical_formula = K * tau * np.exp(-q * tau) * norm.cdf(cp * d2)
             analytical_greeks['rho'] = analytical_formula * 0.01
             
             analytical_greeks = pd.DataFrame.from_dict(analytical_greeks)
@@ -184,12 +184,11 @@ def gk_price(S0: float,
         if numerical_greeks_flag:
             numerical_greeks = {}
             
-            if F is None:
-                F_upshift = F*(1+Δ_shift)
-                F_downshift = F*(1-Δ_shift)
+            if F is not None:
+                F_upshift, F_downshift = F * (1 + Δ_shift), F * (1 - Δ_shift)
             else:
-                F_upshift = None
-                F_downshift = None
+                F_upshift, F_downshift = None, None
+
             results_S0_plus = gk_price(S0=S0*(1+Δ_shift), tau=tau, r_d=r_d, r_f=r_f , cp=cp, K=K, vol=σ, F=F_upshift,analytical_greeks_flag=True)
             X_S_plus, analytical_greeks_S0_plus = results_S0_plus['option_value'], results_S0_plus['analytical_greeks']
             results_S0_minus = gk_price(S0=S0*(1-Δ_shift), tau=tau, r_d=r_d, r_f=r_f, cp=cp, K=K, vol=σ, F=F_downshift,analytical_greeks_flag=True)
