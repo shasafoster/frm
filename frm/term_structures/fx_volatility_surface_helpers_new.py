@@ -75,29 +75,30 @@ def fx_term_structure_helper(df: pd.DataFrame,
     column_order = time_column_order + [col for col in df.columns if col not in time_column_order]
 
     df = df[column_order]
+    df = df.sort_values('delivery_date').reset_index(drop=True)
 
     return df
 
 
 
 
-def fx_forward_curve_helper(df: pd.DataFrame,
+def fx_forward_curve_helper(fx_forward_curve_df: pd.DataFrame,
                             curve_date: pd.Timestamp,
                             spot_offset: int,
                             busdaycal: np.busdaycalendar) -> pd.DataFrame:
 
-    df = convert_column_to_consistent_data_type(df)
+    fx_forward_curve_df = convert_column_to_consistent_data_type(fx_forward_curve_df)
 
     mandatory_columns = ['fx_forward_rate']
     for column in mandatory_columns:
-        assert column in df.columns, f'{column} is missing in fx_forward_curve'
+        assert column in fx_forward_curve_df.columns, f'{column} is missing in fx_forward_curve'
 
-    df = fx_term_structure_helper(df=df,
-                                  curve_date=curve_date,
-                                  spot_offset=spot_offset,
-                                  busdaycal=busdaycal,
-                                  rate_set_date_str='fixing_date')
-    return df
+    fx_forward_curve_df = fx_term_structure_helper(df=fx_forward_curve_df,
+                                                   curve_date=curve_date,
+                                                   spot_offset=spot_offset,
+                                                   busdaycal=busdaycal,
+                                                   rate_set_date_str='fixing_date')
+    return fx_forward_curve_df
     
     
 def validate_ccy_pair(ccy_pair):
@@ -200,11 +201,10 @@ def check_delta_convention(df: pd.DataFrame, ccy_pair: str) -> pd.DataFrame:
     return df
 
 
-def extract_vol_smile_columns(df: pd.DataFrame,
-                              call_put_pattern: str = r'^(0?[1-9]|[1-4]\d)[_ ]?(delta|Δ)[_ ]?(call|c|put|p)$',
-                              atm_delta_neutral_column_pattern: str = r'^atm[_ ]?(delta|Δ)[_ ]?neutral$'):
-
-    vol_smile_columns = []
+def clean_and_extract_vol_smile_columns(df: pd.DataFrame,
+                                        call_put_pattern: str = r'^(0?[1-9]|[1-4]\d)[_ ]?(delta|Δ)[_ ]?(call|c|put|p)$',
+                                        atm_delta_neutral_column_pattern: str = r'^atm[_ ]?(delta|Δ)[_ ]?neutral$'):
+    quotes_column_names = []
     for col_name in df.columns:
         match = re.match(call_put_pattern, col_name)
         if match:
@@ -218,15 +218,24 @@ def extract_vol_smile_columns(df: pd.DataFrame,
             # Return the column name in the new format
             new_col_name = f'{delta_value}_delta_{option_type_full}'
             df.rename(columns={col_name: new_col_name}, inplace=True)
-            vol_smile_columns.append(f'{delta_value}_delta_{option_type_full}')
+            quotes_column_names.append(f'{delta_value}_delta_{option_type_full}')
 
         elif re.match(atm_delta_neutral_column_pattern, col_name):
             new_col_name = 'atm_delta_neutral'
             df.rename(columns={col_name: new_col_name}, inplace=True)
-            vol_smile_columns.append(new_col_name)
+            quotes_column_names.append(new_col_name)
 
-    valid_columns = (['tenor'] if 'tenor' in df.columns else []) + ['expiry_date', 'delivery_date','delta_convention'] + vol_smile_columns + ['warnings']
-    return df[valid_columns], vol_smile_columns
+    call_put_flag = np.array([1 if 'call' in col_name else -1 if 'put' in col_name else 0 for col_name in quotes_column_names])
+    signed_delta = np.array(
+        [0.5 if col_name == 'atm_delta_neutral' else call_put_flag[i] * float(col_name.split('_')[0]) / 100 for i, col_name
+         in enumerate(quotes_column_names)]
+    )
+    quote_details = pd.DataFrame({'quotes_column_names': quotes_column_names, 'quotes_call_put_flag': call_put_flag, 'quotes_signed_delta': signed_delta})
+    quote_details['order'] = 100 / quote_details['quotes_signed_delta']
+    quote_details = quote_details.sort_values('order', ascending=True).reset_index(drop=True)
+    quote_details.drop(labels='order', axis=1, inplace=True)
+
+    return df, quote_details
 
 
 def interp_fx_forward_curve_df(
@@ -327,35 +336,3 @@ def flat_forward_interp(t1: Union[float, np.array],
     return np.sqrt((vol_t1 ** 2 * t1 + vol_t12 ** 2 * (t - t1)) / t)
 
 
-def create_vol_smile_daily(vol_surf, vol_smile_columns, curve_date, day_count_basis):
-    min_expiry = vol_surf['expiry_date'].min()
-    max_expiry = vol_surf['expiry_date'].max()
-
-    expiry_dates = pd.date_range(min_expiry, max_expiry, freq='d')
-    years = year_fraction(curve_date, expiry_dates, day_count_basis)
-    volatility_smile_daily = pd.DataFrame({'expiry_date_daily': expiry_dates, 'expiry_years_daily': years})
-
-    volatility_smile_pillar = vol_surf.copy()
-    volatility_smile_pillar['expiry_years'] = year_fraction(curve_date, volatility_smile_pillar['expiry_date'],
-                                                            day_count_basis)
-
-    # Merge to find closest smaller and larger tenors for each target tenor
-    lower_pillar = pd.merge_asof(volatility_smile_daily, volatility_smile_pillar, left_on='expiry_date_daily',
-                                 right_on='expiry_date', direction='backward')
-    upper_pillar = pd.merge_asof(volatility_smile_daily, volatility_smile_pillar, left_on='expiry_date_daily',
-                                 right_on='expiry_date', direction='forward')
-
-    # Convert to numpy for efficient calculations
-    t1 = lower_pillar['expiry_years'].to_numpy()
-    t2 = upper_pillar['expiry_years'].to_numpy()
-    t = volatility_smile_daily['expiry_years_daily'].to_numpy()
-    t1 = t1[:, np.newaxis]
-    t2 = t2[:, np.newaxis]
-    t = t[:, np.newaxis]
-    vol_t1 = lower_pillar[vol_smile_columns].to_numpy()
-    vol_t2 = upper_pillar[vol_smile_columns].to_numpy()
-
-    # Interpolate the volatility smile
-    volatility_smile_daily[vol_smile_columns] = flat_forward_interp(t1, vol_t1, t2, vol_t2, t)
-
-    return volatility_smile_daily

@@ -12,7 +12,7 @@ from typing import Union
 import warnings
 import re
 
-VALID_DELTA_CONVENTIONS = ['regular_spot_delta','regular_forward_delta','premium_adjusted_spot_delta','premium_adjusted_forward_delta'] 
+VALID_DELTA_CONVENTIONS = ['regular_spot','regular_forward','premium_adjusted_spot','premium_adjusted_forward']
 
 
 

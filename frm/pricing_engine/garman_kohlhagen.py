@@ -217,12 +217,12 @@ def gk_price(S0: float,
             
         return results
             
-def gk_solve_strike(S0: float, 
+def gk_solve_strike(S0: float,
                    tau: float,
                    r_d: float,
                    r_f: float,
-                   vol: float,
-                   signed_delta: float,
+                   vol: [float, np.ndarray],
+                   signed_delta: [float, np.ndarray],
                    delta_convention: str,
                    F: float = None
                    ) -> float:

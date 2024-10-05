@@ -14,11 +14,36 @@ from typing import Tuple
 import warnings
 
 VALID_HESTON_PRICING_METHODS = [
-    'heston_analytical_1993',
+    'heston_1993',
     'heston_carr_madan_gauss_kronrod_quadrature',
     'heston_carr_madan_fft_w_simpsons',
-    'heston_cosine'
+    'heston_cosine',
+    'heston_lipton'
 ]
+
+
+def heston_price_vanilla_european(S0, tau, r, q, cp, K, var0, vv, kappa, theta, rho, lambda_, pricing_method):
+    match pricing_method:
+        case 'heston_cosine':
+            return heston_cosine_price_vanilla_european(S0=S0, tau=tau, r=r, q=q, cp=cp, K=K, var0=var0, vv=vv,
+                                                        kappa=kappa, theta=theta, rho=rho)
+        case 'heston_1993':
+            return heston1993_price_vanilla_european(S0=S0, tau=tau, r=r, q=q, cp=cp, K=K, var0=var0, vv=vv,
+                                                     kappa=kappa, theta=theta, rho=rho, lambda_=lambda_)
+        case 'heston_carr_madan_gauss_kronrod_quadrature':
+            return heston_carr_madan_price_vanilla_european(S0=S0, tau=tau, r=r, q=q, cp=cp, K=K, var0=var0, vv=vv,
+                                                            kappa=kappa, theta=theta, rho=rho, integration_method=0)
+        case 'heston_carr_madan_fft_w_simpsons':
+            return heston_carr_madan_price_vanilla_european(S0=S0, tau=tau, r=r, q=q, cp=cp, K=K, var0=var0, vv=vv,
+                                                            kappa=kappa, theta=theta, rho=rho, integration_method=1)
+        case 'heston_lipton':
+            return heston_lipton_price_vanilla_european(S0=S0, tau=tau, r=r, q=q, cp=cp, K=K, var0=var0, vv=vv,
+                                                        kappa=kappa, theta=theta, rho=rho)
+        case _:
+            raise ValueError("Invalid 'pricing_method:", pricing_method)
+
+
+
 
 def validate_input(var, var_name, validation_fn):
     if np.isscalar(var):
@@ -116,25 +141,8 @@ def heston_calibrate_vanilla_smile(
         else:
             # Integral required for each strike hence can't be vectorised
             for i in range(nb_strikes):
-                match pricing_method:
-                    case 'heston_analytical_1993':
-                        P[i] = heston1993_price_vanilla_european(S0=S0, tau=tau, r=r, q=q, cp=cp[i], K=K[i],
-                                                                 var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho,
-                                                                 lambda_=lambda_)
-                    case 'heston_carr_madan_gauss_kronrod_quadrature':
-                        P[i] = heston_carr_madan_price_vanilla_european(S0=S0, tau=tau, r=r, q=q, cp=cp[i],
-                                                                        K=K[i], var0=var0, vv=vv, kappa=kappa,
-                                                                        theta=theta, rho=rho, integration_method=0)
-                    case 'heston_carr_madan_fft_w_simpsons':
-                        P[i] = heston_carr_madan_price_vanilla_european(S0=S0, tau=tau, r=r, q=q, cp=cp[i],
-                                                                        K=K[i], var0=var0, vv=vv, kappa=kappa,
-                                                                        theta=theta, rho=rho, integration_method=1)
-                    case 'heston_lipton':
-                        P[i] = heston_lipton_price_vanilla_european(S0=S0, tau=tau, r=r, q=q, cp=cp[i],
-                                                                    K=K[i], var0=var0, vv=vv, kappa=kappa,
-                                                                    theta=theta, rho=rho)
-                    case _:
-                        raise ValueError("Invalid 'pricing_method:", pricing_method)
+                P[i] = heston_price_vanilla_european(S0=S0, tau=tau, r=r, q=q, cp=cp[i], K=K[i], var0=var0, vv=vv, kappa=kappa,
+                                            theta=theta, rho=rho, lambda_=lambda_, pricing_method=pricing_method)
 
         for i in range(nb_strikes):
             if P[i] < 0.0:
@@ -159,7 +167,7 @@ def heston_calibrate_vanilla_smile(
         raise ValueError(f"'pricing_method' is invalid: {pricing_method}")
 
     # Calculate strikes for market deltas
-    strikes = gk_solve_strike(S0=S0,tau=tau,r_d=r,r_f=q,vol=volatility_quotes,delta=delta_of_quotes,delta_convention=delta_convention)
+    strikes = gk_solve_strike(S0=S0,tau=tau,r_d=r,r_f=q,vol=volatility_quotes,signed_delta=delta_of_quotes,delta_convention=delta_convention)
     nb_strikes = len(strikes)
 
     # Set the initial volatility, var0, to the implied ATM market volatility
@@ -705,9 +713,6 @@ def heston_lipton_vanilla_european_integral(v, S0, tau, r, q, K, var0, vv, kappa
     payoff = np.real(np.exp(exponent)) / (v**2 + 0.25)
 
     return payoff
-
-
-
 
 
 
