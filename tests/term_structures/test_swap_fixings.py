@@ -18,14 +18,10 @@ def test_swap_fixings():
     fixings_df = pd.read_excel(fixings_fp, sheet_name='usd_sofr')
     fixings_df = fixings_df.sort_values('date', ascending=True).reset_index(drop=True)
     fixings_df['fixing'] = fixings_df['fixing'] / 100.0
-    
-    epsilon = 1e-8
-    value_date = pd.Timestamp(2024,6,28)
+    sofr_fixings = OISFixings(fixings=fixings_df, day_count_basis=DayCountBasis.ACT_360)
 
-    sofr_fixings = OISFixings(fixings=fixings_df,
-                              cpn_calc_method=OISCouponCalcMethod.DAILY_COMPOUNDED,
-                              day_count_basis=DayCountBasis.ACT_360)
-    
+    epsilon = 1e-8
+
     # Test single
     d1 = pd.DatetimeIndex([pd.Timestamp(2022,10,4)]) 
     d2 = pd.DatetimeIndex([pd.Timestamp(2023,10,3)]) 
@@ -84,13 +80,14 @@ def test_swap_fixings():
     fixings_df = fixings_df.sort_values('date', ascending=True).reset_index(drop=True)
     fixings_df['fixing'] = fixings_df['fixing'] / 100.0
     
-    bkbm_fixings = TermFixings(fixings=fixings_df)
+    bkbm_fixings = TermFixings(fixings=fixings_df, day_count_basis=DayCountBasis.ACT_365)
     dates = pd.DatetimeIndex([pd.Timestamp('2024-09-25'),
                               pd.Timestamp('2024-06-25'),
                               pd.Timestamp('2024-09-25'),
                               pd.Timestamp('2024-06-25')])
 
-    assert (bkbm_fixings.index_historical_fixings(dates) == np.array([0.0492, 0.0561, 0.0492, 0.0561])).any()
+    expected_result = np.array([0.0492, 0.0561, 0.0492, 0.0561])
+    assert (abs(bkbm_fixings.index_historical_fixings(dates) - expected_result) < epsilon).all()
 
 
 if __name__ == "__main__":    

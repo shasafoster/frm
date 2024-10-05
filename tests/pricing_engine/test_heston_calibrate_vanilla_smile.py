@@ -70,7 +70,7 @@ def test_heston_calibrate_vanilla_smile():
         ax = fig.add_subplot(111, projection='3d')
 
         # Surface plot
-        surf = ax.plot_surface(T, D, vols, cmap='viridis')
+        surf = ax.plot_surface(T, D, vols, cmap='viridis') # noqa: F841
 
         # Labels and title
         ax.set_xlabel('Maturity (Years)')

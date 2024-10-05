@@ -4,9 +4,10 @@ if __name__ == "__main__":
     os.chdir(os.environ.get('PROJECT_DIR_FRM')) 
         
 from frm.utils.daycount import day_count, year_fraction
-from frm.utils.tenor import get_tenor_settlement_date
+from frm.utils.tenor import *
 from frm.utils.utilities import convert_column_to_consistent_data_type
-from frm.enums.utils import DayCountBasis, CompoundingFrequency, ForwardRate
+from frm.enums.utils import DayCountBasis, CompoundingFrequency
+from frm.enums.term_structures import OISCouponCalcMethod, TermRate
 from frm.term_structures.zero_curve_helpers import zero_rate_from_discount_factor, discount_factor_from_zero_rate
 
 import scipy 
@@ -36,7 +37,8 @@ class ZeroCurve:
     busdaycal: np.busdaycalendar=np.busdaycalendar() # used in simple-average forward rate calculation
     interpolation_method: str='cubic_spline_on_zero_rates'
     extrapolation_method: str='none'
-    
+
+
     # Attributes set in __post_init__
     cubic_spline_definition: str=field(init=False)
     
@@ -52,7 +54,7 @@ class ZeroCurve:
     
     def __process_input_data(self, data, compounding_frequency):
         
-        only_one_of_columns_X = ['tenor', 'days', 'days', 'years']
+        only_one_of_columns_X = ['tenor', 'date', 'days', 'years']
         only_one_of_columns_Y = ['zero_rate','discount_factor']
         
         if len(data.columns.to_list()) != 2:
@@ -77,9 +79,10 @@ class ZeroCurve:
         
         match X_column_name:
             case 'tenor':
-                date, tenor, spot_date = get_tenor_settlement_date(self.curve_date, data['tenor'].values, self.curve_ccy, self.busdaycal)
-                data['tenor'] = tenor
-                data['date'] = date
+                data.loc[:,'tenor'] = data['tenor'].apply(clean_tenor)
+                date_offset = data['tenor'].apply(tenor_to_date_offset)
+                dates = self.curve_date + date_offset
+                data['date'] = np.busday_offset(dates.values.astype('datetime64[D]'), offsets=0, roll='following', busdaycal=self.busdaycal)
                 __calculate_days()
                 __calculate_years()
             case 'date':
@@ -184,12 +187,12 @@ class ZeroCurve:
     def forward_rate(self,
                      period_start: pd.DatetimeIndex,
                      period_end: pd.DatetimeIndex,
-                     forward_rate_type: ForwardRate=ForwardRate.SIMPLE) -> np.array:
+                     forward_rate_type: [TermRate, OISCouponCalcMethod]) -> np.array:
 
         assert len(period_start) == len(period_end)
         assert (period_start >= self.curve_date).all()
                     
-        if forward_rate_type in {ForwardRate.WEIGHTED_AVERAGE, ForwardRate.SIMPLE_AVERAGE}:
+        if forward_rate_type in {OISCouponCalcMethod.WEIGHTED_AVERAGE, OISCouponCalcMethod.SIMPLE_AVERAGE}:
             
             dates = pd.date_range(start=period_start.min(), end=period_end.max(), freq='D')
             discount_factors = self.discount_factor(dates=dates)
@@ -212,9 +215,9 @@ class ZeroCurve:
                 mask = np.logical_and(helper_df['date'] >= start_date,
                                       helper_df['date'] < end_date)
                 match forward_rate_type:
-                    case ForwardRate.WEIGHTED_AVERAGE:
+                    case OISCouponCalcMethod.WEIGHTED_AVERAGE:
                         result[i] = helper_df.loc[mask,'simple_daily_rate'].mean()
-                    case ForwardRate.SIMPLE_AVERAGE:
+                    case OISCouponCalcMethod.SIMPLE_AVERAGE:
                         mask = np.logical_and(mask, helper_df['business_day_flag'])
                         result[i] = helper_df.loc[mask,'simple_daily_rate'].mean()
                         
@@ -227,15 +230,15 @@ class ZeroCurve:
         
         else:
             Δt = pd.Series(year_fraction(period_start, period_end, self.day_count_basis))            
-            DF_t1 = self.discount_factor(period_start)
-            DF_t2 = self.discount_factor(period_end)
+            DF_t1 = self.get_discount_factor(period_start)
+            DF_t2 = self.get_discount_factor(period_end)
         
             # https://en.wikipedia.org/wiki/Forward_rate
-            if forward_rate_type in {ForwardRate.SIMPLE, ForwardRate.DAILY_COMPOUNDED}:
+            if forward_rate_type in {TermRate.SIMPLE, OISCouponCalcMethod.DAILY_COMPOUNDED}:
                 result = (1.0 / Δt) * (DF_t1 / DF_t2 - 1.0)
-            elif forward_rate_type == ForwardRate.CONTINUOUS:
+            elif forward_rate_type == TermRate.CONTINUOUS:
                 result = (1.0 / Δt) * (np.log(DF_t1) - np.log(DF_t2))
-            elif forward_rate_type == ForwardRate.ANNUAL:
+            elif forward_rate_type == TermRate.ANNUAL:
                 result = (DF_t1 / DF_t2) ** (1.0 / Δt)  - 1.0
             else:
                 raise ValueError(f"Invalid forward_rate_type {forward_rate_type}")        
@@ -244,38 +247,38 @@ class ZeroCurve:
         
     def instantaneous_forward_rate(self, years):        
         if self.interpolation_method == 'cubic_spline_on_zero_rates':
-            zero_rate = self.zero_rate(years=years)
+            zero_rate = self.get_zero_rate(years=years)
             zero_rate_1st_deriv = scipy.interpolate.splev(x=years, tck=self.cubic_spline_definition, der=1) 
             return zero_rate + years * zero_rate_1st_deriv
         else:
             raise ValueError('only supported for cubic spline interpolation method(s)')
         
         
-    def discount_factor(self, 
-                  dates: Optional[Union[pd.Timestamp, pd.Series]]=None,
-                  days: Optional[Union[int, pd.Series]]=None,
-                  years: Optional[Union[float, pd.Series]]=None,) -> pd.Series:
-        
-            df = self.index_daily_data(dates, days, years)
-            return df['discount_factor'].values
+    def get_discount_factor(self,
+                            dates: Optional[Union[pd.Timestamp, pd.Series]]=None,
+                            days: Optional[Union[int, pd.Series]]=None,
+                            years: Optional[Union[float, pd.Series]]=None,) -> pd.Series:
+
+        df = self.index_daily_data(dates, days, years)
+        return df['discount_factor'].values
            
         
-    def zero_rate(self, 
-                  compounding_frequency: CompoundingFrequency,
-                  dates: Union[pd.Timestamp, pd.Series] = None,
-                  days: Union[int, pd.Series] = None,
-                  years: Union[float, pd.Series] = None,
-                  ) -> pd.Series:
+    def get_zero_rate(self,
+                      compounding_frequency: CompoundingFrequency,
+                      dates: Union[pd.Timestamp, pd.Series] = None,
+                      days: Union[int, pd.Series] = None,
+                      years: Union[float, pd.Series] = None,
+                      ) -> pd.Series:
                 
-            df = self.index_daily_data(dates, days, years)
-            
-            if compounding_frequency == CompoundingFrequency.CONTINUOUS:
-                return df['nacc'].values
-            else: 
-                zero_rate = zero_rate_from_discount_factor(years=df['years'],
-                                                           discount_factor=df['discount_factor'], 
-                                                           compounding_frequency=compounding_frequency)
-                return zero_rate        
+        df = self.index_daily_data(dates, days, years)
+
+        if compounding_frequency == CompoundingFrequency.CONTINUOUS:
+            return df['nacc'].values
+        else:
+            zero_rate = zero_rate_from_discount_factor(years=df['years'],
+                                                       discount_factor=df['discount_factor'],
+                                                       compounding_frequency=compounding_frequency)
+            return zero_rate
         
         
     def index_daily_data(self, 
@@ -350,7 +353,7 @@ class ZeroCurve:
         max_date = self.data_daily['date'].iloc[-1]
         date_range = pd.date_range(min_date,max_date,freq='d')
         years_zr = year_fraction(self.curve_date, date_range, self.day_count_basis)
-        zero_rates = pd.Series(self.zero_rate(compounding_frequency=CompoundingFrequency.CONTINUOUS, dates=date_range)) * 100
+        zero_rates = pd.Series(self.get_zero_rate(compounding_frequency=CompoundingFrequency.CONTINUOUS, dates=date_range)) * 100
         
         fig, ax = plt.subplots()
         
@@ -362,7 +365,7 @@ class ZeroCurve:
             d2 = pd.date_range(min_date + pd.DateOffset(days=term),max_date ,freq='d')
         
             years_fwd = year_fraction(self.curve_date, d1, self.day_count_basis)
-            fwd_rates = pd.Series(self.forward_rate(d1, d2, ForwardRate.SIMPLE)) * 100
+            fwd_rates = pd.Series(self.forward_rate(d1, d2, TermRate.SIMPLE)) * 100
         
             ax.plot(years_fwd, fwd_rates, label=str(term)+' day forward rate') 
         

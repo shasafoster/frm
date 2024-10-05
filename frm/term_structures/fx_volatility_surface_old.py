@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 import os
-from lib2to3.fixes.fix_renames import alternates
 
 from frm.enums.term_structures import FXSmileInterpolationMethod
 
@@ -39,19 +38,6 @@ import matplotlib.pyplot as plt
 
 
 
-I have a function that I want to input a volatility surface as function parameter.
-
-My idea was a dictionary input where the 'key' is the expiry date and the 'value' is a dictionary with
-    1. Key 'delta_convetion' one of the values: 'spot_delta', 'forward_delta', 'preimum_adjusted_spot', 'premium_adjusted_forward'
-    2. Key 'delta', value is the delta, a numeric ,in range 0-50
-    3. Key 'call_put'. Value is either 'call' or 'put'
-    4. Key 'volatility_quote', value is the volatility quote, a numeric
-
-Can you give feedback on this proposed input format, offering alternates or improvements?
-
-
-
-
 
 
 @dataclass
@@ -59,25 +45,25 @@ class FXVolatilitySurface:
     # Mandatory initialisation attributes
     curve_date: pd.Timestamp
     spot_date: pd.Timestamp
-    domestic_ccy: str
-    foreign_ccy: str
+    curve_ccy: str
     fx_forward_curve: pd.DataFrame
     domestic_zero_curve: ZeroCurve
     foreign_zero_curve: ZeroCurve
 
-    vol_quotes_call_put: pd.DataFrame
-    #vol_quotes_strategy: pd.DataFrame # Have a helper function to convert this to vol_quotes_call_put.
-    busdaycal: np.busdaycalendar
 
     # Optional initialisation attributes
+    spot_date: Optional[pd.Timestamp] = None
     day_count_basis: DayCountBasis = DayCountBasis.ACT_ACT
+    σ_pillar: pd.DataFrame=None
     smile_interpolation_method: FXSmileInterpolationMethod = FXSmileInterpolationMethod.HESTON_COSINE
 
     # Non initialisation attributes set in __post_init__
     fx_spot_rate: float = field(init=False)
-    volatility_smile_pillar: pd.DataFrame = field(init=False)
-    volatility_smile_daily: pd.DataFrame = field(init=False)
-    volatility_smile_daily_func: dict = field(init=False)
+    domestic_ccy: str = field(init=False)
+    foreign_ccy: str = field(init=False)
+    daily_volatility_smile: pd.DataFrame=None
+    σ_pillar: dict=None
+    daily_volatility_smile_func: dict=None
     
     # volatility definitions
 
@@ -92,14 +78,13 @@ class FXVolatilitySurface:
 
         busdaycal = get_busdaycal(keys=[self.curve_ccy[:3],self.curve_ccy[3:]])
 
-        # COMPLETE
         if self.spot_date is None:
             result = get_tenor_settlement_date(self.curve_date, 'sp', self.curve_ccy, busdaycal=busdaycal, spot_offset=True)
             holiday_rolled_offset_date, cleaned_tenor, spot_date = result
             assert holiday_rolled_offset_date == spot_date
             self.spot_date = spot_date
 
-        # COMPLETE curve_ccy validation
+        # curve_ccy validation
         self.curve_ccy = self.curve_ccy.lower().strip()
         assert len(self.curve_ccy) == 6, self.curve_ccy
         self.foreign_ccy = self.curve_ccy[:3]
@@ -109,7 +94,7 @@ class FXVolatilitySurface:
         elif self.domestic_ccy == 'usd' and self.foreign_ccy not in {'aud','eur','gbp','nzd'}:
             warnings.warn("non conventional fx market, market convention is for 'usd' to be the foreign currency (except for 'aud/usd', 'eur/usd', 'gbp/usd' and 'nzd/usd' pairs)")
 
-        # COMPLETE  fx_forward_curve validation
+        # fx_forward_curve validation 
         assert 'fx_forward_rate' in self.fx_forward_curve.columns 
         self.fx_forward_curve = convert_column_to_consistent_data_type(self.fx_forward_curve)
         assert ('tenor_name' in self.fx_forward_curve.columns) or ('expiry_date' in self.fx_forward_curve.columns and 'delivery_date' in self.fx_forward_curve.columns)
@@ -147,8 +132,7 @@ class FXVolatilitySurface:
             σ_pillar = self.__interp_daily_FXF_and_IR_rates(σ_pillar)   
                  
             self.σ_pillar = σ_pillar            
-
-            # COMPLETE
+            
             if 'σ_atmf' in self.σ_pillar.keys():
                 self.K_pillar = σ_pillar['fx_forward_rate']
             else:
@@ -172,12 +156,12 @@ class FXVolatilitySurface:
                     delta = [0.5 if v == 'k_atmΔneutral' else cp[i] * float(v.split('_')[1].split('Δ')[0]) / 100 for i,v in enumerate(dict_K_σ.keys())]
                     vol = self.σ_pillar.loc[date, dict_K_σ.values()].values
                                         
-                    K = gk_solve_strike(S0=S0,tau=tau,r_d=r_d,r_f=r_f,vol=vol,delta=delta,delta_convention=delta_convention,F=F)
+                    K = gk_solve_strike(S0=S0,tau=tau,r_f=r_f,r_d=r_d,σ=σ,delta=delta,delta_convention=delta_convention,F=F)
                     K_pillar.loc[date,dict_K_σ.keys()] = K
                                                 
                 self.K_pillar = K_pillar
 
-            # COMPLETE ###################################################################
+            ###################################################################
             # Interpolate the term structure of volatility to get a daily volatility smile            
             dates = pd.date_range(min(self.σ_pillar.index),max(self.σ_pillar.index),freq='d')
             tenor_years = year_fraction(self.curve_date,dates, self.day_count_basis)
@@ -225,7 +209,58 @@ class FXVolatilitySurface:
         return df
 
 
+    def forward_volatility(self, 
+                           t1: Union[float, np.array], 
+                           σ_t1: Union[float, np.array], 
+                           t2: Union[float, np.array], 
+                           σ_t2: Union[float, np.array]) -> Union[float, np.array]:
+        """
+        Calculate the at-the-money forward volatility from time t1 to t2.
+        The forward volatility is based on the consistency condition:
+        σ_t1**2 * t1 + σ_t1_t2**2 * (t2- t1) = σ_t1**2 * t2    
+    
+        Parameters:
+        - t1 (float): Time to first maturity
+        - σ_t1 (float): At-the-money volatility at time (in years) to expiry date 1
+        - t2 (float): Time to second maturity
+        - σ_t2 (float): At-the-money volatility at time (in years) to expiry date 2
+    
+        Returns:
+        - np.array: Forward volatility from time t1 to t2
+        """
+        tau = t2 - t1
+        if np.any(tau == 0):
+            warnings.warn("t2 and t1 are equal. NaN will be returned.")
+        elif np.any(tau < 0):
+            raise ValueError("t2 is less than t1. Please swap ")
+    
+        result = (σ_t2**2 * t2 - σ_t1**2 * t1) / tau
+        if np.any(result < 0):
+            raise ValueError("Negative value encountered under square root.")
+    
+        return np.sqrt(result)
 
+    def flat_forward_interp(self, 
+                            t1: Union[float, np.array], 
+                            σ_t1: Union[float, np.array], 
+                            t2: Union[float, np.array], 
+                            σ_t2: Union[float, np.array], 
+                            t: Union[float, np.array]) -> Union[float, np.array]:
+        """
+        Interpolate the at-the-money volatility at a given time 't' using flat forward interpolation.
+    
+        Parameters:
+        - t1 (Union[float, array]): Time to first maturity
+        - σ_t1 (Union[float, array]): At-the-money volatility at time t1
+        - t2 (Union[float, array]): Time to second maturity
+        - σ_t2 (Union[float, array]): At-the-money volatility at time t2
+        - t (Union[float, array]): Time at which to interpolate the volatility
+    
+        Returns:
+        - array: Interpolated volatility at time 't'
+        """
+        σ_t12 = self.forward_volatility(t1, σ_t1, t2, σ_t2)
+        return np.sqrt((σ_t1**2 * t1 + σ_t12**2 * (t - t1)) / t)
 
 
 
@@ -446,18 +481,17 @@ class FXVolatilitySurface:
                 theta = self.daily_volatility_smile_func[expiry_date]['theta']
                 rho = self.daily_volatility_smile_func[expiry_date]['rho']
                 lambda_ = self.daily_volatility_smile_func[expiry_date]['lambda_']
-
-                match self.smile_interpolation_method:
-                    case 'heston_analytical_1993':
-                        X = heston1993_price_vanilla_european(S0=S0, tau=tau, r=r, q=q, cp=cp, K=K_target, var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho, lambda_=lambda_)
-                    case 'heston_carr_madan_gauss_kronrod_quadrature':
-                        X = heston_carr_madan_price_vanilla_european(S0=S0, tau=tau, r=r, q=q, cp=cp, K=K_target, var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho, integration_method=0)
-                    case 'heston_carr_madan_fft_w_simpsons':
-                        X = heston_carr_madan_price_vanilla_european(S0=S0, tau=tau, r=r, q=q, cp=cp, K=K_target, var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho, integration_method=1)
-                    case 'heston_cosine':
-                        X = heston_cosine_price_vanilla_european(S0=S0, tau=tau, r=r, q=q, cp=cp, K=K_target, var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho)
-                    case 'heston_lipton':
-                        X = heston_lipton_price_vanilla_european(S0=S0, tau=tau, r=r, q=q, cp=cp, K=K_target, var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho)
+                
+                if self.smile_interpolation_method == 'heston_analytical_1993':
+                    X = heston1993_price_vanilla_european(S0=S0, tau=tau, r=r, q=q, cp=cp, K=K_target, var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho, lambda_=lambda_)
+                elif self.smile_interpolation_method == 'heston_carr_madan_gauss_kronrod_quadrature':
+                    X = heston_carr_madan_price_vanilla_european(S0=S0, tau=tau, r=r, q=q, cp=cp, K=K_target, var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho, integration_method=0)
+                elif self.smile_interpolation_method == 'heston_carr_madan_fft_w_simpsons':
+                    X = heston_carr_madan_price_vanilla_european(S0=S0, tau=tau, r=r, q=q, cp=cp, K=K_target, var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho, integration_method=1)
+                elif self.smile_interpolation_method == 'heston_cosine':
+                    X = heston_cosine_price_vanilla_european(S0=S0, tau=tau, r=r, q=q, cp=cp, K=K_target, var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho)
+                elif self.smile_interpolation_method == 'heston_lipton':
+                    X = heston_lipton_price_vanilla_european(S0=S0, tau=tau, r=r, q=q, cp=cp, K=K_target, var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho)
 
                 result.append(gk_solve_implied_volatility(S0=S0, tau=tau, r_d=r, r_f=q, cp=cp, K=K_target, X=X, vol_guess=var0**2))
         return np.array(result)

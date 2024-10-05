@@ -6,15 +6,14 @@ if __name__ == "__main__":
 import pandas as pd
 import numpy as np
 from frm.utils.business_day_calendar import get_busdaycal
-from frm.utils.tenor import get_tenor_settlement_date
+#from frm.utils.tenor import get_tenor_settlement_date
 from frm.utils.daycount import year_fraction
 from frm.enums.utils import DayCountBasis
 
 def convert_column_to_consistent_data_type(df: pd.DataFrame):
     for col in df.columns:
-        if df[col].apply(isinstance, args=(float,)).all():
-            df[col] = pd.to_numeric(df[col])
-            
+       if df[col].apply(isinstance, args=(float,)).all():
+           df[col] = pd.to_numeric(df[col])
     return df
 
 

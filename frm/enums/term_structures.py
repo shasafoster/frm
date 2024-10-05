@@ -4,9 +4,6 @@ if __name__ == "__main__":
     os.chdir(os.environ.get('PROJECT_DIR_FRM'))
     
 from enum import Enum
-import pandas as pd
-import numpy as np
-from frm.enums.helper import  clean_enum_value, is_valid_enum_value, get_enum_member
 
 
 class OISCouponCalcMethod(Enum):
@@ -14,12 +11,30 @@ class OISCouponCalcMethod(Enum):
     WEIGHTED_AVERAGE = 'weightedaverage'
     SIMPLE_AVERAGE = 'simpleaverage'
 
+
 class TermRate(Enum):
     SIMPLE = 'simple'
     CONTINUOUS = 'continuous'
-    DAILY = 'daily'
-    WEEKLY = 'weekly'
-    MONTHLY = 'monthly'
-    QUARTERLY = 'quarterly'
-    SEMIANNUAL = 'semiannual'
+    #DAILY = 'daily' # Forward rate formula is not implemented in ZeroCurve
+    #WEEKLY = 'weekly' # Forward rate formula is not implemented in ZeroCurve
+    #MONTHLY = 'monthly' # Forward rate formula is not implemented in ZeroCurve
+    #QUARTERLY = 'quarterly' # Forward rate formula is not implemented in ZeroCurve
+    #SEMIANNUAL = 'semiannual' # Forward rate formula is not implemented in ZeroCurve
     ANNUAL = 'annual'
+
+
+class FXSmileInterpolationMethod(Enum):
+    UNIVARIATE_SPLINE = 'univariate_spline'
+    CUBIC_SPLINE = 'cubic_spline'
+    HESTON_ANALYTICAL_1993 = 'heston_analytical_1993'
+    HESTON_CARR_MADAN_GAUSS_KRONROD_QUADRATURE = 'heston_carr_madan_gauss_kronrod_quadrature'
+    HESTON_CARR_MADAN_FFT_W_SIMPSONS = 'heston_carr_madan_fft_w_simpsons'
+    HESTON_LIPTON = 'heston_lipton'
+    HESTON_COSINE = 'heston_cosine'
+
+
+class DeltaConvention(Enum):
+    REGULAR_SPOT = 'regular_spot'
+    REGULAR_FORWARD = 'regular_forward'
+    PREMIUM_ADJUSTED_SPOT = 'premium_adjusted_spot'
+    PREMIUM_ADJUSTED_FORWARD = 'premium_adjusted_forward'

@@ -1,22 +1,18 @@
 # -*- coding: utf-8 -*-
 import os
 
-from frm.term_structures.swap_fixings import OISFixings
-from tests_private.term_structures.test_leg import zero_curve
-
 if __name__ == "__main__":
     os.chdir(os.environ.get('PROJECT_DIR_FRM'))
 
 from dataclasses import dataclass
-from enum import Enum
 import numpy as np
 import pandas as pd
 
-from frm.enums.utils import DayCountBasis, CompoundingFrequency
+from frm.enums.utils import CompoundingFrequency
 from frm.enums.term_structures import OISCouponCalcMethod
 from frm.utils.daycount import year_fraction
 from frm.term_structures.zero_curve import ZeroCurve
-from frm.term_structures.swap_fixings import OISFixings, TermFixings
+from frm.term_structures.historical_swap_index_fixings import OISFixings, TermFixings
 
 
 

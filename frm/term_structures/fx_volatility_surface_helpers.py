@@ -4,7 +4,7 @@ if __name__ == "__main__":
     os.chdir(os.environ.get('PROJECT_DIR_FRM')) 
     
 
-from frm.frm.schedule.daycounter import VALID_DAY_COUNT_BASIS
+from frm.schedule.daycounter import VALID_DAY_COUNT_BASIS
 
 import numpy as np
 import pandas as pd
@@ -15,43 +15,7 @@ import re
 VALID_DELTA_CONVENTIONS = ['regular_spot_delta','regular_forward_delta','premium_adjusted_spot_delta','premium_adjusted_forward_delta'] 
 
 
-def interp_fx_forward_curve(fx_forward_curve: pd.DataFrame, 
-                            dates: Union[pd.Series, pd.DatetimeIndex]=None,
-                            date_type: str=None,
-                            flat_extrapolation: bool=True) -> pd.Series:
-    
-    assert date_type in ['expiry_date','delivery_date']
-    
-    if isinstance(dates, pd.Series):
-        dates = pd.DatetimeIndex(dates)
-    elif isinstance(dates, pd.DatetimeIndex):
-        pass
-    else:
-        raise ValueError("'dates' must be a pandas Series or DatetimeIndex")
-        
-    unique_dates = dates.drop_duplicates()
-    combined_dates = unique_dates.union(pd.DatetimeIndex(fx_forward_curve[date_type]))
-    df = pd.Series(fx_forward_curve['fx_forward_rate'].values, index=fx_forward_curve[date_type].values)
-    
-    result = df.reindex(combined_dates.values).copy()
-    start_date = fx_forward_curve[date_type].min()
-    end_date = fx_forward_curve[date_type].max()
-    
-    if flat_extrapolation:
-        try:                    
-            result = result.interpolate(method='time', limit_area='inside').ffill().bfill()
-        except ValueError:
-            raise ValueError("Interpolation failed, check for missing values in the input data.")
-        # Find out of range dates and warn
-        out_of_range_dates = unique_dates[(unique_dates < start_date) | (unique_dates > end_date)]
-        for date in out_of_range_dates:
-            warnings.warn(f"Date {date} is outside the {date_type} range {start_date} - {end_date}, flat extrapolation applied.")
-    else:
-        result = result.interpolate(method='time', limit_area='inside')
-    
-    result = result.reindex(dates)
-    
-    return result
+
     
 
 def fx_σ_input_helper(df):
@@ -236,7 +200,7 @@ def fx_σ_input_helper(df):
                     df.loc[i,'errors'] += rr + ' value is present but column ' + bf + ' is absent\n'
                 if atm not in row.index and pd.notna(row[rr]):
                     df.loc[i,'errors'] += rr + ' value is present but column ' + atm + ' is absent\n'                         
-          
+
     # Drop σ-strategy quote columns
     pattern2 = r'^σ_(\d{1,2})Δ(bf|rr)$'
     cols_to_drop = df.filter(regex=pattern2).columns
@@ -249,7 +213,6 @@ def fx_σ_input_helper(df):
 
 
 
-    
     
     
     

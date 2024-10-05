@@ -1,26 +1,21 @@
 # -*- coding: utf-8 -*-
 import os
 
-from numpy.ma.core import mask_or
 
 if __name__ == "__main__":
     os.chdir(os.environ.get('PROJECT_DIR_FRM')) 
 
 from frm.utils.daycount import day_count, year_fraction
 from frm.utils.schedule import get_schedule, get_payment_dates, get_fixing_dates
-from frm.utils.business_day_calendar import get_busdaycal
-from frm.utils.tenor import get_tenor_settlement_date
-from frm.enums.utils import DayCountBasis, DayRoll, PaymentType, PeriodFrequency, StubType, RollConvention
-from frm.term_structures.swap_curve import ZeroCurve, SwapCurve
+from frm.enums.utils import DayCountBasis, DayRoll, PeriodFrequency, StubType, RollConvention, TimingConvention
+from frm.term_structures.swap_curve import SwapCurve, OISCurve, TermSwapCurve
 
 from enum import Enum
 import numpy as np
 import pandas as pd
-from scipy.optimize import fsolve
-from scipy.stats import norm
 
 from dataclasses import dataclass, field, InitVar 
-from typing import Literal, Optional
+from typing import Optional
 
 
 class ExchangeNotionals(Enum):
@@ -82,9 +77,10 @@ class SwapLeg:
     roll_user_specified_dates: InitVar[bool] = False
     # Payment date parameters. Initialisation parameters only, not stored in the class.
     payment_delay: InitVar[int]=0
-    payment_type: InitVar[PaymentType] = PaymentType.IN_ARREARS
+    payment_timing: InitVar[TimingConvention] = TimingConvention.IN_ARREARS
     # Fixing date parameters. Applicable to LEGTYPE.FLOAT only. Initialisation parameters only, not stored in the class.
     fixing_days_ahead: InitVar[int]=2
+    fixing_timing: InitVar[TimingConvention] = TimingConvention.IN_ADVANCE
     # The same business day calendar is used for schedule, payment and fixing dates.
     busdaycal: InitVar[np.busdaycalendar] = np.busdaycalendar()
 
@@ -112,9 +108,11 @@ class SwapLeg:
                       roll_convention,
                       roll_user_specified_dates,
                       # Payment date parameters
-                      payment_delay, payment_type,
+                      payment_delay,
+                      payment_timing,
                       # Fixing date parameters
                       fixing_days_ahead,
+                      fixing_timing,
                       # Business day calendar
                       busdaycal):
 
@@ -151,7 +149,7 @@ class SwapLeg:
                     schedule=schedule,
                     fixing_days_ahead=fixing_days_ahead,
                     roll_convention=RollConvention.PRECEDING, # Hardcoded in Leg class for now
-                    fixing_type=PaymentType.IN_ADVANCE, # Hardcoded in Leg class for now
+                    fixing_timing=TimingConvention.IN_ADVANCE, # Hardcoded in Leg class for now
                     busdaycal=busdaycal)
                 schedule.insert(loc=0, column='fixing_date', value=fixing_dates)
                 schedule['fixing'] = np.nan
@@ -170,7 +168,7 @@ class SwapLeg:
         schedule['payment_date'] = get_payment_dates(
             schedule=schedule,
             roll_convention=roll_convention,
-            payment_type=payment_type,
+            payment_timing=payment_timing,
             payment_delay=payment_delay,
             busdaycal=busdaycal)
         schedule['payment'] = np.nan

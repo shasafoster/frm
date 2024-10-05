@@ -50,7 +50,7 @@ def get_busdaycal(keys) -> np.busdaycalendar:
         return np.busdaycalendar()
 
     if type(keys) is str:
-        keys = [keys]
+        keys = [keys.upper()]
     elif type(keys) is list:
         keys = list(set(keys))
         keys = [key.upper() for key in keys]

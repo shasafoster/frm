@@ -222,7 +222,7 @@ def gk_solve_strike(S0: float,
                    r_d: float,
                    r_f: float,
                    vol: float,
-                   delta: float,
+                   signed_delta: float,
                    delta_convention: str,
                    F: float = None
                    ) -> float:
@@ -239,9 +239,9 @@ def gk_solve_strike(S0: float,
         Domestic risk-free interest rate (annualized continuously compounded).
     r_f : float
         Foreign risk-free interest rate (annualized continuously compounded).
-    σ : float
+    vol : float
         Volatility (annualized standard deviation of FX returns).
-    Δ : float
+    signed_delta : float
         Signed delta, restricted to [0, 0.5] for calls and [-0.5, 0] for puts.
     delta_convention : str
         Delta convention used for quoting, one of {'regular_spot', 'regular_forward', 'premium_adjusted_spot', 'premium_adjusted_forward'}.
@@ -260,14 +260,14 @@ def gk_solve_strike(S0: float,
 
     # Set to greek letter so code review to reference [1] is easier
     σ = vol
-    Δ = delta
+    Δ = signed_delta
 
     # Convert to arrays. Function is vectorised.
     S0, tau, r_f, r_d, σ, Δ = to_np_array(S0, tau, r_f, r_d, σ, Δ)
     if F is not None: 
         F = np.atleast_1d(F).astype(float)
         assert (F > 0.0).all() 
-    
+
     # Value checks
     assert (S0 > 0.0).all(), S0
     assert (tau > 0.0).all(), tau
@@ -313,18 +313,19 @@ def gk_solve_strike(S0: float,
                 if Δ[i] != 0.5:
                     # For premium adjusted quotes the solution must be solved numerically
                     # Please refer to Reference [1] for full details
-                    if delta_convention == 'premium_adjusted_spot':
-                        def solve_delta(K, σ, cp, F, tau, Δ):
-                            return np.exp(-r_f * tau) * (cp * K / F) * norm.cdf(cp * (np.log(F/K) - 0.5 * σ ** 2 * tau) / (σ * np.sqrt(tau))) - Δ                
-                    elif delta_convention == 'premium_adjusted_forward':
-                        def solve_delta(K, σ, cp, F, tau, Δ):
-                            return (cp * K / F) * norm.cdf(cp * (np.log(F/K) - 0.5 * σ ** 2 * tau) / (σ * np.sqrt(tau))) - Δ
+                    match delta_convention:
+                        case 'premium_adjusted_spot':
+                            def solve_delta(K, σ, cp, F, tau, Δ):
+                                return np.exp(-r_f * tau) * (cp * K / F) * norm.cdf(cp * (np.log(F/K) - 0.5 * σ ** 2 * tau) / (σ * np.sqrt(tau))) - Δ
+                        case 'premium_adjusted_forward':
+                            def solve_delta(K, σ, cp, F, tau, Δ):
+                                return (cp * K / F) * norm.cdf(cp * (np.log(F/K) - 0.5 * σ ** 2 * tau) / (σ * np.sqrt(tau))) - Δ
         
                     # Solve the upper bound, 'K_max' for the numerical solver
                     # The strike of a premium adjusted Δ-σ quote is ALWAYS below the regular (non premium adjusted) Δ-σ quote
                     # Hence, we analytically calculate the K, assuming the σ was a regular Δ quote
                     delta_convention_adj = delta_convention.replace('premium_adjusted','regular')
-                    K_max = gk_solve_strike(S0=S0,tau=tau, r_d=r_d, r_f=r_f, vol=σ[i], delta=Δ[i], delta_convention=delta_convention_adj, F=F)
+                    K_max = gk_solve_strike(S0=S0,tau=tau, r_d=r_d, r_f=r_f, vol=σ[i], signed_delta=Δ[i], delta_convention=delta_convention_adj, F=F)
                     K_max = K_max.item()
     
                     # Put Option
@@ -333,13 +334,13 @@ def gk_solve_strike(S0: float,
                         
                     # Call Option
                     if Δ[i] > 0: 
-                        # For the premimum adjusted call Δ, due to non-monotonicity, two strikes can be solved numerically for call options (but not put options).
+                        # For the premium adjusted call Δ, due to non-monotonicity, two strikes can be solved numerically for call options (but not put options).
                         # To avoid this, we solve a lower bound, 'K_min' to guarantee we get the correct solution in the numerical solver.
                         # The lower bound is the 'maximum' Δ, hence we numerically solve the maximum Δ
-                        def solve_K_min(K, σ, cp, F, t):
-                            d1 = (np.log(S0 / K) + (r_d - r_f + 0.5 * σ**2) * t) / (σ * np.sqrt(t))
-                            d2 = d1 - σ * np.sqrt(t)
-                            return σ * np.sqrt(t) * norm.cdf(d2) - norm.pdf(d2)
+                        def solve_K_min(K, σ, cp, F, tau): # TODO test and remove cp, F
+                            d1 = (np.log(S0 / K) + (r_d - r_f + 0.5 * σ**2) * tau) / (σ * np.sqrt(tau))
+                            d2 = d1 - σ * np.sqrt(tau)
+                            return σ * np.sqrt(tau) * norm.cdf(d2) - norm.pdf(d2)
                         
                         try: 
                             solution = root_scalar(solve_K_min, args=(σ[i], cp[i], F, tau), x0=F ,bracket=[0.00001, K_max])

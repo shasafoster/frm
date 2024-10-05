@@ -13,43 +13,42 @@ from typing import Union
 import datetime as dt
   
 
-def get_spot_offset(curve_ccy: str=None) -> int:
-    
-    if curve_ccy is None:
-        return 2
-    
-    if not isinstance(curve_ccy, str):
-        logging.error("function input 'curve_ccy' must be a string")
-        raise TypeError("function input 'curve_ccy' must be a string")    
-    
-    if len(curve_ccy) == 6:
-        # http://www.londonfx.co.uk/valdates.html
-        if curve_ccy in {'usdcad','cadusd',
-                         'usdphp','phpusd',
-                         'usdrub','rubusd',
-                         'usdtry','tryusd'}:
-            return 1
-        else:
-            return 2
+# def get_spot_offset(curve_ccy: str=None) -> int:
+#
+#     if curve_ccy is None:
+#         return 2
+#
+#     if not isinstance(curve_ccy, str):
+#         logging.error("function input 'curve_ccy' must be a string")
+#         raise TypeError("function input 'curve_ccy' must be a string")
+#
+#     if len(curve_ccy) == 6:
+#         # http://www.londonfx.co.uk/valdates.html
+#         if curve_ccy in {'usdcad','cadusd',
+#                          'usdphp','phpusd',
+#                          'usdrub','rubusd',
+#                          'usdtry','tryusd'}:
+#             return 1
+#         else:
+#             return 2
+#
+#     # Spot offset for interest rate products
+#     elif len(curve_ccy) == 3:
+#         if curve_ccy in {'aud','cad'}:
+#             return 1
+#         elif curve_ccy in {'nzd','jpy','usd','eur'}:
+#             return 2
+#         elif curve_ccy in {'gbp'}:
+#             return 0
+#         else:
+#             return 2
+#
+#     else:
+#         return 2
+#         #logging.error("invalid 'curve_ccy' value: " + curve_ccy)
+#         #raise ValueError("invalid 'curve_ccy' value: " + curve_ccy)
 
-    # Spot offset for interest rate products
-    elif len(curve_ccy) == 3:    
-        if curve_ccy in {'aud','cad'}:
-            return 1
-        elif curve_ccy in {'nzd','jpy','usd','eur'}:
-            return 2
-        elif curve_ccy in {'gbp'}:
-            return 0
-        else:
-            return 2
-        
-    else:
-        return 2
-        #logging.error("invalid 'curve_ccy' value: " + curve_ccy)      
-        #raise ValueError("invalid 'curve_ccy' value: " + curve_ccy)
 
-
-@np.vectorize
 def clean_tenor(tenor: str) -> str:
     if not isinstance(tenor, str):
         raise TypeError("function input 'tenor' must be a string")      
@@ -76,14 +75,14 @@ def clean_tenor(tenor: str) -> str:
     return tenor 
    
 
-@np.vectorize
+
 def tenor_to_date_offset(tenor: str) -> pd.DateOffset:    
     if not isinstance(tenor, str):
         raise TypeError("'tenor' must be a string")      
         
     misc_tenors_offset = {
         'on' : DateOffset(days=1), # 1 day (overnight)
-        'tn' : DateOffset(days=2), # 2 days (tomorrow next)    
+        'tn' : DateOffset(days=2), # 2 days (tomorrow next)
         'sp'  : DateOffset(days=0), # spot date
         'sn' : DateOffset(days=1), # 1 day (spot next)
         'sw' : DateOffset(days=5), # 5 days (spot week)        
@@ -115,64 +114,62 @@ def tenor_to_date_offset(tenor: str) -> pd.DateOffset:
         
     return offset
 
-@np.vectorize
-def offset_market_data_date(curve_date: np.datetime64,
-                spot_date: np.datetime64,
-                tenor: str) -> np.datetime64:     
-    # offset from 
-    # (i) the curve_date for the ON and TN tenors and from;
-    # (ii) the spot date for all other tenors   
-    
-    date_offset = tenor_to_date_offset(tenor)
-    
-    if tenor in {'on', 'tn'}:
-        return curve_date + date_offset.item() 
-    else:
-        return spot_date + date_offset.item()
 
-@np.vectorize
-def get_tenor_effective_date(tenor, curve_date, spot_date):
-    if tenor in {'on'}:
-        return curve_date 
-    else:
-        return spot_date 
+# @np.vectorize
+# def offset_market_data_date(
+#         curve_date: np.datetime64,
+#         spot_date: np.datetime64,
+#         tenor: str) -> np.datetime64:
+#     # offset from
+#     # (i) the curve_date for the ON and TN tenors and from;
+#     # (ii) the spot date for all other tenors
+#
+#     date_offset = tenor_to_date_offset(tenor)
+#
+#     if tenor in {'on', 'tn'}: # This is not true for IRS with 1 day settlement delay
+#         return curve_date + date_offset.item()
+#     else:
+#         return spot_date + date_offset.item()
+#
+#
+# @np.vectorize
+# def get_tenor_effective_date(tenor, curve_date, spot_date):
+#     if tenor in {'on'}:
+#         return curve_date
+#     else:
+#         return spot_date
+#
+#
+#
+#
+#
+# # FX vol quote to expiry, which is the difference between the tenor and the curve date
+#
+# def get_tenor_settlement_date(
+#         curve_date: pd.Timestamp,
+#         tenor: Union[str, np.ndarray],
+#         busdaycal: np.busdaycalendar=np.busdaycalendar(),
+#         ):
+#
+#     if isinstance(curve_date, dt.date):
+#         curve_date = np.datetime64(curve_date)
+#     else:
+#         curve_date = np.datetime64(curve_date.date())
+#
+#     cleaned_tenor = clean_tenor(tenor)
+#     if cleaned_tenor.size == 1:
+#         cleaned_tenor = cleaned_tenor.item()
+#
+#     offset_date = offset_market_data_date(curve_date, spot_date, cleaned_tenor)
+#
+#     holiday_rolled_offset_date =
+#
+#     if holiday_rolled_offset_date.shape == ():
+#         holiday_rolled_offset_date = pd.Timestamp(holiday_rolled_offset_date.item()) # For scalar
+#     else:
+#         holiday_rolled_offset_date = pd.DatetimeIndex(holiday_rolled_offset_date) # For array
+#
+#
+#
+#     return holiday_rolled_offset_date, cleaned_tenor, pd.Timestamp(spot_date)
 
-def get_tenor_settlement_date(
-        curve_date: pd.Timestamp,
-        tenor: Union[str, np.ndarray], 
-        curve_ccy: str=None, 
-        busdaycal: np.busdaycalendar=None,
-        spot_offset: bool=True
-        ):
-        
-    if busdaycal is None or pd.isna(busdaycal):
-        busdaycal = np.busdaycalendar()
-    
-    if isinstance(curve_date, dt.date):
-        curve_date = np.datetime64(curve_date)
-    else:
-        curve_date = np.datetime64(curve_date.date())
-            
-    if spot_offset:
-
-        spot_date = np.busday_offset(curve_date.astype('datetime64[D]'), offsets=get_spot_offset(curve_ccy), roll='following', busdaycal=busdaycal)
-    else: 
-        spot_date = curve_date
-        
-    cleaned_tenor = clean_tenor(tenor)
-    if cleaned_tenor.size == 1:
-        cleaned_tenor = cleaned_tenor.item()
-    
-    offset_date = offset_market_data_date(curve_date, spot_date, cleaned_tenor)
-    
-    holiday_rolled_offset_date = np.busday_offset(offset_date.astype('datetime64[D]'), offsets=0, roll='following', busdaycal=busdaycal)
-    
-    if holiday_rolled_offset_date.shape == ():
-        holiday_rolled_offset_date = pd.Timestamp(holiday_rolled_offset_date.item()) # For scalar
-    else:
-        holiday_rolled_offset_date = pd.DatetimeIndex(holiday_rolled_offset_date) # For array
-    
-    
-    
-    return holiday_rolled_offset_date, cleaned_tenor, pd.Timestamp(spot_date)  
-        
