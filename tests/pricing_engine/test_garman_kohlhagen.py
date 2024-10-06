@@ -3,6 +3,7 @@ import os
 if __name__ == "__main__":
     os.chdir(os.environ.get('PROJECT_DIR_FRM')) 
 
+import numpy as np
 from frm.pricing_engine.garman_kohlhagen import gk_price, gk_solve_strike, gk_solve_implied_volatility
 
 def test_gk_price_and_solve_implied_volatility():
@@ -141,10 +142,12 @@ def test_gk_solve_strike():
     r_f = 0.04655
     r_d = 0.05376
     tau = 1.0
-    delta = -0.3
+    signed_delta = -0.3
     delta_convention = 'regular_spot'
-    strike = gk_solve_strike(S0=S0,tau=tau,r_d=r_d,r_f=r_f,vol=vol,delta=delta,delta_convention=delta_convention)
+    strike = gk_solve_strike(S0=S0,tau=tau,r_d=r_d,r_f=r_f,vol=vol,signed_delta=signed_delta,delta_convention=delta_convention)
     assert abs(strike_test - strike) / strike_test < epsilon_px
+    result = gk_price(S0=S0, tau=tau, r_d=r_d, r_f=r_f, cp=np.sign(signed_delta), K=strike, vol=vol, analytical_greeks_flag=True)
+    assert abs(result['analytical_greeks']['spot_delta'].iloc[0] - signed_delta) < 1e-8
 
     # AUDUSD 1Y 30 Δ Call, 30 June 2023 London 10pm 
     strike_test = 0.70690
@@ -153,10 +156,12 @@ def test_gk_solve_strike():
     r_f = 0.04655
     r_d = 0.05376
     tau = 1.0
-    delta = 0.3
+    signed_delta = 0.3
     delta_convention = 'regular_spot'
-    strike = gk_solve_strike(S0=S0,tau=tau,r_d=r_d,r_f=r_f,vol=vol,delta=delta,delta_convention=delta_convention)
+    strike = gk_solve_strike(S0=S0,tau=tau,r_d=r_d,r_f=r_f,vol=vol,signed_delta=signed_delta,delta_convention=delta_convention)
     assert abs(strike_test - strike) / strike_test < epsilon_px
+    result = gk_price(S0=S0, tau=tau, r_d=r_d, r_f=r_f, cp=np.sign(signed_delta), K=strike, vol=vol, analytical_greeks_flag=True)
+    assert abs(result['analytical_greeks']['spot_delta'].iloc[0] - signed_delta) < 1e-8
 
     # AUDUSD 1Y 5 Δ Put, 30 June 2023 London 10pm 
     strike_test = 0.54280
@@ -165,11 +170,12 @@ def test_gk_solve_strike():
     r_f = 0.04655
     r_d = 0.05376
     tau = 1.0
-    delta = -0.05
+    signed_delta = -0.05
     delta_convention = 'regular_spot'
-    strike = gk_solve_strike(S0=S0,tau=tau,r_d=r_d,r_f=r_f,vol=vol,delta=delta,delta_convention=delta_convention)
+    strike = gk_solve_strike(S0=S0,tau=tau,r_d=r_d,r_f=r_f,vol=vol,signed_delta=signed_delta,delta_convention=delta_convention)
     assert abs(strike_test - strike) / strike_test < epsilon_px
-
+    result = gk_price(S0=S0, tau=tau, r_d=r_d, r_f=r_f, cp=np.sign(signed_delta), K=strike, vol=vol, analytical_greeks_flag=True)
+    assert abs(result['analytical_greeks']['spot_delta'].iloc[0] - signed_delta) < 1e-8
 
     # AUDUSD 1Y 5 Δ Call, 30 June 2023 London 10pm 
     epsilon_px = 0.0015 # 0.15 % higher tolerance for this one 
@@ -179,11 +185,14 @@ def test_gk_solve_strike():
     r_f = 0.04655
     r_d = 0.05376
     tau = 1.0
-    delta = 0.05
+    signed_delta = 0.05
     delta_convention = 'regular_spot'
-    strike = gk_solve_strike(S0=S0,tau=tau,r_d=r_d,r_f=r_f,vol=vol,delta=delta,delta_convention=delta_convention)
+    strike = gk_solve_strike(S0=S0,tau=tau,r_d=r_d,r_f=r_f,vol=vol,signed_delta=signed_delta,delta_convention=delta_convention)
     assert abs(strike_test - strike) / strike_test < epsilon_px
-    
+    result = gk_price(S0=S0, tau=tau, r_d=r_d, r_f=r_f, cp=np.sign(signed_delta), K=strike, vol=vol, analytical_greeks_flag=True)
+    assert abs(result['analytical_greeks']['spot_delta'].iloc[0] - signed_delta) < 1e-8
+
+
     # AUDUSD 5Y 30 Δ Put, 30 June 2023 London 10pm 
     epsilon_px = 0.0034 # 0.34 % higher tolerance for this one 
     strike_test = 0.59180
@@ -192,11 +201,14 @@ def test_gk_solve_strike():
     r_f = 0.04287
     r_d = 0.03902
     tau = 5.0
-    delta = -0.3
+    signed_delta = -0.3
     delta_convention = 'regular_forward'
-    strike = gk_solve_strike(S0=S0,tau=tau,r_d=r_d,r_f=r_f,vol=vol,delta=delta,delta_convention=delta_convention)
+    strike = gk_solve_strike(S0=S0,tau=tau,r_d=r_d,r_f=r_f,vol=vol,signed_delta=signed_delta,delta_convention=delta_convention)
     assert abs(strike_test - strike) / strike_test < epsilon_px
-    
+    result = gk_price(S0=S0, tau=tau, r_d=r_d, r_f=r_f, cp=np.sign(signed_delta), K=strike, vol=vol, analytical_greeks_flag=True)
+    assert abs(result['analytical_greeks']['forward_delta'].iloc[0] - signed_delta) < 1e-8
+
+
     # AUDUSD 5Y 30 Δ Put, 30 June 2023 London 10pm 
     epsilon_px = 0.0036 # 0.36 % higher tolerance for this one 
     strike_test = 0.75820
@@ -205,11 +217,12 @@ def test_gk_solve_strike():
     r_f = 0.04287
     r_d = 0.03902
     tau = 5.0
-    delta = 0.3
+    signed_delta = 0.3
     delta_convention = 'regular_forward'
-    strike = gk_solve_strike(S0=S0,tau=tau,r_d=r_d,r_f=r_f,vol=vol,delta=delta,delta_convention=delta_convention)
+    strike = gk_solve_strike(S0=S0,tau=tau,r_d=r_d,r_f=r_f,vol=vol,signed_delta=signed_delta,delta_convention=delta_convention)
     assert abs(strike_test - strike) / strike_test < epsilon_px
-
+    result = gk_price(S0=S0, tau=tau, r_d=r_d, r_f=r_f, cp=np.sign(signed_delta), K=strike, vol=vol, analytical_greeks_flag=True)
+    assert abs(result['analytical_greeks']['forward_delta'].iloc[0] - signed_delta) < 1e-8
 
     epsilon_px = 0.001
     
@@ -221,11 +234,12 @@ def test_gk_solve_strike():
     r_d = -0.00509
     tau = 2.0
     F = 129.7958
-    delta = 0.2
+    signed_delta = 0.2
     delta_convention = 'premium_adjusted_forward'
-    strike = gk_solve_strike(S0=S0,tau=tau,r_d=r_d,r_f=r_f,vol=vol,delta=delta,delta_convention=delta_convention)
+    strike = gk_solve_strike(S0=S0,tau=tau,r_d=r_d,r_f=r_f,vol=vol,signed_delta=signed_delta,delta_convention=delta_convention)
     assert abs(strike_test - strike) / strike_test < epsilon_px
-    
+
+
     # 9M USDJPY call, (USD call, JPY Put), 30 June 2023, London 10pm data
     strike_test = 148.11
     S0 = 144.32 # 20 Δ Call
@@ -236,7 +250,7 @@ def test_gk_solve_strike():
     F = 138.031
     delta = 0.2
     delta_convention = 'premium_adjusted_spot'
-    strike = gk_solve_strike(S0=S0,tau=tau,r_d=r_d,r_f=r_f,vol=vol,delta=delta,delta_convention=delta_convention, F=F)
+    strike = gk_solve_strike(S0=S0,tau=tau,r_d=r_d,r_f=r_f,vol=vol,signed_delta=signed_delta,delta_convention=delta_convention, F=F)
     assert abs(strike_test - strike) / strike_test < epsilon_px
         
         
@@ -260,10 +274,27 @@ def test_gk_price_greeks():
 
 
 if __name__ == '__main__':
-    test_gk_price_and_solve_implied_volatility()
-    test_gk_solve_strike()
+    #test_gk_price_and_solve_implied_volatility()
+    #test_gk_solve_strike()
     
 
+
+    epsilon_px = 0.001 # 0.1 %
+
+    # AUDUSD 1Y 30 Δ Put, 30 June 2023 London 10pm
+    strike_test = 0.64100
+    S0 = 0.6662
+    vol = 0.1064786
+    r_f = 0.04655
+    r_d = 0.05376
+    tau = 1.0
+    signed_delta = -0.3
+    delta_convention = 'regular_spot'
+    strike = gk_solve_strike(S0=S0,tau=tau,r_d=r_d,r_f=r_f,vol=vol,signed_delta=signed_delta,delta_convention=delta_convention)
+
+
+
+    assert abs(strike_test - strike) / strike_test < epsilon_px
         
     # S0=0.6629
     # vol=0.0984688

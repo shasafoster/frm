@@ -142,8 +142,9 @@ def gk_price(S0: float,
             # where X is the option price (whose units is DOM),
             # and S0 is the fx spot price (whose units is DOM/FOR)
             # We multiply by S0 so to return the Δ a percentage applicable to the foreign currency notional
-            analytical_greeks['spot_delta'] = S0 * cp * np.exp(-q * tau) * norm.cdf(cp * d1)
-            analytical_greeks['forward_delta'] = S0 * cp * norm.cdf(cp * d1) 
+            # Multiplication of S0 removed
+            analytical_greeks['spot_delta'] = cp * np.exp(-q * tau) * norm.cdf(cp * d1)
+            analytical_greeks['forward_delta'] = cp * norm.cdf(cp * d1)
     
             # Vega, ν, is the change in an options price for a small change in the volatility input
             # ν = ∂X/∂σ ≈ (X(σ_plus) − X(σ_minus)) / (σ_plus - σ_minus)
@@ -167,13 +168,13 @@ def gk_price(S0: float,
             # Gamma, Γ, is the change in an option's delta for a small change in the underlying assets price.
             # Gamma := ∂Δ/∂S ≈ (Δ(S_plus) − Δ(S_minus)) / (S_plus - S_minus)
             # In practice, gamma is  normalised to measure the change in Δ, for a 1% change in the underlying assets price.
-            # Hence we have multiplied the analytical gamma formula by 'S * 0.01'
+            # Hence, we have multiplied the analytical gamma formula by 'S * 0.01'
             analytical_formula = np.exp(-q * tau) * norm.pdf(d1)  / (S0 * σ * np.sqrt(tau)) # identical for calls and puts
             analytical_greeks['gamma'] = (0.01 * S0) * analytical_formula # normalised for 1% change
             
             # Rho, ρ, is the rate at which the price of an option changes relative to a change in the interest rate. 
             # In practice, Rho is normalised to measure the change in price for a 1% change in the underlying interest rate.
-            # Hence we have multiplied the analytical formula result by 0.01 (i.e. 1%)
+            # Hence, we have multiplied the analytical formula result by 0.01 (i.e. 1%)
             analytical_formula = K * tau * np.exp(-q * tau) * norm.cdf(cp * d2)
             analytical_greeks['rho'] = analytical_formula * 0.01
             
@@ -218,14 +219,14 @@ def gk_price(S0: float,
         return results
             
 def gk_solve_strike(S0: float,
-                   tau: float,
-                   r_d: float,
-                   r_f: float,
-                   vol: [float, np.ndarray],
-                   signed_delta: [float, np.ndarray],
-                   delta_convention: str,
-                   F: float = None
-                   ) -> float:
+                    tau: float,
+                    r_d: float,
+                    r_f: float,
+                    vol: [float, np.ndarray],
+                    signed_delta: [float, np.ndarray],
+                    delta_convention: str,
+                    F: float = None,
+                    atm_delta_convention: str='forward') -> float:
     """
     Solves the strike for a given Delta-volatility (Δ-σ) quate.
 
@@ -244,10 +245,12 @@ def gk_solve_strike(S0: float,
     signed_delta : float
         Signed delta, restricted to [0, 0.5] for calls and [-0.5, 0] for puts.
     delta_convention : str
-        Delta convention used for quoting, one of {'regular_spot', 'regular_forward', 'premium_adjusted_spot', 'premium_adjusted_forward'}.
+        Delta convention used for the tenors quoting, one of {'regular_spot', 'regular_forward', 'premium_adjusted_spot', 'premium_adjusted_forward'}.
     F : float, optional
         Market forward rate. If None, it will be calculated using interest rate parity (default is None).
-
+    atm_delta_convention : str, optional
+        At-the-money delta convention used for the tenors quoting, one of {'forward','per_delta_convention'} (default is 'forward').
+        Market convention, is at-the-money delta is quoted in terms of the forward delta, regardless of the delta convention used for the tenors quoting.
     Returns
     -------
     float
@@ -276,9 +279,10 @@ def gk_solve_strike(S0: float,
     assert Δ.shape == σ.shape
     cp = np.sign(Δ)
     assert delta_convention in {'regular_spot',
-                             'regular_forward',
-                            'premium_adjusted_spot',
-                            'premium_adjusted_forward'}, delta_convention
+                                'regular_forward',
+                                'premium_adjusted_spot',
+                                'premium_adjusted_forward'}, delta_convention
+    assert atm_delta_convention in {'forward', 'per_delta_convention'}, atm_delta_convention
 
     result = np.zeros(shape=Δ.shape)
     if F is None:
@@ -289,17 +293,17 @@ def gk_solve_strike(S0: float,
     mask_not_atm = np.logical_not(mask_atm)
 
     if delta_convention in {'regular_spot','regular_forward'}:
-        
-        if np.any(mask_atm):
-            # at-the-money Δ-neutral strike, for regular spot/forward Δ
-            result[mask_atm] = (F * np.exp(0.5 * σ**2 * tau))[mask_atm]
-        
-        if np.any(mask_not_atm):    
-            if delta_convention == 'regular_spot':
-                norm_func = norm.ppf(cp * Δ * np.exp(r_f * tau))
-            elif delta_convention == 'regular_forward':
-                norm_func = norm.ppf(cp * Δ)
-            result[mask_not_atm] = (F * np.exp(-cp * norm_func * σ * np.sqrt(tau) + 0.5 * σ**2 * tau))[mask_not_atm]
+
+        if delta_convention == 'regular_spot':
+            norm_func = norm.ppf(cp * Δ * np.exp(r_f * tau))
+        elif delta_convention == 'regular_forward':
+            norm_func = norm.ppf(cp * Δ) # Note: norm.ppf(0.5) = 0. Applicable to for atm-delta-neutral quotes.
+        result = (F * np.exp(-cp * norm_func * σ * np.sqrt(tau) + 0.5 * σ**2 * tau))
+
+        if atm_delta_convention == 'per_delta_convention':
+            pass
+        elif atm_delta_convention == 'forward':
+            result[mask_atm] = (F * np.exp(0.5 * σ[mask_atm]**2 * tau))
 
     elif delta_convention in {'premium_adjusted_spot','premium_adjusted_forward'}:
         

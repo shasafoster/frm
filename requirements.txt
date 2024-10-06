@@ -8,4 +8,4 @@ PrettyTable
 pytest
 ruff
 scipy
-
+snakeviz

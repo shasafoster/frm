@@ -8,7 +8,7 @@ import time
 import matplotlib.pyplot as plt
 
 from frm.pricing_engine.monte_carlo_generic import generate_rand_nbs
-from frm.pricing_engine.heston_simulate import simulate_heston, simulate_heston_scalar
+from frm.pricing_engine.heston import simulate_heston, simulate_heston_scalar
 from frm.pricing_engine.in_progress.gbm_speed_exploration import simulate_gbm
 
 
