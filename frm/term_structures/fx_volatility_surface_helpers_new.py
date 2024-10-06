@@ -225,7 +225,8 @@ def clean_and_extract_vol_smile_columns(df: pd.DataFrame,
             df.rename(columns={col_name: new_col_name}, inplace=True)
             quotes_column_names.append(new_col_name)
 
-    call_put_flag = np.array([1 if 'call' in col_name else -1 if 'put' in col_name else 0 for col_name in quotes_column_names])
+    call_put_flag = np.array([1 if 'call' in col_name else -1 if 'put' in col_name else 1 if col_name == 'atm_delta_neutral' else np.nan for col_name in quotes_column_names])
+
     signed_delta = np.array(
         [0.5 if col_name == 'atm_delta_neutral' else call_put_flag[i] * float(col_name.split('_')[0]) / 100 for i, col_name
          in enumerate(quotes_column_names)]

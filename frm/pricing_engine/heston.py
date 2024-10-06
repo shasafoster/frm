@@ -121,7 +121,7 @@ def heston_calibrate_vanilla_smile(
         q (float): Interest rate of the asset (Foreign interest rate for Garman-Kohlhagen)
         cp (array): Option types; 1 for call, -1 for put.
         K (array): Vector of strike prices.
-        σ_market (array): Vector of market implied volatilises.
+        volatility_quotes (array): Vector of market implied volatilises.
         method (int): 0 for SSE, 1 for P and IV.
 
         Returns:

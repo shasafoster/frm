@@ -422,11 +422,11 @@ def gk_solve_implied_volatility(S0: float,
     """
     try:
         # Try Netwon's method first (it's faster but less robust)
-        return newton(lambda σ: (gk_price(S0=S0,tau=tau,r_d=r_d,r_f=r_f,cp=cp,K=K,vol=σ)['option_value']  - X), x0=vol_guess, tol=1e-4, maxiter=50).item()
+        return newton(lambda vol: (gk_price(S0=S0,tau=tau,r_d=r_d,r_f=r_f,cp=cp,K=K,vol=vol)['option_value']  - X), x0=vol_guess, tol=1e-4, maxiter=50).item()
     except RuntimeError:
         # Fallback to Brent's method
         try:
-            return root_scalar(lambda σ: (gk_price(S0=S0,tau=tau,r_d=r_d,r_f=r_f,cp=cp,K=K,vol=σ)['option_value']  - X), bracket=[0.0001, 2], method='brentq').root.item()
+            return root_scalar(lambda vol: (gk_price(S0=S0,tau=tau,r_d=r_d,r_f=r_f,cp=cp,K=K,vol=vol)['option_value']  - X), bracket=[0.0001, 2], method='brentq').root
         except ValueError:
             return np.inf        
         

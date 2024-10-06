@@ -416,85 +416,85 @@ class FXVolatilitySurface:
     #                     raise ValueError('SSE is a large value, ', round(SSE,4), ' heston fit at ', expiry_date,' is likely poor')
             
             
-    def interp_σ_surface(self, 
-                          expiry_dates: pd.DatetimeIndex, 
-                          K: np.array, 
-                          cp: np.array):
-            
-        K = np.atleast_1d(K).astype(float)
-        cp = np.atleast_1d(cp).astype(float)
-        
-        assert expiry_dates.shape == K.shape
-        assert expiry_dates.shape == cp.shape
-    
-        # Interpolate the volatility smile for the given expiries
-        self.interp_σ_smile_from_pillar_points(expiry_dates)
-    
-    
-        df = self.daily_volatility_smile.loc[expiry_dates,:].copy()
-        
-        cols_to_drop = [col for col in df.columns if 'σ' in col]
-        df.drop(columns=cols_to_drop, inplace=True)
-        df['K'] = K
-        df['call_put'] = cp
-
-        #helper_cols = ['tenor_date','tenor_name','tenor_years','fx_forward_rate','foreign_ccy_continuously_compounded_zero_rate','domestic_ccy_continuously_compounded_zero_rate','Δ_convention']
-        # dict_K_σ = {v.replace('σ', 'k'): v for v in self.daily_volatility_smile.columns if v not in helper_cols}
-                
-        result = []
-    
-        # Get the implied vol for each strike and date combination
-        # At some point need to make this over unique date, K
-        for expiry_date,row in df.iterrows():
-            
-            K_target = row['K']
-            
-            if self.smile_interpolation_method in {'univariate_spline', 'cubic_spline'}:
-                
-                σ = self.daily_volatility_smile_func[expiry_date](K_target)
-                result.append(σ)
-                
-            elif self.smile_interpolation_method[:6] == 'heston':
-                
-                S0 = self.fx_spot_rate
-                r_f = row['foreign_ccy_continuously_compounded_zero_rate']
-                r_d = row['domestic_ccy_continuously_compounded_zero_rate']
-                tau = row['tenor_years']                
-                F = row['fx_forward_rate']               
-                cp = row['call_put']
-
-                if F is not None: 
-                    # Use market forward rate and imply the curry basis-adjusted domestic interest rate  
-                    F = np.atleast_1d(F).astype(float)
-                    r_d_basis_adj = np.log(F / S0) / tau + r_f # from F = S0 * exp((r_d - r_f) * tau)
-                    r = r_d_basis_adj
-                    q = r_f
-                else:
-                    # By interest rate parity
-                    F = S0 * np.exp((r_d - r_f) * tau)   
-                    r = r_d
-                    q = r_f
-
-                var0 = self.daily_volatility_smile_func[expiry_date]['var0']
-                vv = self.daily_volatility_smile_func[expiry_date]['vv']
-                kappa = self.daily_volatility_smile_func[expiry_date]['kappa']
-                theta = self.daily_volatility_smile_func[expiry_date]['theta']
-                rho = self.daily_volatility_smile_func[expiry_date]['rho']
-                lambda_ = self.daily_volatility_smile_func[expiry_date]['lambda_']
-                
-                if self.smile_interpolation_method == 'heston_analytical_1993':
-                    X = heston1993_price_vanilla_european(S0=S0, tau=tau, r=r, q=q, cp=cp, K=K_target, var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho, lambda_=lambda_)
-                elif self.smile_interpolation_method == 'heston_carr_madan_gauss_kronrod_quadrature':
-                    X = heston_carr_madan_price_vanilla_european(S0=S0, tau=tau, r=r, q=q, cp=cp, K=K_target, var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho, integration_method=0)
-                elif self.smile_interpolation_method == 'heston_carr_madan_fft_w_simpsons':
-                    X = heston_carr_madan_price_vanilla_european(S0=S0, tau=tau, r=r, q=q, cp=cp, K=K_target, var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho, integration_method=1)
-                elif self.smile_interpolation_method == 'heston_cosine':
-                    X = heston_cosine_price_vanilla_european(S0=S0, tau=tau, r=r, q=q, cp=cp, K=K_target, var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho)
-                elif self.smile_interpolation_method == 'heston_lipton':
-                    X = heston_lipton_price_vanilla_european(S0=S0, tau=tau, r=r, q=q, cp=cp, K=K_target, var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho)
-
-                result.append(gk_solve_implied_volatility(S0=S0, tau=tau, r_d=r, r_f=q, cp=cp, K=K_target, X=X, vol_guess=var0**2))
-        return np.array(result)
+    # def interp_σ_surface(self,
+    #                       expiry_dates: pd.DatetimeIndex,
+    #                       K: np.array,
+    #                       cp: np.array):
+    #
+    #     K = np.atleast_1d(K).astype(float)
+    #     cp = np.atleast_1d(cp).astype(float)
+    #
+    #     assert expiry_dates.shape == K.shape
+    #     assert expiry_dates.shape == cp.shape
+    #
+    #     # Interpolate the volatility smile for the given expiries
+    #     self.interp_σ_smile_from_pillar_points(expiry_dates)
+    #
+    #
+    #     df = self.daily_volatility_smile.loc[expiry_dates,:].copy()
+    #
+    #     cols_to_drop = [col for col in df.columns if 'σ' in col]
+    #     df.drop(columns=cols_to_drop, inplace=True)
+    #     df['K'] = K
+    #     df['call_put'] = cp
+    #
+    #     #helper_cols = ['tenor_date','tenor_name','tenor_years','fx_forward_rate','foreign_ccy_continuously_compounded_zero_rate','domestic_ccy_continuously_compounded_zero_rate','Δ_convention']
+    #     # dict_K_σ = {v.replace('σ', 'k'): v for v in self.daily_volatility_smile.columns if v not in helper_cols}
+    #
+    #     result = []
+    #
+    #     # Get the implied vol for each strike and date combination
+    #     # At some point need to make this over unique date, K
+    #     for expiry_date,row in df.iterrows():
+    #
+    #         K_target = row['K']
+    #
+    #         if self.smile_interpolation_method in {'univariate_spline', 'cubic_spline'}:
+    #
+    #             σ = self.daily_volatility_smile_func[expiry_date](K_target)
+    #             result.append(σ)
+    #
+    #         elif self.smile_interpolation_method[:6] == 'heston':
+    #
+    #             S0 = self.fx_spot_rate
+    #             r_f = row['foreign_ccy_continuously_compounded_zero_rate']
+    #             r_d = row['domestic_ccy_continuously_compounded_zero_rate']
+    #             tau = row['tenor_years']
+    #             F = row['fx_forward_rate']
+    #             cp = row['call_put']
+    #
+    #             if F is not None:
+    #                 # Use market forward rate and imply the curry basis-adjusted domestic interest rate
+    #                 F = np.atleast_1d(F).astype(float)
+    #                 r_d_basis_adj = np.log(F / S0) / tau + r_f # from F = S0 * exp((r_d - r_f) * tau)
+    #                 r = r_d_basis_adj
+    #                 q = r_f
+    #             else:
+    #                 # By interest rate parity
+    #                 F = S0 * np.exp((r_d - r_f) * tau)
+    #                 r = r_d
+    #                 q = r_f
+    #
+    #             var0 = self.daily_volatility_smile_func[expiry_date]['var0']
+    #             vv = self.daily_volatility_smile_func[expiry_date]['vv']
+    #             kappa = self.daily_volatility_smile_func[expiry_date]['kappa']
+    #             theta = self.daily_volatility_smile_func[expiry_date]['theta']
+    #             rho = self.daily_volatility_smile_func[expiry_date]['rho']
+    #             lambda_ = self.daily_volatility_smile_func[expiry_date]['lambda_']
+    #
+    #             if self.smile_interpolation_method == 'heston_analytical_1993':
+    #                 X = heston1993_price_vanilla_european(S0=S0, tau=tau, r=r, q=q, cp=cp, K=K_target, var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho, lambda_=lambda_)
+    #             elif self.smile_interpolation_method == 'heston_carr_madan_gauss_kronrod_quadrature':
+    #                 X = heston_carr_madan_price_vanilla_european(S0=S0, tau=tau, r=r, q=q, cp=cp, K=K_target, var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho, integration_method=0)
+    #             elif self.smile_interpolation_method == 'heston_carr_madan_fft_w_simpsons':
+    #                 X = heston_carr_madan_price_vanilla_european(S0=S0, tau=tau, r=r, q=q, cp=cp, K=K_target, var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho, integration_method=1)
+    #             elif self.smile_interpolation_method == 'heston_cosine':
+    #                 X = heston_cosine_price_vanilla_european(S0=S0, tau=tau, r=r, q=q, cp=cp, K=K_target, var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho)
+    #             elif self.smile_interpolation_method == 'heston_lipton':
+    #                 X = heston_lipton_price_vanilla_european(S0=S0, tau=tau, r=r, q=q, cp=cp, K=K_target, var0=var0, vv=vv, kappa=kappa, theta=theta, rho=rho)
+    #
+    #             result.append(gk_solve_implied_volatility(S0=S0, tau=tau, r_d=r, r_f=q, cp=cp, K=K_target, X=X, vol_guess=var0**2))
+    #     return np.array(result)
 
 
     def price_vanilla_european(self,
