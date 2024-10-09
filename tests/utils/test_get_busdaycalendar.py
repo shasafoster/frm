@@ -24,3 +24,9 @@ def test_busdaycal():
     assert (busdaycal.weekmask == np.array([ True,  True,  True,  True,  False, False, False])).all()  
     
     
+
+if __name__ == "__main__":
+    busdaycal = get_busdaycal(keys='USD')
+
+
+

@@ -15,8 +15,6 @@ from numba import njit
 from typing import Tuple
 import warnings
 
-
-
 VALID_HESTON_PRICING_METHODS = [
     'heston_1993',
     'heston_carr_madan_gauss_kronrod_quadrature',
@@ -24,7 +22,6 @@ VALID_HESTON_PRICING_METHODS = [
     'heston_cosine',
     'heston_lipton'
 ]
-
 
 def heston_price_vanilla_european(S0, tau, r, q, cp, K, var0, vv, kappa, theta, rho, lambda_, pricing_method):
     match pricing_method:

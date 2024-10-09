@@ -204,29 +204,59 @@ def check_delta_convention(df: pd.DataFrame, ccy_pair: str) -> pd.DataFrame:
     return df
 
 
-def clean_and_extract_vol_smile_columns(df: pd.DataFrame,
-                                        call_put_pattern: str = r'^(0?[1-9]|[1-4]\d)[_ ]?(delta|Δ)[_ ]?(call|c|put|p)$',
-                                        atm_delta_neutral_column_pattern: str = r'^atm[_ ]?(delta|Δ)[_ ]?neutral$'):
+def clean_vol_quotes_column_names(vol_quotes_df):
+    patterns = {
+        r'^(0?[1-9]|[1-4]\d)[_ ]?(delta|Δ)[_ ]?(call|c|put|p)$': lambda
+            m: f'{m.group(1)}_delta_{"call" if m.group(3) in ["call", "c"] else "put"}',
+        r'^(0?[1-9]|[1-4]\d)[_ ]?(delta|Δ)[_ ]?(risk[_ ]?reversal|rr|butterfly|bf)$': lambda
+            m: f'{m.group(1)}_delta_{m.group(3).replace("_", "").replace(" ", "").replace("rr", "riskreversal").replace("bf", "butterfly")}',
+        r'^(a|at)[_ ]?(t|the)[_ ]?(m|money)[_ ]?(delta|Δ)[_ ]?neutral$': lambda _: 'atm_delta_neutral',
+        r'^(a|at)[_ ]?(t|the)[_ ]?(m|money)[_ ]?(f|fwd|forward)$': lambda _: 'atm_forward'
+    }
+
+    for col_name in vol_quotes_df.columns:
+        for pattern, func in patterns.items():
+            match = re.match(pattern, col_name)
+            if match:
+                new_col_name = func(match)
+                vol_quotes_df.rename(columns={col_name: new_col_name}, inplace=True)
+                break
+
+    return vol_quotes_df
+
+
+def solve_call_put_quotes_from_strategy_quotes(vol_quotes_df):
+
+    risk_reversal_deltas = sorted([col_name.split('_')[0] for col_name in vol_quotes_df.columns if 'riskreversal' in col_name])
+    butterfly_deltas = sorted([col_name.split('_')[0] for col_name in vol_quotes_df.columns if 'butterfly' in col_name])
+
+    assert 'atm_delta_neutral' in vol_quotes_df.columns
+    assert risk_reversal_deltas == butterfly_deltas
+
+    for delta in butterfly_deltas:
+
+        if f'{delta}_delta_put' not in vol_quotes_df.columns:
+            vol_quotes_df[f'{delta}_delta_put'] = vol_quotes_df['atm_delta_neutral'] \
+                                                        + vol_quotes_df[f'{delta}_delta_butterfly'].values \
+                                                        - 0.5 * vol_quotes_df[f'{delta}_delta_riskreversal'].values
+        if f'{delta}_delta_call' not in vol_quotes_df.columns:
+            vol_quotes_df[f'{delta}_delta_call'] = vol_quotes_df['atm_delta_neutral'] \
+                                                         + vol_quotes_df[f'{delta}_delta_butterfly'].values \
+                                                         + 0.5 * vol_quotes_df[f'{delta}_delta_riskreversal'].values
+
+        vol_quotes_df.drop(labels=[f'{delta}_delta_butterfly', f'{delta}_delta_riskreversal'], axis=1, inplace=True)
+
+    return vol_quotes_df
+
+def get_delta_smile_quote_details(df: pd.DataFrame,
+                                  call_put_pattern: str = r'^(0?[1-9]|[1-4]\d)[_ ]?(delta|Δ)[_ ]?(call|c|put|p)$',
+                                  atm_delta_neutral_column_pattern: str = r'^(a|at)[_ ]?(t|the)[_ ]?(m|money)[_ ]?(delta|Δ)[_ ]?neutral$') -> pd.DataFrame:
     quotes_column_names = []
     for col_name in df.columns:
-        match = re.match(call_put_pattern, col_name)
-        if match:
-            # Extract components from match groups
-            delta_value = match.group(1)  # 1 or 2 digits
-            option_type = match.group(3)  # "call", "c", "put", or "p"
-
-            # Convert "c" to "call" and "p" to "put"
-            option_type_full = 'call' if option_type in ['call', 'c'] else 'put'
-
-            # Return the column name in the new format
-            new_col_name = f'{delta_value}_delta_{option_type_full}'
-            df.rename(columns={col_name: new_col_name}, inplace=True)
-            quotes_column_names.append(f'{delta_value}_delta_{option_type_full}')
-
+        if re.match(call_put_pattern, col_name):
+            quotes_column_names.append(col_name)
         elif re.match(atm_delta_neutral_column_pattern, col_name):
-            new_col_name = 'atm_delta_neutral'
-            df.rename(columns={col_name: new_col_name}, inplace=True)
-            quotes_column_names.append(new_col_name)
+            quotes_column_names.append(col_name)
 
     call_put_flag = np.array([1 if 'call' in col_name else -1 if 'put' in col_name else 1 if col_name == 'atm_delta_neutral' else np.nan for col_name in quotes_column_names])
 
@@ -234,12 +264,12 @@ def clean_and_extract_vol_smile_columns(df: pd.DataFrame,
         [0.5 if col_name == 'atm_delta_neutral' else call_put_flag[i] * float(col_name.split('_')[0]) / 100 for i, col_name
          in enumerate(quotes_column_names)]
     )
-    quote_details = pd.DataFrame({'quotes_column_names': quotes_column_names, 'quotes_call_put_flag': call_put_flag, 'quotes_signed_delta': signed_delta})
-    quote_details['order'] = 100 / quote_details['quotes_signed_delta']
-    quote_details = quote_details.sort_values('order', ascending=True).reset_index(drop=True)
-    quote_details.drop(labels='order', axis=1, inplace=True)
+    delta_smile_quote_details = pd.DataFrame({'quotes_column_names': quotes_column_names, 'quotes_call_put_flag': call_put_flag, 'quotes_signed_delta': signed_delta})
+    delta_smile_quote_details['order'] = 100 / delta_smile_quote_details['quotes_signed_delta']
+    delta_smile_quote_details = delta_smile_quote_details.sort_values('order', ascending=True).reset_index(drop=True)
+    delta_smile_quote_details.drop(labels='order', axis=1, inplace=True)
 
-    return df, quote_details
+    return delta_smile_quote_details
 
 
 def interp_fx_forward_curve_df(

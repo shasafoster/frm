@@ -1,12 +1,10 @@
 # -*- coding: utf-8 -*-
 import os
 
-
 from frm.enums.term_structures import FXSmileInterpolationMethod
 
 if __name__ == "__main__":
     os.chdir(os.environ.get('PROJECT_DIR_FRM')) 
-    
 
 from frm.term_structures.zero_curve import ZeroCurve
 from frm.pricing_engine.monte_carlo_generic import generate_rand_nbs
@@ -14,7 +12,8 @@ from frm.pricing_engine.heston import heston_calibrate_vanilla_smile, heston_pri
 from frm.pricing_engine.garman_kohlhagen import gk_price, gk_solve_strike, gk_solve_implied_volatility
 from frm.pricing_engine.geometric_brownian_motion import simulate_gbm_path
 
-from frm.term_structures.fx_volatility_surface_helpers import (clean_and_extract_vol_smile_columns,
+from frm.term_structures.fx_volatility_surface_helpers import (clean_vol_quotes_column_names,
+                                                               get_delta_smile_quote_details,
                                                                check_delta_convention,
                                                                fx_term_structure_helper,
                                                                fx_forward_curve_helper,
@@ -22,7 +21,8 @@ from frm.term_structures.fx_volatility_surface_helpers import (clean_and_extract
                                                                resolve_fx_curve_dates,
                                                                validate_ccy_pair,
                                                                forward_volatility,
-                                                               flat_forward_interp)
+                                                               flat_forward_interp,
+                                                               solve_call_put_quotes_from_strategy_quotes)
 from scipy.interpolate import CubicSpline, InterpolatedUnivariateSpline
 from frm.utils.daycount import year_fraction
 from frm.utils.business_day_calendar import get_busdaycal
@@ -30,7 +30,7 @@ from frm.enums.utils import DayCountBasis, CompoundingFrequency
 
 import numpy as np
 import pandas as pd
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, InitVar
 from typing import Optional
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mtick
@@ -43,9 +43,7 @@ class FXVolatilitySurface:
     fx_forward_curve_df: pd.DataFrame # Quotes in perspective of # of domestic currency units per foreign currency unit
     domestic_zero_curve: ZeroCurve
     foreign_zero_curve: ZeroCurve
-
-    vol_quotes_call_put: Optional[pd.DataFrame] = None
-    vol_quotes_strategy: Optional[pd.DataFrame] = None # Have a helper function to convert this to vol_quotes_call_put.
+    vol_quotes: InitVar[pd.DataFrame]
 
     #### Optional initialisation attributes
 
@@ -56,7 +54,7 @@ class FXVolatilitySurface:
 
     busdaycal: np.busdaycalendar = None
     day_count_basis: DayCountBasis = DayCountBasis.ACT_ACT
-    smile_interpolation_method: FXSmileInterpolationMethod = FXSmileInterpolationMethod.HESTON_COSINE
+    smile_interpolation_method: FXSmileInterpolationMethod = FXSmileInterpolationMethod.UNIVARIATE_SPLINE
 
     # Non initialisation attributes set in __post_init__
     fx_spot_rate: float = field(init=False)
@@ -69,7 +67,7 @@ class FXVolatilitySurface:
     quotes_call_put_flag: np.ndarray = field(init=False)
 
 
-    def __post_init__(self):
+    def __post_init__(self, vol_quotes):
 
         self.vol_smile_daily_func = {}
 
@@ -94,15 +92,15 @@ class FXVolatilitySurface:
         self.fx_spot_rate = self.fx_forward_curve_df.loc[mask, 'fx_forward_rate'].values[0]
 
         # Process volatility input and setup pillar dataframe and daily helper dataframe
-        vol_smile_pillar_df, vol_smile_quote_details = clean_and_extract_vol_smile_columns(self.vol_quotes_call_put)
-        self.quotes_column_names = np.array(vol_smile_quote_details['quotes_column_names'].to_list())
-        self.quotes_signed_delta = np.array(vol_smile_quote_details['quotes_signed_delta'].to_list())
-        self.quotes_call_put_flag = np.array(vol_smile_quote_details['quotes_call_put_flag'].to_list())
-
-        self.vol_smile_pillar_df = self._setup_vol_smile_pillar_df(vol_smile_pillar_df)
+        vol_quotes = clean_vol_quotes_column_names(vol_quotes)
+        vol_quotes_call_put = solve_call_put_quotes_from_strategy_quotes(vol_quotes)
+        delta_smile_quote_details = get_delta_smile_quote_details(vol_quotes_call_put)
+        self.quotes_column_names = np.array(delta_smile_quote_details['quotes_column_names'].to_list())
+        self.quotes_signed_delta = np.array(delta_smile_quote_details['quotes_signed_delta'].to_list())
+        self.quotes_call_put_flag = np.array(delta_smile_quote_details['quotes_call_put_flag'].to_list())
+        self.vol_smile_pillar_df = self._setup_vol_smile_pillar_df(vol_quotes_call_put)
         self.vol_smile_daily_df = self._setup_vol_smile_daily_df()
         self.strike_pillar_df = self._setup_strike_pillar()
-
 
 
     def _add_fx_ir_to_df(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -114,6 +112,7 @@ class FXVolatilitySurface:
         df['foreign_zero_rate'] = self.foreign_zero_curve.get_zero_rate(dates=df['expiry_date'],
                                                                         compounding_frequency=CompoundingFrequency.CONTINUOUS)
         return df
+
 
     def _setup_vol_smile_pillar_df(self, vol_smile_pillar_df):
             vol_smile_pillar_df['warnings'] = ''
@@ -184,6 +183,7 @@ class FXVolatilitySurface:
 
         return vol_smile_daily_df[column_order]
 
+
     def _setup_strike_pillar(self):
         strike_pillar_df = self.vol_smile_pillar_df.copy()
         strike_pillar_df.loc[:, self.quotes_column_names] = np.nan
@@ -246,10 +246,15 @@ class FXVolatilitySurface:
                                                        FXSmileInterpolationMethod.CUBIC_SPLINE]:
                     K = gk_solve_strike(S0=S0, tau=tau, r_d=r_d, r_f=r_f, vol=vol, signed_delta=signed_delta, delta_convention=delta_convention, F=F)
                     if self.smile_interpolation_method == FXSmileInterpolationMethod.UNIVARIATE_SPLINE:
-                        self.vol_smile_daily_func[expiry_date] = InterpolatedUnivariateSpline(x=K, y=vol)
+                        if len(self.quotes_column_names) < 3:
+                            raise ValueError('Cannot fit InterpolatedUnivariateSpline with less than 3 points, please provide more points.')
+                        degree = min(3, max(2, len(self.quotes_column_names) - 1))
+                        self.vol_smile_daily_func[expiry_date] = InterpolatedUnivariateSpline(x=K, y=vol, k=degree)
                     elif self.smile_interpolation_method == FXSmileInterpolationMethod.CUBIC_SPLINE:
+                        if len(self.quotes_column_names) < 4:
+                            raise ValueError('Cannot fit CubicSpline with less than 4 points, please provide more points or use a different interpolation method')
                         self.vol_smile_daily_func[expiry_date] = CubicSpline(x=K, y=vol)
-                elif self.smile_interpolation_method in [FXSmileInterpolationMethod.HESTON_ANALYTICAL_1993,
+                elif self.smile_interpolation_method in [FXSmileInterpolationMethod.HESTON_1993,
                                                          FXSmileInterpolationMethod.HESTON_CARR_MADAN_GAUSS_KRONROD_QUADRATURE,
                                                          FXSmileInterpolationMethod.HESTON_CARR_MADAN_FFT_W_SIMPSONS,
                                                          FXSmileInterpolationMethod.HESTON_COSINE,
@@ -310,7 +315,7 @@ class FXVolatilitySurface:
             if self.smile_interpolation_method in [FXSmileInterpolationMethod.UNIVARIATE_SPLINE,
                                                     FXSmileInterpolationMethod.CUBIC_SPLINE]:
                 interp_df.loc[i,'vol'] = vol_smile_func(K[i])
-            elif self.smile_interpolation_method in [FXSmileInterpolationMethod.HESTON_ANALYTICAL_1993,
+            elif self.smile_interpolation_method in [FXSmileInterpolationMethod.HESTON_1993,
                                                     FXSmileInterpolationMethod.HESTON_CARR_MADAN_GAUSS_KRONROD_QUADRATURE,
                                                     FXSmileInterpolationMethod.HESTON_CARR_MADAN_FFT_W_SIMPSONS,
                                                     FXSmileInterpolationMethod.HESTON_COSINE,
@@ -516,405 +521,66 @@ class FXVolatilitySurface:
 
     def plot_smile(self, expiry_date: pd.Timestamp):
 
-        pass
-
-
-
-
-        # self.interp_vol_surface(expiry_dates=pd.DatetimeIndex([expiry_date]),
-        #                         K=deltas,
-        #                         cp=np.sign(deltas))
-        #
-        #
-        # self.vol_smile_daily_df[]
-        #
-        # mask = self.vol_smile_daily_df['expiry_date'] == expiry_date
-        #
-        # def convert_column_name_to_delta_for_plt(input_str):
-        #     if 'put' in input_str:
-        #         return int(input_str.split('Δ')[0][2:])
-        #     elif 'call' in input_str:
-        #         return 100 - int(input_str.split('Δ')[0][2:])
-        #     elif 'neutral' in input_str:
-        #         return 50
-        #
-        # def convert_column_name_to_delta(input_str):
-        #     if 'put' in input_str:
-        #         return -1 * int(input_str.split('Δ')[0][2:]) / 100
-        #     elif 'call' in input_str:
-        #         return int(input_str.split('Δ')[0][2:]) / 100
-        #     elif 'neutral' in input_str:
-        #         return 0.5
-        #
-        # i = 0
-        # for date, row in self.σ_pillar.iterrows():
-        #
-        #     # Scalars
-        #     tenor_name = row['tenor']
-        #     delta_convention = row['delta_convention']
-        #     S0 = self.fx_spot_rate
-        #     r_f = row['foreign_zero_rate']
-        #     r_d = row['domestic_zero_rate']
-        #     tau = row['expiry_years']
-        #     F = row['fx_forward_rate']
-        #
-        #     if F is not None:
-        #         # Use market forward rate and imply the curry basis-adjusted domestic interest rate
-        #         F = np.atleast_1d(F).astype(float)
-        #         r_d_basis_adj = np.log(F / S0) / tau + r_f  # from F = S0 * exp((r_d - r_f) * tau)
-        #         r = r_d_basis_adj
-        #         q = r_f
-        #     else:
-        #         # By interest rate parity
-        #         F = S0 * np.exp((r_d - r_f) * tau)
-        #         r = r_d  # noqa: F841
-        #         q = r_f  # noqa: F841
-        #
-        #     # Arrays
-        #     Δ = [convert_column_name_to_delta(c) for c in self.σ_pillar.columns if c[0] == 'σ']
-        #     Δ_for_plt = [convert_column_name_to_delta_for_plt(c) for c in self.σ_pillar.columns if c[0] == 'σ']
-        #     cp = np.sign(Δ)
-        #     σ = row[[c for c in self.σ_pillar.columns if c[0] == 'σ']].values
-        #
-        #     if self.smile_interpolation_method[:6] == 'heston':
-        #         var0, vv, kappa, theta, rho, lambda_, IV, SSE = \
-        #             heston_calibrate_vanilla_smile(Δ, delta_convention, σ, S0, r_f, r_d, tau, cp,
-        #                                            pricing_method=self.smile_interpolation_method)
-        #
-        #         # Displaying output
-        #         print(f'=== {tenor_name} calibration results ===')
-        #         print(f'var0, vv, kappa, theta, rho: {var0, vv, kappa, theta, rho}')
-        #         print(f'SSE {SSE * 100}')
-        #
-        #         # Plotting
-        #         i += 1
-        #         plt.figure(i + 1)
-        #         plt.plot(Δ_for_plt, σ * 100, 'ko-', linewidth=1)
-        #         plt.plot(Δ_for_plt, IV * 100, 'rs--', linewidth=1)
-        #         plt.legend([f'{tenor_name} smile', 'Heston fit'], loc='upper right')
-        #         plt.xlabel('Delta [%]')
-        #         plt.ylabel('Implied volatility [%]')
-        #         plt.xticks(Δ_for_plt)
-        #         plt.title(self.smile_interpolation_method)
-        #         plt.show()
-        #
-        #     else:
-        #         raise ValueError
-
-
-
-
-# FX Volatility Surface
-
-# At minimum (out of the curve_date, spot_offset & spot_date) the curve_date or spot_date must be specified
-# The two parameters can be implied or set per market convention.
-# If all three parameters are provided, they will be validated for consistency.
-curve_date = pd.Timestamp('2023-06-30') # Friday 30-June-2023
-
-# Market convention is quoted as AUD/USD (1 AUD = x USD)
-ccy_pair = 'audusd'
-ccy_pair, domestic_ccy, foreign_ccy = validate_ccy_pair(ccy_pair)
-
-# The FX volatility surface is defined as pandas DataFrame.
-# Each row of the dataframe defines to the volatility smile for the rows tenor.
-# Each column of the dataframe corresponds to a given delta's term structure.
-# The dataframe must have
-# (i) at least one of 'tenor', 'expiry_date' or 'delivery_date' as columns to define the term structure.
-# (ii) the 'delta_convention' column to specify the delta convention for the volatility smile.
-# The volatility smile column names are defined by 'X_delta_call' and 'X_delta_put' where X is the delta value with 1<X<50.
-# The 'atm_delta_neutral' column is the at-the-money volatility.
-vol_surface_data = {
-    'tenor': ['1W', '1M', '2M', '3M', '6M', '9M', '1Y', '2Y', '3Y', '4Y', '5Y', '7Y', '10Y'],
-    'delta_convention': ['regular_spot'] * len(['1W', '1M', '2M', '3M', '6M', '9M', '1Y']) \
-                      + ['regular_forward'] * len(['2Y', '3Y', '4Y', '5Y', '7Y', '10Y']),
-    '5Δ_put': np.array([11.943, 11.145, 11.514, 11.834, 12.402, 12.996, 13.546, 14.159, 14.683, 15.161, 15.477, 16.703, 17.042])/100,
-    '10Δ_put': np.array([11.656, 10.786, 10.990, 11.200, 11.599, 12.006, 12.361, 12.824, 13.215, 13.618, 13.875, 14.603, 14.966])/100,
-    '15Δ_put': np.array([11.481, 10.568, 10.683, 10.832, 11.141, 11.455, 11.718, 12.123, 12.452, 12.808, 13.032, 13.573, 13.948])/100,
-    '20Δ_put': np.array([11.350, 10.405, 10.457, 10.564, 10.812, 11.065, 11.270, 11.645, 11.932, 12.254, 12.455, 12.888, 13.267])/100,
-    '25Δ_put': np.array([11.240, 10.271, 10.275, 10.350, 10.550, 10.758, 10.920, 11.273, 11.530, 11.823, 12.005, 12.360, 12.739])/100,
-    '30Δ_put': np.array([11.140, 10.152, 10.116, 10.165, 10.326, 10.496, 10.624, 10.961, 11.190, 11.457, 11.620, 11.909, 12.283])/100,
-    'atmΔ_neutral': np.array([10.868, 9.814, 9.684, 9.670, 9.745, 9.848, 9.922, 10.150, 10.300, 10.488, 10.600, 10.750, 11.100])/100,
-    '30Δ_call': np.array([10.722, 9.598, 9.441, 9.400, 9.440, 9.535, 9.610, 9.831, 9.934, 10.076, 10.166, 10.369, 10.683])/100,
-    '25Δ_call': np.array([10.704, 9.559, 9.407, 9.364, 9.404, 9.508, 9.596, 9.833, 9.930, 10.065, 10.155, 10.407, 10.711]) / 100,
-    '20Δ_call': np.array([10.683, 9.516, 9.368, 9.323, 9.365, 9.481, 9.585, 9.846, 9.943, 10.071, 10.160, 10.478, 10.774]) / 100,
-    '15Δ_call': np.array([10.663, 9.471, 9.331, 9.287, 9.335, 9.470, 9.599, 9.893, 9.998, 10.117, 10.206, 10.615, 10.904]) / 100,
-    '10Δ_call': np.array([10.643, 9.421, 9.296, 9.256, 9.318, 9.486, 9.657, 10.004, 10.126, 10.236, 10.325, 10.877, 11.157])/100,
-    '5Δ_call': np.array([10.628, 9.365, 9.274, 9.249, 9.349, 9.587, 9.847, 10.306, 10.474, 10.568, 10.660, 11.528, 11.787])/100
-}
-vol_quotes_call_put = pd.DataFrame(vol_surface_data)
-
-# FX Forward Rates
-# The FX forward curve must be specified as a dataframe with
-# (i) least one of 'tenor', 'fixing_date' or 'delivery_date' (to define the term structure)
-# (ii) the 'fx_forward_rate' column
-fx_forward_curve_data = {
-    'tenor': ['SP','1D','1W','2W','3W','1M','2M','3M','6M','9M','1Y','15M','18M','2Y','3Y','4Y','5Y','7Y','10Y'],
-    'fx_forward_rate': [0.6629, 0.6629, 0.6630, 0.6631, 0.6633, 0.6635, 0.6640, 0.6646,0.6661, 0.6673, 0.6680,
-                        0.6681, 0.6679, 0.6668, 0.6631, 0.6591, 0.6525, 0.6358, 0.6084],
-}
-fx_forward_curve_df = pd.DataFrame(fx_forward_curve_data)
-
-
-# Interest rates
-data = {
-    'tenor' : ['1 Day', '1 Week', '2 Week', '3 Week', '1 Month', '2 Month', '3 Month', '6 Month', '9 Month', '1 Year', '15 Month', '18 Month', '2 Year', '3 Year', '4 Year', '5 Year', '7 Year', '10 Year'],
-    'domestic_zero_rate': [5.055, 5.059, 5.063, 5.065, 5.142, 5.221, 5.270, 5.390, 5.432, 5.381, 5.248, 5.122, 4.812, 4.373, 4.087, 3.900, 3.690, 3.550],
-    'foreign_zero_rate': [4.156, 4.153, 4.150, 4.138, 4.194, 4.274, 4.335, 4.479, 4.595, 4.660, 4.674, 4.673, 4.578, 4.427, 4.295, 4.285, 4.362, 4.493],
-}
-zero_rate_df = pd.DataFrame(data)
-zero_rate_df['foreign_zero_rate'] = zero_rate_df['foreign_zero_rate'] / 100
-zero_rate_df['domestic_zero_rate'] = zero_rate_df['domestic_zero_rate'] / 100
-
-zero_rate_domestic_df = zero_rate_df[['tenor', 'domestic_zero_rate']].copy()
-zero_rate_domestic_df.rename(columns={'domestic_zero_rate': 'zero_rate'}, inplace=True)
-
-zero_rate_foreign_df = zero_rate_df[['tenor', 'foreign_zero_rate']].copy()
-zero_rate_foreign_df.rename(columns={'foreign_zero_rate': 'zero_rate'}, inplace=True)
-
-busdaycal_domestic = get_busdaycal(domestic_ccy)
-busdaycal_foreign = get_busdaycal(foreign_ccy)
-
-zero_curve_domestic = ZeroCurve(data=zero_rate_domestic_df, curve_date=pd.Timestamp('2023-06-30'), day_count_basis=DayCountBasis.ACT_360, compounding_frequency=CompoundingFrequency.CONTINUOUS, busdaycal=busdaycal_domestic)
-zero_curve_foreign = ZeroCurve(data=zero_rate_foreign_df, curve_date=pd.Timestamp('2023-06-30'), day_count_basis=DayCountBasis.ACT_365, compounding_frequency=CompoundingFrequency.CONTINUOUS, busdaycal=busdaycal_foreign)
-del zero_rate_domestic_df, zero_rate_foreign_df, zero_rate_df, busdaycal_domestic, busdaycal_foreign
-
-# If no business day calendar is specified, create it based on holiday calendars of both currencies
-busdaycal = None
-if busdaycal is None:
-    busdaycal = get_busdaycal([domestic_ccy, foreign_ccy])
-
-
-surf = FXVolatilitySurface(domestic_ccy=domestic_ccy,
-                           foreign_ccy=foreign_ccy,
-                           fx_forward_curve_df=fx_forward_curve_df,
-                           domestic_zero_curve=zero_curve_domestic,
-                           foreign_zero_curve=zero_curve_foreign,
-                           vol_quotes_call_put=vol_quotes_call_put,
-                           curve_date=curve_date,
-                           busdaycal=busdaycal,
-                           smile_interpolation_method=FXSmileInterpolationMethod.HESTON_COSINE)
-
-expiry_dates = pd.DatetimeIndex(['2025-06-30', '2025-12-31', '2026-06-30','2026-06-30','2026-06-30'])
-K = np.array([0.7, 0.7, 0.7, 0.7, 0.7])
-cp = np.array([-1, -1, 1, 1, 1])
-
-#df = vol_surface.interp_vol_surface(expiry_dates, K, cp)
-
-surf = vol_surface
-
-# Test the strike solve by comparing the analytical delta to the signed delta
-# Excluding, the atm delta neutral quotes, the volatility quotes are given as spot delta for <= 1Y tenors and forward delta for > 1Y tenors.
-# The atm delta neutral quotes are all forward delta quotes.
-
-#%%
-
-# Plot smile for any date
-
-expiry_date = pd.Timestamp('2025-06-30')
-vol_daily_smile_df = surf.vol_smile_daily_df.loc[surf.vol_smile_daily_df['expiry_date'] == expiry_date]
-vol_daily_smile_func = surf.vol_smile_daily_func[expiry_date]
-
-delta_convention = vol_daily_smile_df['delta_convention'].iloc[0]
-vol_pillar = vol_daily_smile_df[surf.quotes_column_names].iloc[0]
-
-strikes = gk_solve_strike(S0=surf.fx_spot_rate,
-                          tau=vol_daily_smile_df['expiry_years'].iloc[0],
-                          r_d=vol_daily_smile_df['domestic_zero_rate'].iloc[0],
-                          r_f=vol_daily_smile_df['foreign_zero_rate'].iloc[0],
-                          vol=vol_pillar,
-                          signed_delta=surf.quotes_signed_delta,
-                          delta_convention=delta_convention,
-                          F=vol_daily_smile_df['fx_forward_rate'].iloc[0],
-                          atm_delta_convention='forward')
-
-nb_strikes = 100
-strike_delta_neutral = strikes[surf.quotes_column_names == 'atm_delta_neutral'].item()
-strikes_put = np.linspace(np.min(strikes), strike_delta_neutral, nb_strikes)
-strikes_call = np.linspace(strike_delta_neutral, np.max(strikes), nb_strikes)
-strikes_array = np.concatenate([strikes_put, strikes_call])
-call_put_array = np.concatenate([-1 * np.ones(nb_strikes), np.ones(nb_strikes)])
-expiry_dates = pd.DatetimeIndex([expiry_date for _ in range(len(strikes_array))])
-
-result = surf.price_vanilla_european(expiry_dates=expiry_dates,
-                                     K=strikes_array,
-                                     cp=call_put_array,
-                                     analytical_greeks_flag=True)
-
-if delta_convention == 'regular_spot':
-    delta_str = 'spot_delta'
-elif delta_convention == 'regular_forward':
-    delta_str = 'forward_delta'
-
-delta = result['analytical_greeks'][delta_str]
-vol = result['market_data_inputs']['vol']
-
-delta_pillar_for_plot = np.full(surf.quotes_signed_delta.shape, np.nan)
-midpoint = len(delta_pillar_for_plot)//2
-delta_pillar_for_plot[:midpoint] = np.abs(surf.quotes_signed_delta[:midpoint])
-delta_pillar_for_plot[midpoint:] = 1.0 - surf.quotes_signed_delta[midpoint:]
-
-delta_for_plot = np.full(delta.shape, np.nan)
-delta_for_plot[:nb_strikes] = np.abs(delta[:nb_strikes])
-delta_for_plot[nb_strikes:] = 1.0 - delta[nb_strikes:]
-
-# Plot
-plt.plot(100*delta_pillar_for_plot, vol_pillar, 'x', label='Pillar Volatilities')
-plt.plot(100*delta_for_plot, vol, label='Fitted Smile')    # X markers
-
-tenor = np.round(vol_daily_smile_df['expiry_years'].iloc[0],2)
-
-plt.title(f'Volatility Smile for {tenor}Y ({expiry_date.date()})\n'
-          f'Smile interpolation method: {surf.smile_interpolation_method.value}')
-plt.xlabel('Delta:   Puts: (0,0.5). ATM Δ Neutral: 0.5. Calls: (0.5,1)')
-plt.ylabel('Volatility')
-plt.xlim([0, 100])
-
-plt.gca().yaxis.set_major_formatter(mtick.PercentFormatter(1.0, decimals=0))  # 1.0 means 100%
-
-plt.legend()
-plt.show()
-
-
-
-
-
-
-
-
-#%%
-
-
-for i,row in surf.vol_smile_pillar_df.iterrows():
-    # Spot delta check
-
-    vols = surf.vol_smile_pillar_df[surf.quotes_column_names].iloc[i]
-    signed_delta = surf.quotes_signed_delta
-    cp = surf.quotes_call_put_flag
-    expiry_date = surf.vol_smile_pillar_df['expiry_date'].iloc[i]
-    expiry_dates = pd.DatetimeIndex([expiry_date for _ in range(len(vols))])
-    K = surf.strike_pillar_df[surf.quotes_column_names].iloc[i]
-
-    result = surf.price_vanilla_european(expiry_dates=expiry_dates,
-                                         K=K,
-                                         cp=cp,
-                                         analytical_greeks_flag=True)
-
-
-    mask = surf.quotes_column_names != 'atm_delta_neutral'
-    if surf.vol_smile_pillar_df.loc[i,'delta_convention'] == 'regular_spot':
-        delta_str = 'spot_delta'
-    elif surf.vol_smile_pillar_df.loc[i,'delta_convention'] == 'regular_forward':
-        delta_str = 'forward_delta'
-
-    assert (np.abs(result['analytical_greeks'][delta_str][mask] - signed_delta[mask]) < 1e-2).all()
-    assert (np.abs(result['analytical_greeks']['forward_delta'][~mask] - signed_delta[~mask]) < 1e-2).all()
-
-#%%
-
-# expiry_date = pd.Timestamp('2025-06-30')
-#
-# vol_smile = surf.vol_smile_daily_df.loc[surf.vol_smile_daily_df['expiry_date'] == expiry_date]
-# surf._solve_vol_daily_smile_func(pd.DatetimeIndex([expiry_date]))
-# vol_smile_func = surf.vol_smile_daily_func[expiry_date]
-#
-# # Pillar data for scatter plot
-# pillar_delta = surf.quotes_signed_delta
-# pillar_vol = vol_smile[surf.quotes_column_names].values[0]
-#
-# # Data per smile function for line plot
-# min_delta = np.max(pillar_delta[pillar_delta < 0])
-# max_delta = np.min(pillar_delta[pillar_delta > 0])
-# deltas = np.array(list(np.linspace(min_delta, -0.5, 10)) + list(np.linspace(0.5, max_delta, 10)))
-
-
-vol_smile = surf.vol_smile_pillar_df.iloc[8]
-strike_smile = surf.strike_pillar_df.iloc[5]
-
-vols = vol_smile[surf.quotes_column_names].values
-strikes = strike_smile[surf.quotes_column_names].values
-
-strike_delta_neutral = strike_smile['atm_delta_neutral']
-
-strikes_put = np.linspace(min(strikes), strike_delta_neutral, 100)
-strikes_call = np.linspace(strike_delta_neutral, max(strikes), 100)
-strikes_range = np.concatenate([strikes_put, strikes_call])
-call_put_range = np.concatenate([-1 * np.ones(100), np.ones(100)])
-
-expiry_dates = pd.DatetimeIndex([vol_smile['expiry_date'] for _ in range(len(strikes_range))])
-
-result = surf.price_vanilla_european(expiry_dates=expiry_dates,
-                                     K=strikes_range,
-                                     cp=call_put_range,
-                                     analytical_greeks_flag=True)
-
-
-
-
-
-#%%
-# Solve strike for each delta
-
-
-#
-# def clean_and_extract_vol_smile_columns(df: pd.DataFrame,
-#                                         call_put_pattern: str = r'^(0?[1-9]|[1-4]\d)[_ ]?(delta|Δ)[_ ]?(call|c|put|p)$',
-#                                         atm_delta_neutral_column_pattern: str = r'^atm[_ ]?(delta|Δ)[_ ]?neutral$'):
-#     quotes_column_names = []
-#     for col_name in df.columns:
-#         match = re.match(call_put_pattern, col_name)
-#         if match:
-#             # Extract components from match groups
-#             delta_value = match.group(1)  # 1 or 2 digits
-#             option_type = match.group(3)  # "call", "c", "put", or "p"
-#
-#             # Convert "c" to "call" and "p" to "put"
-#             option_type_full = 'call' if option_type in ['call', 'c'] else 'put'
-#
-#             # Return the column name in the new format
-#             new_col_name = f'{delta_value}_delta_{option_type_full}'
-#             df.rename(columns={col_name: new_col_name}, inplace=True)
-#             quotes_column_names.append(f'{delta_value}_delta_{option_type_full}')
-#
-# for Δ in Δ_list:
-#     atm = 'σ_atmΔneutral'
-#     bf = 'σ_' + Δ + 'Δbf'
-#     rr = 'σ_' + Δ + 'Δrr'
-#
-#     for v in ['call', 'put']:
-#         column_name = 'σ_' + Δ + 'Δ' + v
-#         if column_name not in df.columns:
-#             df[column_name] = np.nan
-#
-#     for i, row in df.iterrows():
-#
-#         if bf and rr in row.index:
-#             if atm in row.index:
-#                 if pd.notna(row[bf]) and pd.notna(row[rr]) and pd.notna(row[atm]):
-#                     if isinstance(row[bf], (float, int)) and isinstance(row[rr], (float, int)) \
-#                             and isinstance(row[atm], (float, int)) and row[atm] > 0:
-#                         df.at[i, 'σ_' + Δ + 'Δcall'] = row[bf] + row[atm] + 0.5 * row[rr]
-#                         df.at[i, 'σ_' + Δ + 'Δput'] = row[bf] + row[atm] - 0.5 * row[rr]
-#
-#             if pd.isna(row[bf]) and pd.notna(row[rr]):
-#                 df.loc[i, 'errors'] += bf + ' value is absent\n'  # add comment if butterfly is n/a
-#             elif pd.isna(row[rr]) and pd.notna(row[bf]):
-#                 df.loc[i, 'errors'] += rr + ' value is absent\n'  # add comment if risk reversal is n/a
-#             elif (pd.notna(row[bf]) or pd.notna(row[rr])) and pd.isna(row[atm]):
-#                 df.loc[i, 'errors'] += atm + ' value is absent\n'  # add comment if at-the-money is n/a
-#
-#         elif bf in row.index and rr not in row.index:
-#             if rr not in row.index and pd.notna(row[bf]):
-#                 df.loc[i, 'errors'] += bf + ' value is present but column ' + rr + ' is absent\n'
-#             if atm not in row.index and pd.notna(row[bf]):
-#                 df.loc[i, 'errors'] += bf + ' value is present but column ' + atm + ' is absent\n'
-#
-#         elif rr in row.index and bf not in row.index:
-#             if bf not in row.index and pd.notna(row[rr]):
-#                 df.loc[i, 'errors'] += rr + ' value is present but column ' + bf + ' is absent\n'
-#             if atm not in row.index and pd.notna(row[rr]):
-#                 df.loc[i, 'errors'] += rr + ' value is present but column ' + atm + ' is absent\n'
-#
-#             # Drop σ-strategy quote columns
-# pattern2 = r'^σ_(\d{1,2})Δ(bf|rr)$'
-# cols_to_drop = df.filter(regex=pattern2).columns
-# df = df.drop(columns=cols_to_drop)
+        self._solve_vol_daily_smile_func(pd.DatetimeIndex([expiry_date]))
+
+        vol_daily_smile_df = self.vol_smile_daily_df.loc[self.vol_smile_daily_df['expiry_date'] == expiry_date]
+
+        delta_convention = vol_daily_smile_df['delta_convention'].iloc[0]
+        vol_pillar = vol_daily_smile_df[self.quotes_column_names].iloc[0]
+
+        pillar_strikes = gk_solve_strike(S0=self.fx_spot_rate,
+                                  tau=vol_daily_smile_df['expiry_years'].iloc[0],
+                                  r_d=vol_daily_smile_df['domestic_zero_rate'].iloc[0],
+                                  r_f=vol_daily_smile_df['foreign_zero_rate'].iloc[0],
+                                  vol=vol_pillar,
+                                  signed_delta=self.quotes_signed_delta,
+                                  delta_convention=delta_convention,
+                                  F=vol_daily_smile_df['fx_forward_rate'].iloc[0],
+                                  atm_delta_convention='forward')
+
+        nb_strikes = 100
+        strike_delta_neutral = pillar_strikes[self.quotes_column_names == 'atm_delta_neutral'].item()
+        strikes_put = np.linspace(np.min(pillar_strikes), strike_delta_neutral, nb_strikes)
+        strikes_call = np.linspace(strike_delta_neutral, np.max(pillar_strikes), nb_strikes)
+        strikes_array = np.concatenate([strikes_put, strikes_call])
+        call_put_array = np.concatenate([-1 * np.ones(nb_strikes), np.ones(nb_strikes)])
+        expiry_dates = pd.DatetimeIndex([expiry_date for _ in range(len(strikes_array))])
+
+        result = self.price_vanilla_european(expiry_dates=expiry_dates,
+                                             K=strikes_array,
+                                             cp=call_put_array,
+                                             analytical_greeks_flag=True)
+
+        if delta_convention == 'regular_spot':
+            delta_str = 'spot_delta'
+        elif delta_convention == 'regular_forward':
+            delta_str = 'forward_delta'
+
+        delta = result['analytical_greeks'][delta_str]
+        vol = result['market_data_inputs']['vol']
+
+        delta_pillar_for_plot = np.full(self.quotes_signed_delta.shape, np.nan)
+        midpoint = len(delta_pillar_for_plot) // 2
+        delta_pillar_for_plot[:midpoint] = np.abs(self.quotes_signed_delta[:midpoint])
+        delta_pillar_for_plot[midpoint:] = 1.0 - self.quotes_signed_delta[midpoint:]
+
+        delta_for_plot = np.full(delta.shape, np.nan)
+        delta_for_plot[:nb_strikes] = np.abs(delta[:nb_strikes])
+        delta_for_plot[nb_strikes:] = 1.0 - delta[nb_strikes:]
+
+        # Plot
+        plt.plot(100 * delta_pillar_for_plot, vol_pillar, 'x', label='Pillar Volatilities')
+        plt.plot(100 * delta_for_plot, vol, label='Fitted Smile')  # X markers
+
+        tenor = np.round(vol_daily_smile_df['expiry_years'].iloc[0], 2)
+
+        plt.title(f'Volatility Smile for {tenor}Y ({expiry_date.date()})\n'
+                  f'Smile interpolation method: {self.smile_interpolation_method.value}')
+        plt.xlabel('Delta:   Puts: (0,0.5). ATM Δ Neutral: 0.5. Calls: (0.5,1)')
+        plt.ylabel('Volatility')
+        plt.xlim([0, 100])
+
+        plt.gca().yaxis.set_major_formatter(mtick.PercentFormatter(1.0, decimals=1))  # 1.0 means 100%
+
+        plt.legend()
+        plt.show()

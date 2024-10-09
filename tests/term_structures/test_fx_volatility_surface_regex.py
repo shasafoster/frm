@@ -49,7 +49,7 @@ def test_regex_patterns():
 
 
     # Define the regex pattern
-    atm_delta_neutral_column_pattern = r'^atm[_ ]?(delta|Δ)[_ ]?neutral$'
+    atm_delta_neutral_column_pattern = r'^(a|at)[_ ]?(t|the)[_ ]?(m|money)[_ ]?(delta|Δ)[_ ]?neutral$'
 
     # Test cases: (string, expected result)
     test_cases = [
@@ -57,6 +57,7 @@ def test_regex_patterns():
         ('atm_Δ_neutral', True),
         ('atmΔneutral', True),
         ('atm_Δneutral', True),
+        ('at the money delta neutral', True),
         ('atmneutral', False),  # Should not match, "delta" or "Δ" is mandatory
         ('atm delta neutral', True),
         ('atm delta xneutral', False),  # Invalid

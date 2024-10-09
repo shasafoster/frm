@@ -26,7 +26,7 @@ class TermRate(Enum):
 class FXSmileInterpolationMethod(Enum):
     UNIVARIATE_SPLINE = 'univariate_spline'
     CUBIC_SPLINE = 'cubic_spline'
-    HESTON_ANALYTICAL_1993 = 'heston_analytical_1993'
+    HESTON_1993 = 'heston_1993'
     HESTON_CARR_MADAN_GAUSS_KRONROD_QUADRATURE = 'heston_carr_madan_gauss_kronrod_quadrature'
     HESTON_CARR_MADAN_FFT_W_SIMPSONS = 'heston_carr_madan_fft_w_simpsons'
     HESTON_LIPTON = 'heston_lipton'
