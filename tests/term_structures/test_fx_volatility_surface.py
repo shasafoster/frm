@@ -9,17 +9,11 @@ if __name__ == "__main__":
 from frm.term_structures.zero_curve import ZeroCurve
 from frm.term_structures.fx_volatility_surface import FXVolatilitySurface
 
-from scipy.interpolate import CubicSpline, InterpolatedUnivariateSpline
-from frm.utils.daycount import year_fraction
 from frm.utils.business_day_calendar import get_busdaycal
 from frm.enums.utils import DayCountBasis, CompoundingFrequency
-from frm.enums.term_structures import FXSmileInterpolationMethod
 
 import numpy as np
 import pandas as pd
-from dataclasses import dataclass, field
-from typing import Optional
-import matplotlib.pyplot as plt
 
 
 def test_fx_volatility_surface():

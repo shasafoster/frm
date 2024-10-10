@@ -11,8 +11,7 @@ from frm.pricing_engine.heston import \
     heston_carr_madan_price_vanilla_european, \
     heston_cosine_price_vanilla_european, \
     heston1993_price_vanilla_european, \
-    heston_lipton_price_vanilla_european, \
-    heston_price_vanilla_european
+    heston_lipton_price_vanilla_european
 
 
 
