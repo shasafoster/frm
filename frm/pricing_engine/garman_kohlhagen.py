@@ -154,7 +154,7 @@ def gk_price(S0: float,
         analytical_formula = -(S0*np.exp(-r*tau)*norm.pdf(d1 * cp)*σ)/(2*np.sqrt(tau)) \
             + r_f * np.exp(-q * tau) * S0 * norm.cdf(d1 * cp) \
             - r_d * np.exp(-r * tau) * K * norm.cdf(d2 * cp)
-        results['analytical_greeks']['theta'] = analytical_formula * 1/365.25 # normalised to 1 day change
+        results['analytical_greeks']['theta'] = analytical_formula * 1/365.25 # normalised to 1 calendar day
 
         # Gamma, Γ, is the change in an option's delta for a small change in the underlying assets price.
         # Gamma := ∂Δ/∂S ≈ (Δ(S_plus) − Δ(S_minus)) / (S_plus - S_minus)

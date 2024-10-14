@@ -195,7 +195,7 @@ class ZeroCurve:
         if forward_rate_type in {OISCouponCalcMethod.WEIGHTED_AVERAGE, OISCouponCalcMethod.SIMPLE_AVERAGE}:
             
             dates = pd.date_range(start=period_start.min(), end=period_end.max(), freq='D')
-            discount_factors = self.discount_factor(dates=dates)
+            discount_factors = self.discount_factors(dates=dates)
             daily_interest_multiplier = discount_factors[:-1] / discount_factors[1:]
             daily_simple_interest_rate = (daily_interest_multiplier - 1) * self.day_count_basis.days_per_year
             dates_np = dates.to_numpy(dtype='datetime64[D]')
@@ -230,8 +230,8 @@ class ZeroCurve:
         
         else:
             Δt = pd.Series(year_fraction(period_start, period_end, self.day_count_basis))            
-            DF_t1 = self.get_discount_factor(period_start)
-            DF_t2 = self.get_discount_factor(period_end)
+            DF_t1 = self.get_discount_factors(period_start)
+            DF_t2 = self.get_discount_factors(period_end)
         
             # https://en.wikipedia.org/wiki/Forward_rate
             if forward_rate_type in {TermRate.SIMPLE, OISCouponCalcMethod.DAILY_COMPOUNDED}:
@@ -247,14 +247,14 @@ class ZeroCurve:
         
     def instantaneous_forward_rate(self, years):        
         if self.interpolation_method == 'cubic_spline_on_zero_rates':
-            zero_rate = self.get_zero_rate(years=years)
+            zero_rate = self.get_zero_rates(years=years)
             zero_rate_1st_deriv = scipy.interpolate.splev(x=years, tck=self.cubic_spline_definition, der=1) 
             return zero_rate + years * zero_rate_1st_deriv
         else:
             raise ValueError('only supported for cubic spline interpolation method(s)')
         
         
-    def get_discount_factor(self,
+    def get_discount_factors(self,
                             dates: Optional[Union[pd.Timestamp, pd.Series]]=None,
                             days: Optional[Union[int, pd.Series]]=None,
                             years: Optional[Union[float, pd.Series]]=None,) -> pd.Series:
@@ -263,7 +263,7 @@ class ZeroCurve:
         return df['discount_factor'].values
            
         
-    def get_zero_rate(self,
+    def get_zero_rates(self,
                       compounding_frequency: CompoundingFrequency,
                       dates: Union[pd.Timestamp, pd.Series] = None,
                       days: Union[int, pd.Series] = None,
