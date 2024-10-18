@@ -219,21 +219,21 @@ def black76_ln_to_normal_vol_analytical(
     return σN
 
 
-def black76_ln_to_normal_vol(
+def black76_sln_to_normal_vol(
         F: float,
         tau: float,
         K: float,
         vol_sln: float,
         ln_shift: float = 0
-    ):
+    ) -> float:
     # If needed, faster method detailed in: Le Floc'h, Fabien, Fast and Accurate Analytic Basis Point Volatility (April 10, 2016).
-
     # The solve is invariant to the risk-free rate or the call/put perspective.
+
     r = 0.0
     cp = 1
 
     black76_px = black76(F=F, tau=tau, K=K, r=r, cp=cp, vol_sln=vol_sln, ln_shift=ln_shift)['price']
-    vol_n_guess = black76_ln_to_normal_vol_analytical(F=F, tau=tau, K=K, vol_sln=vol_sln, ln_shift=ln_shift)
+    vol_n_guess = np.atleast_1d(black76_ln_to_normal_vol_analytical(F=F, tau=tau, K=K, vol_sln=vol_sln, ln_shift=ln_shift))
 
     def px_sse(vol_n):
         bachelier_px = bachelier(F=F, tau=tau, r=r, cp=cp, K=K, vol_n=vol_n)['price']
@@ -272,13 +272,13 @@ def shift_black76_vol(
         black76_px_shift = black76(F=F, tau=tau, K=K, r=r, cp=cp, vol_sln=vol_new_ln_shift, ln_shift=to_ln_shift)['price']
         return 100 * np.sum(black76_px - black76_px_shift) ** 2  # Multiply by 100 to help optimizer convergence.
 
-    vol_guess = vol_sln * (F / (F + (to_ln_shift - from_ln_shift)))
+    vol_guess = np.atleast_1d(vol_sln * (F / (F + (to_ln_shift - from_ln_shift))))
     res = scipy.optimize.minimize(fun=px_sse, x0=vol_guess)
     vol_post_shift = res.x[0]
     return vol_post_shift
 
 
-def normal_vol_to_black76_ln(
+def normal_vol_to_black76_sln(
         F: float,
         tau: float,
         K: float,
@@ -291,7 +291,7 @@ def normal_vol_to_black76_ln(
     cp = 1
 
     bachelier_px = bachelier(F=F, tau=tau, K=K, r=r, cp=cp, vol_n=vol_n)['price']
-    vol_sln_guess = vol_n / F
+    vol_sln_guess = np.atleast_1d(vol_n / F)
 
     def px_sse(vol_sln):
         black76_px = black76(F=F, tau=tau, K=K, r=r, cp=cp, vol_sln=vol_sln, ln_shift=ln_shift)['price']

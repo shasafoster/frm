@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 import os
 
-from scipy.constants import sigma
 
 if __name__ == "__main__":
     os.chdir(os.environ.get('PROJECT_DIR_FRM'))
@@ -57,7 +56,7 @@ from typing import Optional
 
 # Set to symbols used in [1] for easier comparison
 
-def calc_ln_vol_for_strike(
+def calc_sln_vol_for_strike(
         tau: float,
         F: float,
         alpha: float,
@@ -148,7 +147,7 @@ def calc_ln_vol_for_strike(
     return σB
 
 
-def solve_alpha(
+def solve_alpha_from_sln_vol(
     tau: float,
     F: float,
     beta: float,
@@ -187,9 +186,9 @@ def solve_alpha(
     """
 
     F = F + ln_shift
-    β = beta
-    ρ = rho
-    v = volvol
+    β = beta; del beta
+    ρ = rho; del rho
+    v = volvol; del volvol
 
     # Rearrange equation 2.18 from Hagan 2002 into  form Aα^3 + Bα^2 + Cα + K = 0
     A = (1/24) * ((1-β)**2) * tau / (F**(2-2*β))
@@ -202,20 +201,20 @@ def solve_alpha(
     roots_real = np.extract(np.isreal(roots), np.real(roots))
 
     # Note: the double real roots case is not tested
-    alpha_first_guess = vol_sln_atm * F**(1-beta)
+    alpha_first_guess = vol_sln_atm * F**(1-β)
     i_min = np.argmin(np.abs(roots_real - alpha_first_guess))
-
     return roots_real[i_min].item()
 
 
-def fit_sabr_params_to_smile(tau: float,
-                             F: float,
-                             K: np.array,
-                             vols_sln: np.array,
-                             ln_shift: float=None,
-                             beta: Optional[float]=None)-> tuple:
+def fit_sabr_params_to_sln_smile(tau: float,
+                                 F: float,
+                                 K: np.array,
+                                 vols_sln: np.array,
+                                 ln_shift: float=None,
+                                 beta: Optional[float]=None)-> tuple:
     """
-    Calibrates SABR parameters to a volatility smile.
+    Calibrates SABR parameters to a volatility smile of European option prices using the Hagan 2002 (lognormal) SABR model and the Black76 formula.
+    This method is not suitable for caps/floors or swaptions.
 
     Notes:
     The rho, volvol and (optionally) beta parameters are solved numerically.
@@ -232,8 +231,8 @@ def fit_sabr_params_to_smile(tau: float,
         Log-normal shift.
     K: np.array
         Strike prices.
-    vols: np.array
-        Volatilities.
+    vols_sln: np.array
+        (shifted) log-normal volatilities of European options.
     beta: Optional[float]
         Elasticity of the volatility with respect to the forward rate.
 
@@ -248,8 +247,8 @@ def fit_sabr_params_to_smile(tau: float,
             beta, rho, volvol = param
         else:
             rho, volvol = param
-        alpha = solve_alpha(tau=tau, F=F, beta=beta, rho=rho, volvol=volvol, vol_sln_atm=vol_sln_atm, ln_shift=ln_shift)
-        sabr_vols = calc_ln_vol_for_strike(tau=tau,F=F,alpha=alpha,beta=beta,rho=rho,volvol=volvol,K=K, ln_shift=ln_shift)
+        alpha = solve_alpha_from_sln_vol(tau=tau, F=F, beta=beta, rho=rho, volvol=volvol, vol_sln_atm=vol_sln_atm, ln_shift=ln_shift)
+        sabr_vols = calc_sln_vol_for_strike(tau=tau,F=F,alpha=alpha,beta=beta,rho=rho,volvol=volvol,K=K, ln_shift=ln_shift)
         return sum((vols_sln - sabr_vols) ** 2)
 
     # Index the at-the-money (ATM) volatility
@@ -271,7 +270,7 @@ def fit_sabr_params_to_smile(tau: float,
         bounds=bounds)
 
     beta, rho, volvol = (beta, *res.x) if beta is not None else res.x
-    alpha = solve_alpha(tau=tau, F=F, beta=beta, rho=rho, volvol=volvol, vol_sln_atm=vol_sln_atm, ln_shift=ln_shift)
+    alpha = solve_alpha_from_sln_vol(tau=tau, F=F, beta=beta, rho=rho, volvol=volvol, vol_sln_atm=vol_sln_atm, ln_shift=ln_shift)
 
     return (alpha, beta, rho, volvol), res
 

@@ -4,7 +4,7 @@ if __name__ == "__main__":
     os.chdir(os.environ.get('PROJECT_DIR_FRM')) 
         
 from frm.utils.daycount import day_count, year_fraction
-from frm.utils.tenor import *
+from frm.utils.tenor import clean_tenor, tenor_to_date_offset
 from frm.utils.utilities import convert_column_to_consistent_data_type
 from frm.enums.utils import DayCountBasis, CompoundingFrequency
 from frm.enums.term_structures import OISCouponCalcMethod, TermRate
@@ -184,10 +184,10 @@ class ZeroCurve:
                          data = df_shifted_data,
                          day_count_basis = self.day_count_basis)
                    
-    def forward_rate(self,
-                     period_start: pd.DatetimeIndex,
-                     period_end: pd.DatetimeIndex,
-                     forward_rate_type: [TermRate, OISCouponCalcMethod]) -> np.array:
+    def get_forward_rates(self,
+                          period_start: pd.DatetimeIndex,
+                          period_end: pd.DatetimeIndex,
+                          forward_rate_type: [TermRate, OISCouponCalcMethod]) -> np.array:
 
         assert len(period_start) == len(period_end)
         assert (period_start >= self.curve_date).all()

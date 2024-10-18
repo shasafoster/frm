@@ -337,11 +337,11 @@ def forward_volatility(t1: Union[float, np.array],
     elif np.any(tau < 0):
         raise ValueError("t2 is less than t1.")
 
-    result = (vol_t2 ** 2 * t2 - vol_t1 ** 2 * t1) / tau
-    if np.any(result < 0):
+    var_t1_t2 = (vol_t2 ** 2 * t2 - vol_t1 ** 2 * t1) / tau
+    if np.any(var_t1_t2 < 0):
         raise ValueError("Negative value encountered under square root.")
 
-    return np.sqrt(result)
+    return np.sqrt(var_t1_t2)
 
 
 def flat_forward_interp(t1: Union[float, np.array],
