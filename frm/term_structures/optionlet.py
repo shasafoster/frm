@@ -257,6 +257,7 @@ class Optionlet:
 
         betas = np.array([100, 0, 60, 40, 50, 45, 40, 43.33, 46.67, 50, 50, 40, 60, 40, 40]) / 100.0
 
+
         # Bootstrap the optionlet volatilities and fit the SABR smiles
         for quote_nb in range(len(self.capfloor_vol_quote_df)):
 
