@@ -15,7 +15,7 @@ def black76(F: [float, np.array],
             cp: [float, np.array],
             K: [float, np.array],
             vol_sln: [float, np.array],
-            ln_shift: [float, np.array]=0,
+            ln_shift: [float, np.array],
             intrinsic_time_split: bool=False,
             analytical_greeks: bool=False,
             numerical_greeks: bool=False):
@@ -178,7 +178,7 @@ def black76_ln_to_normal_vol_analytical(
         tau: float,
         K: float,
         vol_sln: float,
-        ln_shift: float=0,
+        ln_shift: float
     ):
     """
     Calculates the normal volatility from the Black76 log-normal volatility.
@@ -224,7 +224,7 @@ def black76_sln_to_normal_vol(
         tau: float,
         K: float,
         vol_sln: float,
-        ln_shift: float = 0
+        ln_shift: float
     ) -> float:
     # If needed, faster method detailed in: Le Floc'h, Fabien, Fast and Accurate Analytic Basis Point Volatility (April 10, 2016).
     # The solve is invariant to the risk-free rate or the call/put perspective.
@@ -283,7 +283,7 @@ def normal_vol_to_black76_sln(
         tau: float,
         K: float,
         vol_n: float,
-        ln_shift: float = 0
+        ln_shift: float
     ):
 
     # The solve is invariant to the risk-free rate or the call/put perspective.
@@ -295,7 +295,7 @@ def normal_vol_to_black76_sln(
 
     def px_sse(vol_sln):
         black76_px = black76(F=F, tau=tau, K=K, r=r, cp=cp, vol_sln=vol_sln, ln_shift=ln_shift)['price']
-        return 100 * np.sum(bachelier_px - black76_px) ** 2 # Multiply by 100 to help optimizer convergence.
+        return 1000 * np.sum(bachelier_px - black76_px) ** 2 # Multiply by 1000 to help optimizer convergence.
 
     res = scipy.optimize.minimize(fun=px_sse,x0=vol_sln_guess)
     vol_sln = res.x[0]
