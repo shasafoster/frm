@@ -185,17 +185,32 @@ class ZeroCurve:
                          day_count_basis = self.day_count_basis)
                    
     def get_forward_rates(self,
-                          period_start: pd.DatetimeIndex,
-                          period_end: pd.DatetimeIndex,
+                          period_start: Union[pd.Timestamp, np.datetime64, dt.datetime, dt.date, pd.Series, pd.DatetimeIndex],
+                          period_end: Union[pd.Timestamp, np.datetime64, dt.datetime, dt.date, pd.Series, pd.DatetimeIndex],
                           forward_rate_type: [TermRate, OISCouponCalcMethod]) -> np.array:
+
+        period_start = pd.to_datetime(period_start)
+        period_end = pd.to_datetime(period_end)
+
+        if isinstance(period_start, (pd.Series, pd.DatetimeIndex)):
+            period_start = pd.DatetimeIndex(period_start)
+        else:
+            period_start = pd.DatetimeIndex([period_start])
+
+        if isinstance(period_end, (pd.Series, pd.DatetimeIndex)):
+            period_end = pd.DatetimeIndex(period_end)
+        else:
+            period_end = pd.DatetimeIndex([period_end])
+
 
         assert len(period_start) == len(period_end)
         assert (period_start >= self.curve_date).all()
-                    
+        assert (period_end >= period_start).all()
+
         if forward_rate_type in {OISCouponCalcMethod.WEIGHTED_AVERAGE, OISCouponCalcMethod.SIMPLE_AVERAGE}:
             
             dates = pd.date_range(start=period_start.min(), end=period_end.max(), freq='D')
-            discount_factors = self.discount_factors(dates=dates)
+            discount_factors = self.get_discount_factors(dates=dates)
             daily_interest_multiplier = discount_factors[:-1] / discount_factors[1:]
             daily_simple_interest_rate = (daily_interest_multiplier - 1) * self.day_count_basis.days_per_year
             dates_np = dates.to_numpy(dtype='datetime64[D]')
@@ -247,7 +262,7 @@ class ZeroCurve:
         
     def instantaneous_forward_rate(self, years):        
         if self.interpolation_method == 'cubic_spline_on_zero_rates':
-            zero_rate = self.get_zero_rates(years=years)
+            zero_rate = self.get_zero_rates(years=years, compounding_frequency=CompoundingFrequency.CONTINUOUS)
             zero_rate_1st_deriv = scipy.interpolate.splev(x=years, tck=self.cubic_spline_definition, der=1) 
             return zero_rate + years * zero_rate_1st_deriv
         else:
@@ -255,9 +270,9 @@ class ZeroCurve:
         
         
     def get_discount_factors(self,
-                            dates: Optional[Union[pd.Timestamp, pd.Series]]=None,
+                            dates: Optional[Union[pd.Timestamp, np.datetime64, dt.datetime, dt.date, pd.Series, pd.DatetimeIndex]]=None,
                             days: Optional[Union[int, pd.Series]]=None,
-                            years: Optional[Union[float, pd.Series]]=None,) -> pd.Series:
+                            years: Optional[Union[float, pd.Series]]=None) -> pd.Series:
 
         df = self.index_daily_data(dates, days, years)
         return df['discount_factor'].values
@@ -265,9 +280,9 @@ class ZeroCurve:
         
     def get_zero_rates(self,
                       compounding_frequency: CompoundingFrequency,
-                      dates: Union[pd.Timestamp, pd.Series] = None,
-                      days: Union[int, pd.Series] = None,
-                      years: Union[float, pd.Series] = None,
+                      dates: Optional[Union[pd.Timestamp, np.datetime64, dt.datetime, dt.date, pd.Series, pd.DatetimeIndex]]=None,
+                      days:  Optional[Union[int, pd.Series]]=None,
+                      years: Optional[Union[float, pd.Series]]=None
                       ) -> pd.Series:
                 
         df = self.index_daily_data(dates, days, years)
@@ -275,16 +290,16 @@ class ZeroCurve:
         if compounding_frequency == CompoundingFrequency.CONTINUOUS:
             return df['nacc'].values
         else:
-            zero_rate = zero_rate_from_discount_factor(years=df['years'],
-                                                       discount_factor=df['discount_factor'],
+            zero_rate = zero_rate_from_discount_factor(years=df['years'].values,
+                                                       discount_factor=df['discount_factor'].values,
                                                        compounding_frequency=compounding_frequency)
             return zero_rate
         
         
     def index_daily_data(self, 
-                  dates: Optional[Union[pd.Timestamp, pd.Series]]=None,
+                  dates: Optional[Union[pd.Timestamp, np.datetime64, dt.datetime, dt.date, pd.Series, pd.DatetimeIndex]]=None,
                   days: Optional[Union[int, pd.Series]]=None,
-                  years: Optional[Union[float, pd.Series]]=None,) -> pd.DataFrame:
+                  years: Optional[Union[float, pd.Series]]=None) -> pd.DataFrame:
         
         inputs = {'dates': dates, 'days': days, 'years': years}
         if sum(x is not None for x in inputs.values()) != 1:
@@ -306,9 +321,14 @@ class ZeroCurve:
         else:
             if days is not None:
                 dates = self.curve_date + dt.timedelta(days=days)
-            if type(dates) is pd.Timestamp: 
-                dates = pd.Series([dates])
-                
+
+            dates = pd.to_datetime(dates)
+            if not(isinstance(dates, pd.DatetimeIndex)):
+                if isinstance(dates, pd.Series):
+                    dates = pd.DatetimeIndex(dates)
+                else:
+                    dates = pd.DatetimeIndex([dates])
+
             # Message suffix if any dates are outside the available data
             if self.extrapolation_method == 'none':    
                 msg = f". NaN will be returned as 'extrapolation_method' is {self.extrapolation_method}"
