@@ -3,6 +3,7 @@ import os
 if __name__ == "__main__":
     os.chdir(os.environ.get('PROJECT_DIR_FRM'))
 
+from numba import njit
 import numpy as np
 import pandas as pd
 from scipy.stats import norm
@@ -151,8 +152,7 @@ def bachelier(F: [float, np.array],
 
     # Price per Bachelier formula
     d = (F - K) / (σN * np.sqrt(tau))
-    X = np.exp(-r*tau) * \
-        ( cp * (F - K) * norm.cdf(cp * d) + σN * np.sqrt(tau) * norm.pdf(d) )
+    X = np.exp(-r*tau) * ( cp * (F - K) * norm.cdf(cp * d) + σN * np.sqrt(tau) * norm.pdf(d) )
 
     results['price'] = X
 

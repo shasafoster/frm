@@ -22,13 +22,13 @@ pip install --upgrade frm
 - Heston parameter calibration to European FX option volatility smile
 - Heston simulation
 
-## In progress
+## Tests/examples in progress
 - Interest rate swaps pricing
 - Interest rate curve bootstrapping
+- Caplet/floorlet term structure bootstrapper (smiles fit to SABR)
 
-## Pipeline
-- SABR volatility model calibration to European swaptions
-- Swaption and cap floor pricing using calibrated SABR model
+## In development / pipeline
+- Swaption term structure bootstrapper (smiles fit to SABR)
 - CDS Bootstrapper
 
 
