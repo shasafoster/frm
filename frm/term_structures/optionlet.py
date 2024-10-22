@@ -3,12 +3,13 @@ import os
 if __name__ == "__main__":
     os.chdir(os.environ.get('PROJECT_DIR_FRM'))
 from dataclasses import dataclass, field, InitVar
+import datetime as dt
 import numpy as np
 import pandas as pd
 import scipy
 import re
 from frm.pricing_engine.black import black76, bachelier, normal_vol_to_black76_sln, black76_sln_to_normal_vol, black76_ln_to_normal_vol_analytical
-from frm.pricing_engine.sabr import solve_alpha_from_sln_vol, calc_sln_vol_for_strike
+from frm.pricing_engine.sabr import solve_alpha_from_sln_vol, calc_sln_vol_for_strike_from_sabr_params
 from frm.utils.daycount import year_fraction
 from frm.enums.utils import DayCountBasis, PeriodFrequency
 from frm.enums.term_structures import TermRate
@@ -16,7 +17,7 @@ from frm.utils.tenor import clean_tenor, tenor_to_date_offset
 from frm.utils.utilities import convert_column_to_consistent_data_type
 from frm.utils.schedule import get_schedule, get_payment_dates
 from frm.term_structures.zero_curve import ZeroCurve
-from typing import Optional
+from typing import Optional, Union
 import time
 import concurrent.futures as cf
 
@@ -199,40 +200,59 @@ class Optionlet:
                     ln_shift=ln_shift)['price'] * row['annuity_factor']
             self.quote_pxs.loc[quote_nb, self.quote_cols] = optionlet_pxs.sum(axis=0)
 
+        t1 = time.time()
 
         # Solve the equivalent normal volatilities for to the lognormal cap/floor volatility quotes.
+        # Can be parallelized as each solve is independent
         self.quote_vol_n = self.quote_vol_sln.copy()
         self.quote_vol_n[self.quote_cols] = np.nan
 
+        def obj_func_relative_px_error(vol_n):
+            """Helper function for solving the equivalent normal (bachelier) volatility for a cap/floor quote"""
+            bachelier_optionlet_pxs = bachelier(F=F, tau=tau, r=0, cp=cp, K=K, vol_n=vol_n.item())['price'] * annuity_factor
+            # Return the square of the relative error (to the price, as we want invariance to the price) to be minimised.
+            # Squared error ensures differentiability which is critical for gradient-based optimisation methods.
+            return ((target - bachelier_optionlet_pxs.sum(axis=0)) / target) ** 2
+
+        # Want prices to be within 0.001% - i.e. if price is 100,000, acceptable range is (99999, 100001)
+        # Hence set obj function tol 'ftol' to (0.001%)**2 = 1e-10 (due to the squaring of the relative error in the obj function)
+        # We set gtol to zero, so that the optimisation is terminated based on ftol.
+        obj_func_tol = 1e-5 ** 2  # 0.001%^2
+        options = {'ftol': obj_func_tol, 'gtol': 0}
+
         for quote_nb, row in self.quote_vol_sln.iterrows():
+            mask = self.term_structure['quote_nb'] <= quote_nb
+            F = self.term_structure.loc[mask, 'F'].values
+            tau = self.term_structure.loc[mask, 'expiry_years'].values
+            annuity_factor = self.term_structure.loc[mask, 'annuity_factor'].values
+
             for quote_col in self.quote_cols:
+                cp = self.quote_cp.loc[quote_nb, quote_col]
+                K = self.quote_strikes.loc[quote_nb, quote_col]
+                target = self.quote_pxs.loc[quote_nb, quote_col]
 
                 x0 = np.atleast_1d(black76_ln_to_normal_vol_analytical(
                         F=row['F'],
                         tau=row['last_optionlet_expiry_years'],
-                        K=self.quote_strikes.loc[quote_nb, quote_col],
+                        K=K,
                         vol_sln=self.quote_vol_sln.loc[quote_nb, quote_col],
                         ln_shift=row['ln_shift']))
 
-                # For speed, index the parameters of minimisation objective function to variables outside the function.
-                target = self.quote_pxs.loc[quote_nb, quote_col]
-                mask = self.term_structure['quote_nb'] <= quote_nb
-                F = self.term_structure[mask]['F']
-                tau = self.term_structure[mask]['expiry_years']
-                cp = self.quote_cp.loc[quote_nb, quote_col]
-                K = self.quote_strikes.loc[quote_nb, quote_col]
-                annuity_factor = self.term_structure[mask]['annuity_factor']
-                quote_terms = (F, tau, cp, K, annuity_factor)
-
                 res = scipy.optimize.minimize(
-                    fun=lambda param: self._capfloor_black76_ln_to_normal_vol_error_function(param=param, quote_terms=quote_terms, target=target),
+                    fun=obj_func_relative_px_error,
                     x0=x0,
                     bounds=[(x0*0.8, x0*1.25)],
-                    tol=1e-4 # Prices are within 0.01% - i.e. if price is 10,000, acceptable range is (9999, 10001)
-                )
-                self.quote_vol_n.loc[quote_nb, quote_col] = res.x.item()
+                    method='L-BFGS-B',
+                    options=options)
 
+                # 2nd condition required as we have overridden options to terminate based on ftol
+                if res.success or abs(res.fun) < obj_func_tol:
+                    self.quote_vol_n.loc[quote_nb, quote_col] = res.x.item()
+                else:
+                    print(res)
+                    raise ValueError('Optimisation of lognormal volatility quotes, normal volatility equivalent, failed to converge')
 
+        print('time to solve quotes equivalent normal vol:', time.time() - t1)
 
         solve_vol_n_t = []
         solve_sabr_t = []
@@ -297,7 +317,7 @@ class Optionlet:
 
             optionlets = self.term_structure.loc[mask_prior, :].copy()
 
-            vol_sln = calc_sln_vol_for_strike(
+            vol_sln = calc_sln_vol_for_strike_from_sabr_params(
                     tau=optionlets['expiry_years'].values,
                     F=optionlets['F'].values,
                     alpha=optionlets['alpha'].values,
@@ -305,7 +325,7 @@ class Optionlet:
                     rho=optionlets['rho'].values,
                     volvol=optionlets['volvol'].values,
                     K=self.quote_strikes.loc[quote_nb, 'atm'],
-                    ln_shift=optionlets['ln_shift'].values)
+                    ln_shift=optionlets.ln_shift)
 
             optionlet_px = black76(
                 F=optionlets['F'].values,
@@ -323,8 +343,7 @@ class Optionlet:
                 tau=optionlets.loc[N,'expiry_years'],
                 K=self.quote_strikes.loc[quote_nb, 'atm'],
                 vol_sln=vol_sln[-1],
-                ln_shift=optionlets.loc[N,'ln_shift'],
-            )
+                ln_shift=optionlets.ln_shift)
 
             # The target of the numerical solve is (a) - (bi)
             target = self.quote_pxs.loc[quote_nb, 'atm'] - sum(optionlet_px)
@@ -344,25 +363,29 @@ class Optionlet:
                 Y = [normal_vol_prior_pillar, param.item()]
                 vol_n = np.interp(x, X, Y)
                 optionlet_pxs = bachelier(F=F, tau=tau, r=0, cp=cp, K=K, vol_n=vol_n)['price'] * annuity_factor
-
-                # We want an error function that is invariant to the price.
-                # The price is a function of the term & money-ness of the cap/floor quote.
-                # Hence, we have used the absolute relative error between the prices.
-                relative_error = np.abs(target - optionlet_pxs.sum(axis=0)) / target
-                return relative_error
+                # Return the square of the relative error (to the price, as we want invariance to the price) to be minimised.
+                # Squared error ensures differentiability which is critical for gradient-based optimisation methods.
+                return ((target - optionlet_pxs.sum(axis=0)) / target)**2
 
             # (bii): Numerically solve the normal ATMF volatility for the terminal 'pillar' optionlet.
+            # Want prices to be within 0.001% - i.e. if price is 100,000, acceptable range is (99999, 100001)
+            # Hence set obj function tol 'ftol' to (0.001%)**2 = 1e-10 (due to the squaring of the relative error in the obj function)
+            # We set gtol to zero, so that the optimisation is terminated based on ftol.
+            obj_func_tol = 1e-5**2 # 0.001%^2
+            options = {'ftol': obj_func_tol, 'gtol': 0}
             res = scipy.optimize.minimize(
-                fun=lambda param: vol_n_atm_obj_func(param=param),
+                fun=vol_n_atm_obj_func,
                 x0=np.atleast_1d(normal_vol_prior_pillar),
-                bounds=[(0.0001, None)],
-                tol=1e-4) # Prices are within 0.01% - i.e. if price is 10,000, acceptable range is (9999, 10001)
+                bounds=[(0.0001, 1)],
+                method='L-BFGS-B',
+                options=options)
 
-            if res.success:
+            # 2nd condition required as we have overridden options to terminate based on ftol
+            if res.success or abs(res.fun) < obj_func_tol:
                 vol_n_atm_pillar = res.x.item()
             else:
                 print(res)
-                raise ValueError('Optimisation failed to converge')
+                raise ValueError('Optimisation of pillar optionlet normal volatility failed to converge')
 
             # For the intra-pillar optionlets, interpolate the normal ATMF volatility between the pillar points.
             # Linear interpolation is used, this is an assumption. Other interpolation methods could be used.
@@ -423,7 +446,7 @@ class Optionlet:
 
             for idx, (i, row) in enumerate(self.term_structure.loc[mask_current, :].iterrows()):
                 alpha = solve_alpha_from_sln_vol(tau=row['expiry_years'], F=row['F'], beta=beta[idx], rho=rho[idx], volvol=volvol[idx], vol_sln_atm=row['vol_sln_atm'],ln_shift=row['ln_shift'])
-                vols_sln = calc_sln_vol_for_strike(tau=row['expiry_years'], F=row['F'], alpha=alpha, beta=beta[idx], rho=rho[idx], volvol=volvol[idx], K=K, ln_shift=row['ln_shift'])
+                vols_sln = calc_sln_vol_for_strike_from_sabr_params(tau=row['expiry_years'], F=row['F'], alpha=alpha, beta=beta[idx], rho=rho[idx], volvol=volvol[idx], K=K, ln_shift=row['ln_shift'])
 
                 optionlet_pxs[idx, :] = black76(
                     F=row['F'],
@@ -458,7 +481,7 @@ class Optionlet:
             # For the 2nd, 3rd... pillar points, we first must solve (bi).
             prior_optionlet_pxs = np.full(shape=(len(self.term_structure[mask_prior]), len(self.quote_cols)), fill_value=np.nan)
             for i, row in self.term_structure.loc[mask_prior, :].iterrows():
-                vol_sln = calc_sln_vol_for_strike(
+                vol_sln = calc_sln_vol_for_strike_from_sabr_params(
                     tau=row['expiry_years'],
                     F=row['F'],
                     alpha=row['alpha'],
@@ -494,7 +517,7 @@ class Optionlet:
             beta_pillar, rho_pillar, volvol_pillar = (beta_overide, *res.x) if beta_overide is not None else res.x
         else:
             print(res)
-            raise ValueError('Optimisation failed to converge')
+            raise ValueError('Optimisation of SABR parameters failed to converge')
 
         if quote_nb == 0:
             # For term of the 1st cap/floor quote, we assume a flat beta, rho & volvol over the term.
@@ -521,23 +544,68 @@ class Optionlet:
             self.term_structure.loc[i, 'volvol'] = volvol[idx]
 
 
-    def _capfloor_black76_ln_to_normal_vol_error_function(self,
-                        param: np.array,
-                        quote_terms: tuple,
-                        target: float):
-        """Helper function for solving the equivalent normal (bachelier) volatility for a cap/floor quote"""
-
-        F, tau, cp, K, annuity_factor = quote_terms
-        bachelier_optionlet_pxs = bachelier(F=F, tau=tau, r=0, cp=cp, K=K, vol_n=param.item())['price'] * annuity_factor
-
-        # Given we are solving on price, we want an error function that is invariant to the price.
-        # The price is a function of the term & money-ness of the cap/floor quote.
-        # Hence, we have used the absolute relative error between the prices.
-        bachelier_px = bachelier_optionlet_pxs.sum(axis=0)
-        relative_error_of_pxs = abs(target - bachelier_px) / target
-        return relative_error_of_pxs
 
 
 
+    def interpolate_term_structure(self, effective_dates: Union[pd.Timestamp, np.datetime64, dt.datetime, dt.date, pd.Series, pd.DatetimeIndex]):
+        """ Interpolates the SABR term structure for the given optionlet effective date"""
+        #TODO - Add a check to ensure the effective date is within the term structure
+        # Currently we are using the objects daycountbasis, calendar etc.
+        #TODO - consider how to support stubs, non-default day count basis, payment delays, etc.
+        # TODO - how to consider rolled effective dates be rolled if weekends or holidays
+
+        if isinstance(effective_dates, (pd.Series, pd.DatetimeIndex)):
+            effective_dates = pd.DatetimeIndex(effective_dates)
+        else:
+            effective_dates = pd.DatetimeIndex([effective_dates])
+
+        effective_dates = pd.DatetimeIndex(np.busday_offset(
+            dates=effective_dates.to_numpy().astype('datetime64[D]'),
+            offsets=0, roll='modifiedfollowing', busdaycal=self.busdaycal)).unique()
+
+        termination_dates = pd.DatetimeIndex(np.busday_offset(
+            dates=(effective_dates + self.optionlet_frequency.date_offset).to_numpy().astype('datetime64[D]'),
+            offsets=0, roll='modifiedfollowing', busdaycal=self.busdaycal))
+
+        F = self.zero_curve.get_forward_rates(
+            period_start=effective_dates, period_end=termination_dates, forward_rate_type=TermRate.SIMPLE)
+
+        # Selecting the specific columns for interpolation
+        cols_to_interpolate = ['beta', 'rho', 'volvol', 'vol_n_atm']
+
+        # Linearly interpolate for each date in 'effective_dates'
+        interpolated_params = (
+            pd.concat([self.term_structure, pd.DataFrame({'period_start': effective_dates})])
+            .set_index('period_start')
+            .sort_index()[cols_to_interpolate]
+            .interpolate(method='index')
+        ).loc[effective_dates]
+        # Remove any duplicate (occurs if duplicate across term structure and effective_dates)
+        interpolated_params = interpolated_params[~interpolated_params.index.duplicated(keep='first')]
+
+        interpolated_params['period_start'] = effective_dates
+        interpolated_params['period_end'] = termination_dates
+        interpolated_params['payment_dates'] = termination_dates
+        interpolated_params['coupon_term'] = year_fraction(effective_dates, termination_dates, self.day_count_basis)
+        interpolated_params['discount_factors'] = self.zero_curve.get_discount_factors(dates=termination_dates)
+        interpolated_params['annuity_factor'] = interpolated_params['coupon_term'] * interpolated_params['discount_factors']
+        interpolated_params['expiry_years'] = year_fraction(self.curve_date, effective_dates, self.day_count_basis)
+        interpolated_params['F'] = F
+        interpolated_params[['vol_sln_atm', 'alpha']] = np.nan
+
+        # Can be parallelized - each iteration is independent
+        for i, (period_start, row) in enumerate(interpolated_params.iterrows()):
+            vol_sln_atm = normal_vol_to_black76_sln(
+                F=row['F'], tau=row['expiry_years'], K=row['F'], vol_n=row['vol_n_atm'], ln_shift=self.ln_shift)
+
+            alpha = solve_alpha_from_sln_vol(tau=row['expiry_years'], F=row['F'], beta=row['beta'], rho=row['rho'], volvol=row['volvol'],
+                                             vol_sln_atm=vol_sln_atm, ln_shift=self.ln_shift)
+
+            interpolated_params.loc[period_start, 'vol_sln_atm'] = vol_sln_atm
+            interpolated_params.loc[period_start, 'alpha'] = alpha
+
+        column_order = [col for col in interpolated_params.columns if col in self.term_structure.columns]
+
+        return interpolated_params[column_order]
 
 

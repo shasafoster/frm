@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
 import os
+
+from scipy.constants import precision
+
 if __name__ == "__main__":
     os.chdir(os.environ.get('PROJECT_DIR_FRM'))
 
@@ -232,71 +235,121 @@ def black76_sln_to_normal_vol(
     r = 0.0
     cp = 1
 
-    black76_px = black76(F=F, tau=tau, K=K, r=r, cp=cp, vol_sln=vol_sln, ln_shift=ln_shift)['price']
+    black76_px = black76(F=F, tau=tau, K=K, r=r, cp=cp, vol_sln=vol_sln, ln_shift=ln_shift)['price'][0]
     vol_n_guess = np.atleast_1d(black76_ln_to_normal_vol_analytical(F=F, tau=tau, K=K, vol_sln=vol_sln, ln_shift=ln_shift))
 
-    def px_sse(vol_n):
-        bachelier_px = bachelier(F=F, tau=tau, r=r, cp=cp, K=K, vol_n=vol_n)['price']
-        return 100 * np.sum(black76_px - bachelier_px) ** 2 # Multiply by 100 to help optimizer convergence.
+    def obj_func_relative_px_error(vol_n):
+        bachelier_px = bachelier(F=F, tau=tau, r=r, cp=cp, K=K, vol_n=vol_n)['price'][0]
+        # Return the square of the relative error (to the price, as we want invariance to the price) to be minimised.
+        # Squared error ensures differentiability which is critical for gradient-based optimisation methods.
+        return ((black76_px - bachelier_px) / black76_px)**2
 
-    res = scipy.optimize.minimize(
-            fun=px_sse,
-            x0=vol_n_guess,
-            jac=None,
-            options={'gtol': 1e-8,
-                     'eps': 1e-9,
-                     'maxiter': 10,
-                     'disp': False},
-            method='CG'
-    )
-    vol_n = res.x[0]
-    return vol_n
+    # Want prices to be within 0.001% - i.e. if price is 100,000, acceptable range is (99999, 100001)
+    # Hence set obj function tol 'ftol' to (0.001%)**2 = 1e-10 (due to the squaring of the relative error in the obj function)
+    # We set gtol to zero, so that the optimisation is terminated based on ftol.
+    obj_func_tol = 1e-5 ** 2  # 0.001%^2
+    options = {'ftol': obj_func_tol, 'gtol': 0}
+    res = scipy.optimize.minimize(fun=obj_func_relative_px_error,
+                                  x0=vol_n_guess,
+                                  bounds=[(0.00001, 1)],
+                                  method='L-BFGS-B',
+                                  options=options)
+    # 2nd condition required as we have overridden options to terminate based on ftol
+    if res.success or abs(res.fun) < obj_func_tol:
+        return res.x[0]
+    else:
+        raise ValueError('Optimisation to solve normal volatility did not converge.')
+
 
 
 def shift_black76_vol(
-        F: float,
-        tau: float,
-        K: float,
-        vol_sln: float,
-        from_ln_shift: float,
-        to_ln_shift: float
+        F: [float, np.float64],
+        tau: [float, np.float64],
+        K: [float, np.float64],
+        vol_sln: [float, np.float64],
+        from_ln_shift: [float, np.float64],
+        to_ln_shift: [float, np.float64]
     ):
 
     # The solve is invariant to the risk-free rate or the call/put perspective.
-    r = 0
-    cp = 1
+    r = 0.0; cp = 1
 
-    black76_px = black76(F=F, tau=tau, K=K, r=r, cp=cp, vol_sln=vol_sln, ln_shift=from_ln_shift)['price']
+    black76_px = black76(F=F, tau=tau, K=K, r=r, cp=cp, vol_sln=vol_sln, ln_shift=from_ln_shift)['price'][0]
 
-    def px_sse(vol_new_ln_shift):
-        black76_px_shift = black76(F=F, tau=tau, K=K, r=r, cp=cp, vol_sln=vol_new_ln_shift, ln_shift=to_ln_shift)['price']
-        return 100 * np.sum(black76_px - black76_px_shift) ** 2  # Multiply by 100 to help optimizer convergence.
+    def obj_func_relative_px_error(vol_new_ln_shift):
+        # Return the square of the relative error (to the price, as we want invariance to the price) to be minimised.
+        # Squared error ensures differentiability which is critical for gradient-based optimisation methods.
+        return ((black76(F=F, tau=tau, K=K, r=r, cp=cp, vol_sln=vol_new_ln_shift, ln_shift=to_ln_shift)['price'][0] - black76_px) / black76_px)**2
 
-    vol_guess = np.atleast_1d(vol_sln * (F / (F + (to_ln_shift - from_ln_shift))))
-    res = scipy.optimize.minimize(fun=px_sse, x0=vol_guess)
-    vol_post_shift = res.x[0]
-    return vol_post_shift
+    # Want prices to be within 0.001% - i.e. if price is 100,000, acceptable range is (99999, 100001)
+    # Hence set obj function tol 'ftol' to (0.001%)**2 = 1e-10 (due to the squaring of the relative error in the obj function)
+    # We set gtol to zero, so that the optimisation is terminated based on ftol.
+    obj_func_tol = 1e-5 ** 2  # 0.001%^2
+    options = {'ftol': obj_func_tol, 'gtol': 0}
+
+    res = scipy.optimize.minimize(fun=obj_func_relative_px_error,
+                                  x0=np.atleast_1d(vol_sln * (F / (F + (to_ln_shift - from_ln_shift)))),
+                                  bounds=[(0.0001, 100)],
+                                  method='L-BFGS-B',
+                                  options=options)
+    # 2nd condition required as we have overridden options to terminate based on ftol
+    if res.success or abs(res.fun) < obj_func_tol:
+        return res.x[0]
+    else:
+        # Further development could include:
+        # (i) fallback to other optimisation methods (e.g. 'trust-constr')
+        # (ii) addition of 'xtol' parameter into the optimisation (it is a parameter that is not available in 'L-BFGS-B')
+        #      'xtol' allows termination of the optimisation when the solved parameter (i.e. vol_sln) only changes by a small amount (e.g. 0.001%)
+        vol_new_ln_shift = res.x[0]
+        black76_px_shifted = black76(F=F, tau=tau, K=K, r=r, cp=cp, vol_sln=vol_new_ln_shift, ln_shift=to_ln_shift)['price'][0]
+        print({'F': F, 'tau': tau, 'K': K, 'vol_n': vol_sln, 'ln_shift': from_ln_shift})
+        print({'black76_px': black76_px, 'black76_px_shifted': black76_px_shifted, 'vol_new_ln_shift': vol_new_ln_shift,
+               'relative_error': obj_func_relative_px_error(vol_sln)})
+        print(res)
+        raise ValueError('Optimisation to shift Black76 volatility did not converge.')
 
 
 def normal_vol_to_black76_sln(
-        F: float,
-        tau: float,
-        K: float,
-        vol_n: float,
-        ln_shift: float
-    ):
+        F: [float, np.float64],
+        tau: [float, np.float64],
+        K: [float, np.float64],
+        vol_n: [float, np.float64],
+        ln_shift: [float, np.float64]
+    ) -> float:
 
     # The solve is invariant to the risk-free rate or the call/put perspective.
-    r = 0.0
-    cp = 1
+    r = 0.0; cp = 1
 
-    bachelier_px = bachelier(F=F, tau=tau, K=K, r=r, cp=cp, vol_n=vol_n)['price']
-    vol_sln_guess = np.atleast_1d(vol_n / F)
+    bachelier_px = bachelier(F=F, tau=tau, K=K, r=r, cp=cp, vol_n=vol_n)['price'][0]
 
-    def px_sse(vol_sln):
-        black76_px = black76(F=F, tau=tau, K=K, r=r, cp=cp, vol_sln=vol_sln, ln_shift=ln_shift)['price']
-        return 1000 * np.sum(bachelier_px - black76_px) ** 2 # Multiply by 1000 to help optimizer convergence.
+    def obj_func_relative_px_error(vol_sln):
+        # Return the square of the relative error (to the price, as we want invariance to the price) to be minimised.
+        # Squared error ensures differentiability which is critical for gradient-based optimisation methods.
+        return ((bachelier_px - black76(F=F, tau=tau, K=K, r=r, cp=cp, vol_sln=vol_sln, ln_shift=ln_shift)['price'][0]) / bachelier_px)**2
 
-    res = scipy.optimize.minimize(fun=px_sse,x0=vol_sln_guess)
-    vol_sln = res.x[0]
-    return vol_sln
+    # Want prices to be within 0.001% - i.e. if price is 100,000, acceptable range is (99999, 100001)
+    # Hence set obj function tol 'ftol' to (0.001%)**2 = 1e-10 (due to the squaring of the relative error in the obj function)
+    # We set gtol to zero, so that the optimisation is terminated based on ftol.
+    obj_func_tol = 1e-5 ** 2  # 0.001%^2
+    options = {'ftol': obj_func_tol, 'gtol': 0}
+    res = scipy.optimize.minimize(fun=obj_func_relative_px_error,
+                                  x0=np.atleast_1d(vol_n / (F + ln_shift)),
+                                  bounds=[(0.0001, 100)],
+                                  method='L-BFGS-B',
+                                  options=options)
+    # 2nd condition required as we have overridden options to terminate based on ftol
+    if res.success or abs(res.fun) < obj_func_tol:
+        return res.x[0]
+    else:
+        # Further development could include:
+        # (i) fallback to other optimisation methods (e.g. 'trust-constr')
+        # (ii) addition of 'xtol' parameter into the optimisation (it is a parameter that is not available in 'L-BFGS-B')
+        #      'xtol' allows termination of the optimisation when solved parameter (i.e. vol_sln) only changes by a small amount (e.g. 0.001%)
+        vol_sln = res.x[0]
+        black76_px = black76(F=F, tau=tau, K=K, r=r, cp=cp, vol_sln=vol_sln, ln_shift=ln_shift)['price'][0]
+        print({'F': F, 'tau': tau, 'K': K, 'vol_n': vol_n, 'ln_shift': ln_shift})
+        print({'bachelier_px': bachelier_px, 'black76_px': black76_px, 'vol_sln': vol_sln,
+               'relative_error': obj_func_relative_px_error(vol_sln)})
+        print(res)
+        raise ValueError('Optimisation to convert normal volatility to log-normal volatility did not converge.')
+

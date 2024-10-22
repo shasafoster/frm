@@ -38,3 +38,5 @@ class DeltaConvention(Enum):
     REGULAR_FORWARD = 'regular_forward'
     PREMIUM_ADJUSTED_SPOT = 'premium_adjusted_spot'
     PREMIUM_ADJUSTED_FORWARD = 'premium_adjusted_forward'
+
+

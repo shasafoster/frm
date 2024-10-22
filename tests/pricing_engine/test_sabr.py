@@ -6,8 +6,8 @@ if __name__ == "__main__":
 
 import numpy as np
 import pandas as pd
-from frm.pricing_engine.sabr import solve_alpha_from_sln_vol, calc_sln_vol_for_strike, fit_sabr_params_to_sln_smile
-from frm.pricing_engine.black import black76_sln_to_normal_vol
+from frm.pricing_engine.sabr import (solve_alpha_from_sln_vol, calc_sln_vol_for_strike_from_sabr_params,
+                                     fit_sabr_params_to_sln_smile, calc_sln_vol_for_strike_from_sabr_params)
 
 
 def test_solve_alpha_from_sln_vol():
@@ -24,7 +24,7 @@ def test_solve_alpha_from_sln_vol():
     assert np.isclose(alpha, solved_alpha, atol=1e-3)
 
 
-def test_calc_sln_vol_for_strike():
+def test_calc_sln_vol_for_strike_from_sabr_params():
 
     # Scalar strike over term structure
     data = {
@@ -48,8 +48,19 @@ def test_calc_sln_vol_for_strike():
         volvol = row['volvol']
         test_vol_sln_atm = row['vol_sln_atm']
 
-        ln_vol_atm = calc_sln_vol_for_strike(tau=tau, F=F, alpha=alpha, beta=beta, rho=rho, volvol=volvol, K=F, ln_shift=ln_shift)
+        ln_vol_atm = calc_sln_vol_for_strike_from_sabr_params(tau=tau, F=F, alpha=alpha, beta=beta, rho=rho, volvol=volvol, K=F, ln_shift=ln_shift)
         assert np.isclose(ln_vol_atm, test_vol_sln_atm, atol=5e-4) # 0.05% tolerance
+
+    ln_vol_atm_array = calc_sln_vol_for_strike_from_sabr_params(tau=df.loc[:, 'expiry_years'].values - 0.25,
+                                                                F=df.loc[:, 'forward_rate'].values,
+                                                                alpha=df.loc[:, 'alpha'].values,
+                                                                beta=df.loc[:, 'beta'].values,
+                                                                rho=df.loc[:, 'rho'].values,
+                                                                volvol=df.loc[:, 'volvol'].values,
+                                                                K=df.loc[:, 'forward_rate'].values,
+                                                                ln_shift=0.02)
+
+    assert np.allclose(ln_vol_atm_array, df.loc[:, 'vol_sln_atm'].values, atol=5e-4) # 0.05% tolerance
 
     # Strike array
     tau = 4.75
@@ -63,7 +74,7 @@ def test_calc_sln_vol_for_strike():
     K = F + np.array([-2.0, -1.5, -1.0, -0.5, 0.0, 0.5, 1.0, 1.5, 2.0]) / 100
     vol_sln = np.array([18.71, 17.38, 16.33, 15.54, 15.03, 14.75, 14.67, 14.74, 14.91]) / 100
 
-    vol_calc = calc_sln_vol_for_strike(tau=tau, F=F, alpha=alpha, beta=beta, rho=rho, volvol=volvol, K=K, ln_shift=ln_shift)
+    vol_calc = calc_sln_vol_for_strike_from_sabr_params(tau=tau, F=F, alpha=alpha, beta=beta, rho=rho, volvol=volvol, K=K, ln_shift=ln_shift)
     assert (np.abs(vol_calc - vol_sln) < 5e-4).all() # 0.05% tolerance
 
 
@@ -106,50 +117,8 @@ def test_fit_sabr_params_to_sln_smile():
 
 if __name__ == "__main__":
     test_solve_alpha_from_sln_vol()
-    test_calc_sln_vol_for_strike()
+    test_calc_sln_vol_for_strike_from_sabr_params()
     test_fit_sabr_params_to_sln_smile()
 
 
-    # def solve_alpha_from_n_vol(tau, F, vol_n_atm, beta, rho, volvol):
-    #     """
-    #     Compute SABR parameter alpha from an ATM normal volatility.
-    #
-    #     Alpha is determined as the root of a 3rd degree polynomial. Return a single
-    #     scalar alpha.
-    #     """
 
-    tau = 4.75
-    F = 4.229 / 100
-    alpha = 3.57 / 100
-    beta = 50 /100
-    rho = -5.95 / 100
-    volvol = 36.35 / 100
-    vol_sln_atm = 15.02 / 100
-    ln_shift = 0.02
-
-
-
-
-
-
-    # β = beta; del beta
-    # ρ = rho; del rho
-    # v = volvol; del volvol
-    #
-    # f_ = F ** (1 - β)
-    # p = [
-    #     - β * (2 - β) / (24 * f_ ** 2) * tau * F ** β,
-    #     tau * F ** β * ρ * β * v / (4 * f_),
-    #     (1 + tau * v ** 2 * (2 - 3 * ρ ** 2) / 24) * F ** β,
-    #     -vol_n_atm
-    # ]
-    #
-    # roots = np.roots(p)
-    # roots_real = np.extract(np.isreal(roots), np.real(roots))
-    #
-    # # Note: the double real roots case is not tested
-    # alpha_first_guess = vol_n_atm * F ** (-β)
-    # i_min = np.argmin(np.abs(roots_real - alpha_first_guess))
-    # solved_alpha_n = roots_real[i_min]
-
-    #atm_normal = alpha ** 2 * ( 1 + 2*ρ*β*v/3 + alpha**2 * (1-β)**2 / 24  + (2-3*ρ**2) * v**2 / 24)

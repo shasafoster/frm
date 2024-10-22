@@ -1,70 +1,30 @@
 # -*- coding: utf-8 -*-
 import os
-
-
 if __name__ == "__main__":
     os.chdir(os.environ.get('PROJECT_DIR_FRM'))
 
 import numpy as np
 import scipy
 from typing import Optional
+import numbers
 
-# SABR Smile is defined by
-# Tenor (tenor_string, days, years, date) of smile
-# Forward rate
-# Log-normal shift
-# ATM Volatility
-
-# SABR parameters (alpha, beta and rho)
-# Alpha is initial level of volatility
-# Beta controls the elasticity of the volatility with respect to the forward rate
-# Rho controls the correlation between the forward rate and the volatility.
+# TODO additional tests for calc_sln_vol_for_strike_from_sabr_params
+# Checks: F&tau must have same shape, K must be scalar or same shape as F&tau
+# Want to be able to pass term structure of sabr params / optiolet and get all the vols needed to price cap/floor in one call.
+# TODO
+# alpha, beta, rho, volvol must have same shape
+# TODO
 
 
-# Attributes of a SABR smile object
-
-# 1. Tenor details (tenor_string, days, years, date)
-# 2. Day count basis
-# 3. Forward rate
-# 4. Log-normal shift
-# 5. SABR parameters (alpha, beta, rho, volvol)
-
-# Methods
-# 1. Calibrate SABR parameters to caplet/floorlet, cap/floor & swaption.
-# 2. Get volatility for given strike (log-normal and normal).
-
-
-# test_data = {
-#     'Beta=1 flat lognormal': [
-#         [0.60, 0.02, 1.5, 1.0, 0.0, 0.0],
-#         0.60
-#     ],
-#     'Beta=0 flat normal': [
-#         [0.60, 2.0, 1.5, 0.0, 0.0, 0.0],
-#         1.1746
-#     ],
-#     'Beta=0.5, 10y': [
-#         [0.20, 0.015, 10., 0.5, -0.2, 0.3],
-#         0.02310713
-#     ]
-# }
-#
-# [atm_vol, F, tau, beta, rho, volvol], target_alpha = list(test_data.items())[2][1]
-#
-# Per 2.17) in [1]
-# (2.17a) in [1]
-
-# Set to symbols used in [1] for easier comparison
-
-def calc_sln_vol_for_strike(
-        tau: float,
-        F: float,
-        alpha: float,
-        beta: float,
-        rho: float,
-        volvol: float,
+def calc_sln_vol_for_strike_from_sabr_params(
+        tau: [float, np.array],
+        F: [float, np.array],
+        alpha: [float, np.array],
+        beta: [float, np.array],
+        rho: [float, np.array],
+        volvol: [float, np.array],
         K: [float, np.array],
-        ln_shift: float = 0.0) -> float:
+        ln_shift: float) -> float:
     """
     Calculate the log-normal (Black76) volatility for a given strike per the SABR model.
     Calculation is per original Hagan 2002 paper, [1] equations 2.17 and 2.18.
@@ -96,6 +56,15 @@ def calc_sln_vol_for_strike(
     References:
     [1] Hagan, Patrick & Lesniewski, Andrew & Woodward, Diana. (2002). Managing Smile Risk. Wilmott Magazine. 1. 84-108.
     """
+
+    tau, F, alpha, beta, rho, volvol, K, ln_shift = map(np.atleast_1d, (tau, F, alpha, beta, rho, volvol, K, ln_shift))
+
+    assert tau.shape == F.shape == alpha.shape == beta.shape == rho.shape == volvol.shape, \
+        'tau, F, alpha, beta, rho, volvol must have the same shape as they define the SABR smile.'
+
+    if ln_shift.size == 1:
+        ln_shift = ln_shift.item()
+    assert isinstance(ln_shift, numbers.Real), 'ln_shift must be a valid numeric scalar.'
 
     F = F + ln_shift
     K = K + ln_shift
@@ -144,17 +113,20 @@ def calc_sln_vol_for_strike(
 
         σB[~mask_atm] = (row1 * row2)[~mask_atm]
 
-    return σB
+    if σB.size == 1:
+        return σB.item()
+    else:
+        return σB
 
 
 def solve_alpha_from_sln_vol(
-    tau: float,
-    F: float,
-    beta: float,
-    rho: float,
-    volvol: float,
-    vol_sln_atm: float,
-    ln_shift: float = 0.0) -> float:
+    tau: [float, np.float64],
+    F: [float, np.float64],
+    beta: [float, np.float64],
+    rho: [float, np.float64],
+    volvol: [float, np.float64],
+    vol_sln_atm: [float, np.float64],
+    ln_shift: [float, np.float64] = 0.0) -> float:
     """
     Solve alpha analytically by rearranging (2.18) in [1] for alpha.
     The equation is a 3rd degree polynomial (in alpha).
@@ -248,7 +220,7 @@ def fit_sabr_params_to_sln_smile(tau: float,
         else:
             rho, volvol = param
         alpha = solve_alpha_from_sln_vol(tau=tau, F=F, beta=beta, rho=rho, volvol=volvol, vol_sln_atm=vol_sln_atm, ln_shift=ln_shift)
-        sabr_vols = calc_sln_vol_for_strike(tau=tau,F=F,alpha=alpha,beta=beta,rho=rho,volvol=volvol,K=K, ln_shift=ln_shift)
+        sabr_vols = calc_sln_vol_for_strike_from_sabr_params(tau=tau,F=F,alpha=alpha,beta=beta,rho=rho,volvol=volvol,K=K, ln_shift=ln_shift)
         return sum((vols_sln - sabr_vols) ** 2)
 
     # Index the at-the-money (ATM) volatility
@@ -278,43 +250,3 @@ def fit_sabr_params_to_sln_smile(tau: float,
 
 
 
-
-
-
-#%%
-
-
-# def fit(self, k, v_sln, initial_guess=[0.01, 0.00, 0.10]):
-# #   Calibrate SABR parameters alpha, rho and volvol.#
-# #
-# #   Best fit a smile of shifted log-normal volatilities passed through
-# #   arrays k and v. Returns a tuple of SABR params (alpha, rho, volvol)
-
-# def vol_square_error(x):
-#     vols = calc_ln_vol_for_strike(tau=tau,F=F,alpha=x[0],beta=beta,rho=x[1],volvol=x[2],K=K, ln_shift=ln_shift)
-#     return sum((vols - vols_target) ** 2)
-#
-# initial_guess = [0.01, 0.00, 0.10]
-# x0 = np.array(initial_guess)
-# bounds = [(0.0001, None), (-0.9999, 0.9999), (0.0001, None)]
-# res = scipy.optimize.minimize(vol_square_error, x0, method='L-BFGS-B', bounds=bounds)
-# alpha, rho, volvol = res.x
-
-
-
-# x0 = np.array(initial_guess)
-# bounds = [(0.0001, None), (-0.9999, 0.9999), (0.0001, None)]
-# res = minimize(vol_square_error, x0, method='L-BFGS-B', bounds=bounds)
-# alpha, self.rho, self.volvol = res.x
-# return [alpha, self.rho, self.volvol]
-#
-#
-#
-#     sabr = Hagan2002LognormalSABR(f/100, s/100, t, beta=beta)
-#     sabr_test = sabr.fit(k/100, v)
-#     [alpha, rho, volvol] = sabr_test
-#     logging.debug('\nalpha={:.6f}, rho={:.6f}, volvol={:.6f}'
-#                   .format(alpha, rho, volvol))
-#     sabr_target = np.array([0.0253, -0.2463, 0.2908])
-#     error_max = max(abs(sabr_test - sabr_target))
-#     assert (error_max < 1e-5)
