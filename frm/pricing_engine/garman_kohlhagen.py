@@ -13,18 +13,18 @@ def to_np_array(*args):
     return [np.atleast_1d(arg).astype(float) for arg in args]
 
 
-def gk_price(S0: float, 
-             tau: float,
-             r_d: float,
-             r_f: float,
-             cp: int,
-             K: float,
-             vol: float,
-             F: float = None,
+def gk_price(S0: [float, np.ndarray],
+             tau: [float, np.ndarray],
+             r_d: [float, np.ndarray],
+             r_f: [float, np.ndarray],
+             cp: [int, np.ndarray],
+             K: [float, np.ndarray],
+             vol: [float, np.ndarray],
+             F: [float, np.ndarray] = None,
              analytical_greeks: bool=False,
              numerical_greeks: bool=False,
              intrinsic_time_split: bool=False
-             ) -> float:
+             ) -> dict:
     """
     Garman-Kohlhagen European FX option pricing formula for:
     - option total, intrinsic, and time value (in the domestic currency per 1 unit of foreign currency notional).
@@ -59,12 +59,12 @@ def gk_price(S0: float,
     -------
     results : dict
         Dictionary containing the option price and, if requested, analytical or numerical greeks.
-        - 'option_value' : Option price.
-        - 'intrinsic_value' : Intrinsic value (if `intrinsic_time_split_flag` is True).
-        - 'time_value' : Time value (if `intrinsic_time_split_flag` is True).
+        Prices are in units of domestic currency per 1 unit of foreign currency.
+        - 'price' : Option unit price
+        - 'intrinsic' : Intrinsic unit price (if `intrinsic_time_split_flag` is True).
+        - 'time' : Time unit price (if `intrinsic_time_split_flag` is True).
         - 'analytical_greeks' : DataFrame with analytical greeks (if `analytical_greeks_flag` is True).
         - 'numerical_greeks' : DataFrame with numerical greeks (if `numerical_greeks_flag` is True).
-    
     Notes
     -----
     1. The option is priced under the assumption of continuous interest rate compounding.
@@ -81,7 +81,7 @@ def gk_price(S0: float,
     # Convert to arrays. Function is vectorised.
     S0, tau, r_d, r_f, cp, K, σ = [np.atleast_1d(arg).astype(float) for arg in [S0, tau, r_d, r_f, cp, K, σ]]
     
-    # Sensical value checks
+    # Value bounds checks
     # No >0 check for σ, as when doing numerical solving, need to allow for -ve σ
     assert (S0 > 0.0).all(), S0
     assert (tau >= 0.0).all(), tau 
@@ -108,7 +108,7 @@ def gk_price(S0: float,
     X = cp * (S0 * np.exp(-q * tau) * norm.cdf(cp * d1) - K * np.exp(-r * tau) * norm.cdf(cp * d2))
 
     X[tau==0] = np.maximum(0, cp * (S0 - K))[tau==0] # If time-to-maturity is 0.0, set to intrinsic value 
-    results['option_value'] = X
+    results['price'] = X
     
     if intrinsic_time_split:
         intrinsic = np.full_like(X, np.nan)
@@ -128,42 +128,27 @@ def gk_price(S0: float,
     if analytical_greeks:
         results['analytical_greeks'] = pd.DataFrame()
 
-        # Delta, Δ, is the change in an option's price for a small change in the underlying assets price.
-        # Δ := ∂X/∂S ≈ (X(S_plus) − X(S_minus)) / (S_plus - S_minus)
-        # where X is the option price (whose units is DOM),
-        # and S0 is the fx spot price (whose units is DOM/FOR)
-        # We multiply by S0 so to return the Δ a percentage applicable to the foreign currency notional
-        # Multiplication of S0 removed
+        # These formulae produce the delta applicable to the domestic currency notional.
+        # To get the Δ % applicable to the foreign currency notional multiply the below by S0.
         results['analytical_greeks']['spot_delta'] = cp * np.exp(-q * tau) * norm.cdf(cp * d1)
         results['analytical_greeks']['forward_delta'] = cp * norm.cdf(cp * d1)
 
-        # Vega, ν, is the change in an options price for a small change in the volatility input
-        # ν = ∂X/∂σ ≈ (X(σ_plus) − X(σ_minus)) / (σ_plus - σ_minus)
         # In practice, vega is normalised to measure the change in price for a 1% change in the volatility input
-        # Hence we have scaled the numerical vega to a 1% change
+        # Hence we have scaled the analytical vega to a 1% change
         analytical_formula = S0 * np.sqrt(tau) * norm.pdf(d1) * np.exp(-q * tau) # identical for calls and puts
         results['analytical_greeks']['vega'] = analytical_formula * 0.01 # normalised to 1% change
 
-        # Theta, θ, is the change in an options price for a small change in the time to expiry
-        # In practice, theta is normalised to measure the change in price, for a 1 day shorter expiry
-        # Theta includes
-        # 1. Time decay: the change in the option's value as time moves forward, that is, as the expiry date moves closer,
-        #               i.e., the time value price tomorrow minus the time value price today.
-        # 2. Cost of carry: the interest rate sensitivity that causes the value of the portfolio to change as time progresses,
-        #                   e.g., the cost of carry on spots and forwards is included in the theta value.
+        # Per market convention, theta is normalised to the price decay for 1 calendar day.
         analytical_formula = -(S0*np.exp(-r*tau)*norm.pdf(d1 * cp)*σ)/(2*np.sqrt(tau)) \
-            + r_f * np.exp(-q * tau) * S0 * norm.cdf(d1 * cp) \
-            - r_d * np.exp(-r * tau) * K * norm.cdf(d2 * cp)
+            + q * np.exp(-q * tau) * S0 * norm.cdf(d1 * cp) \
+            - r * np.exp(-r * tau) * K * norm.cdf(d2 * cp)
         results['analytical_greeks']['theta'] = analytical_formula * 1/365.25 # normalised to 1 calendar day
 
-        # Gamma, Γ, is the change in an option's delta for a small change in the underlying assets price.
-        # Gamma := ∂Δ/∂S ≈ (Δ(S_plus) − Δ(S_minus)) / (S_plus - S_minus)
         # In practice, gamma is  normalised to measure the change in Δ, for a 1% change in the underlying assets price.
         # Hence, we have multiplied the analytical gamma formula by 'S * 0.01'
         analytical_formula = np.exp(-q * tau) * norm.pdf(d1)  / (S0 * σ * np.sqrt(tau)) # identical for calls and puts
         results['analytical_greeks']['gamma'] = (0.01 * S0) * analytical_formula # normalised for 1% change
 
-        # Rho, ρ, is the rate at which the price of an option changes relative to a change in the interest rate.
         # In practice, Rho is normalised to measure the change in price for a 1% change in the underlying interest rate.
         # Hence, we have multiplied the analytical formula result by 0.01 (i.e. 1%)
         analytical_formula = K * tau * np.exp(-q * tau) * norm.cdf(cp * d2)
@@ -175,7 +160,7 @@ def gk_price(S0: float,
 
         Δ_shift = 1 / 100  # 1% shift
         σ_shift = 1 / 100  # 1% shift
-        θ_shift = 1 / 365.25  # 1 Day
+        θ_shift = 1 / 365.25  # 1 calendar day
         ρ_shift = 1 / 100  # 1% shift
 
         if F is not None:
@@ -184,26 +169,44 @@ def gk_price(S0: float,
             F_upshift, F_downshift = None, None
 
         results_S0_plus = gk_price(S0=S0*(1+Δ_shift), tau=tau, r_d=r_d, r_f=r_f , cp=cp, K=K, vol=σ, F=F_upshift,analytical_greeks=True)
-        X_S_plus, analytical_greeks_S0_plus = results_S0_plus['option_value'], results_S0_plus['analytical_greeks']
+        X_S_plus, analytical_greeks_S0_plus = results_S0_plus['price'], results_S0_plus['analytical_greeks']
         results_S0_minus = gk_price(S0=S0*(1-Δ_shift), tau=tau, r_d=r_d, r_f=r_f, cp=cp, K=K, vol=σ, F=F_downshift,analytical_greeks=True)
-        X_S_minus, analytical_greeks_S0_minus = results_S0_minus['option_value'], results_S0_minus['analytical_greeks']
+        X_S_minus, analytical_greeks_S0_minus = results_S0_minus['price'], results_S0_minus['analytical_greeks']
 
+        # Delta, Δ, is the change in an option's price for a small change in the underlying assets price.
+        # Δ := ∂X/∂S ≈ (X(S_plus) − X(S_minus)) / (S_plus - S_minus)
+        # where X is the option price (whose units is DOM),
+        # and S0 is the fx spot price (whose units is DOM/FOR)
+        # To get the Δ % applicable to the foreign currency notional multiply the below by S0.
         results['numerical_greeks']['spot_delta'] = (X_S_plus - X_S_minus) / (2 * S0 * Δ_shift)
         results['numerical_greeks']['forward_delta'] = numerical_greeks['spot_delta'] / np.exp(-r_f * tau)
 
-        X_σ_plus = gk_price(S0=S0, tau=tau, r_d=r_d, r_f=r_f, cp=cp, K=K, vol=σ+σ_shift, F=F)['option_value']
-        X_σ_minus = gk_price(S0=S0, tau=tau, r_d=r_d, r_f=r_f, cp=cp, K=K, vol=σ-σ_shift, F=F)['option_value']
+        # Vega, ν, is the change in an options price for a small change in the volatility input
+        # ν = ∂X/∂σ ≈ (X(σ_plus) − X(σ_minus)) / (σ_plus - σ_minus).
+        # We divide by 0.01 (1%) to normalise the vega to a 1% change in the volatility input, per market convention.
+        X_σ_plus = gk_price(S0=S0, tau=tau, r_d=r_d, r_f=r_f, cp=cp, K=K, vol=σ+σ_shift, F=F)['price']
+        X_σ_minus = gk_price(S0=S0, tau=tau, r_d=r_d, r_f=r_f, cp=cp, K=K, vol=σ-σ_shift, F=F)['price']
         results['numerical_greeks']['vega'] = (X_σ_plus - X_σ_minus) / (2 * (σ_shift / 0.01))
 
-        X_plus = gk_price(S0=S0, tau=tau+θ_shift, r_d=r_d, r_f=r_f, cp=cp, K=K, vol=σ, F=F)['option_value']
-        X_minus = gk_price(S0=S0, tau=tau-θ_shift, r_d=r_d, r_f=r_f, cp=cp, K=K, vol=σ, F=F)['option_value']
+        # Theta, θ, is the change in an options price for a small change in the time to expiry
+        # In practice, theta is normalised to measure the change in price, for a 1 day shorter expiry
+        # Theta includes
+        # 1. Time decay: the change in the option's value as time moves forward, that is, as the expiry date moves closer,
+        #               i.e., the time value price tomorrow minus the time value price today.
+        # 2. Cost of carry: the interest rate sensitivity that causes the value of the portfolio to change as time progresses,
+        #                   e.g., the cost of carry on spots and forwards is included in the theta value.
+        X_plus = gk_price(S0=S0, tau=tau+θ_shift, r_d=r_d, r_f=r_f, cp=cp, K=K, vol=σ, F=F)['price']
+        X_minus = gk_price(S0=S0, tau=tau-θ_shift, r_d=r_d, r_f=r_f, cp=cp, K=K, vol=σ, F=F)['price']
         results['numerical_greeks']['theta'] = (X_minus - X_plus) / 2
 
+        # Gamma, Γ, is the change in an option's delta for a small change in the underlying assets price.
+        # Gamma := ∂Δ/∂S ≈ (Δ(S_plus) − Δ(S_minus)) / (S_plus - S_minus).
         results['numerical_greeks']['gamma'] = (analytical_greeks_S0_plus['spot_delta'] - analytical_greeks_S0_minus['spot_delta']) / (2 * (Δ_shift / 0.01))
 
+        # Rho, ρ, is the rate at which the price of an option changes relative to a change in the interest rate.
         # This formulae will yield meaningfully different results on whether the forward rate is an input (or if it is calculated from the interest rate differential)
-        X_ρ_plus = gk_price(S0=S0, tau=tau, r_d=r_d, r_f=r_f+ρ_shift, cp=cp, K=K, vol=σ+σ_shift, F=F)['option_value']
-        X_ρ_minus = gk_price(S0=S0, tau=tau, r_d=r_d, r_f=r_f+ρ_shift, cp=cp, K=K, vol=σ-σ_shift, F=F)['option_value']
+        X_ρ_plus = gk_price(S0=S0, tau=tau, r_d=r_d, r_f=r_f+ρ_shift, cp=cp, K=K, vol=σ+σ_shift, F=F)['price']
+        X_ρ_minus = gk_price(S0=S0, tau=tau, r_d=r_d, r_f=r_f+ρ_shift, cp=cp, K=K, vol=σ-σ_shift, F=F)['price']
         results['numerical_greeks']['rho'] = (X_ρ_plus - X_ρ_minus) / 2
 
     return results
@@ -416,11 +419,11 @@ def gk_solve_implied_volatility(S0: float,
     """
     try:
         # Try Netwon's method first (it's faster but less robust)
-        return newton(lambda vol: (gk_price(S0=S0,tau=tau,r_d=r_d,r_f=r_f,cp=cp,K=K,vol=vol)['option_value']  - X), x0=vol_guess, tol=1e-4, maxiter=50).item()
+        return newton(lambda vol: (gk_price(S0=S0,tau=tau,r_d=r_d,r_f=r_f,cp=cp,K=K,vol=vol)['price']  - X), x0=vol_guess, tol=1e-4, maxiter=50).item()
     except RuntimeError:
         # Fallback to Brent's method
         try:
-            return root_scalar(lambda vol: (gk_price(S0=S0,tau=tau,r_d=r_d,r_f=r_f,cp=cp,K=K,vol=vol)['option_value']  - X), bracket=[0.0001, 2], method='brentq').root
+            return root_scalar(lambda vol: (gk_price(S0=S0,tau=tau,r_d=r_d,r_f=r_f,cp=cp,K=K,vol=vol)['price']  - X), bracket=[0.0001, 2], method='brentq').root
         except ValueError:
             return np.inf        
         
@@ -436,14 +439,14 @@ if __name__ == '__main__':
     cp=-1
     K=0.71000
     F = 0.646478
-    p1 = gk_price(S0=S0,tau=tau,r_d=r_d,r_f=r_f,cp=cp,K=K,vol=vol,F=F)['option_value']
+    p1 = gk_price(S0=S0,tau=tau,r_d=r_d,r_f=r_f,cp=cp,K=K,vol=vol,F=F)['price']
     print('F specified:', p1)
-    p2 = gk_price(S0=S0,tau=tau,r_d=r_d,r_f=r_f,cp=cp,K=K,vol=vol)['option_value']
+    p2 = gk_price(S0=S0,tau=tau,r_d=r_d,r_f=r_f,cp=cp,K=K,vol=vol)['price']
     print('IR parity', p2)
 
 
     # check if instrinisc value is returned. Use IR parity. 
-    p3 = gk_price(S0=S0,tau=tau,r_d=r_d,r_f=r_f,cp=cp,K=K,vol=vol)['option_value']
+    p3 = gk_price(S0=S0,tau=tau,r_d=r_d,r_f=r_f,cp=cp,K=K,vol=vol)['price']
     print('if tau=0 intrinisc?:', p3)    
 
 

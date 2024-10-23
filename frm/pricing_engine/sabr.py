@@ -75,8 +75,8 @@ def calc_sln_vol_for_strike_from_sabr_params(
     ρ = rho
     v = volvol
 
-    σB = np.full(K.shape, np.nan)
     mask_atm = np.abs(np.log(F / K)) < 1e-06
+    σB = np.full(mask_atm.shape, np.nan)
 
     if mask_atm.any():
         # If ATM, use (2.18) in [1].

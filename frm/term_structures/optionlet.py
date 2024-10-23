@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import scipy
 import re
-from frm.pricing_engine.black import black76, bachelier, normal_vol_to_black76_sln, black76_sln_to_normal_vol, black76_ln_to_normal_vol_analytical
+from frm.pricing_engine.black import black76, bachelier, normal_vol_to_black76_sln, black76_sln_to_normal_vol, black76_sln_to_normal_vol_analytical
 from frm.pricing_engine.sabr import solve_alpha_from_sln_vol, calc_sln_vol_for_strike_from_sabr_params
 from frm.utils.daycount import year_fraction
 from frm.enums.utils import DayCountBasis, PeriodFrequency
@@ -19,6 +19,7 @@ from frm.utils.schedule import get_schedule, get_payment_dates
 from frm.term_structures.zero_curve import ZeroCurve
 from typing import Optional, Union
 import time
+import numbers
 import concurrent.futures as cf
 
 
@@ -83,12 +84,11 @@ class Optionlet:
         self.quote_vol_sln['last_optionlet_expiry_years'] = year_fraction(
             self.curve_date, self.quote_vol_sln['last_optionlet_expiry_date'],self.day_count_basis)
         self.quote_vol_sln['F'] = np.nan
-        self.quote_vol_sln['ln_shift'] = self.ln_shift
 
         self.quote_vol_sln = convert_column_to_consistent_data_type( self.quote_vol_sln)
 
         first_columns = ['tenor', 'settlement_date', 'effective_date', 'last_optionlet_expiry_date', 'termination_date',
-                         'term_years', 'last_optionlet_expiry_years', 'F', 'ln_shift']
+                         'term_years', 'last_optionlet_expiry_years', 'F']
         column_order = first_columns + [col for col in  self.quote_vol_sln.columns if col not in first_columns]
         self.quote_vol_sln =  self.quote_vol_sln[column_order]
         self.quote_vol_sln.sort_values(by=['termination_date'], inplace=True)
@@ -134,22 +134,23 @@ class Optionlet:
                                            busdaycal=self.busdaycal)
         self.term_structure['payment_dates'] = get_payment_dates(schedule=self.term_structure,
                                                                  busdaycal=self.busdaycal)
-        self.term_structure['coupon_term'] = year_fraction(start_date=self.term_structure['period_start'],
-                                                           end_date=self.term_structure['period_end'],
+        self.term_structure.rename(columns={'period_start': 'effective_date', 'period_end': 'termination_date'},
+                                   inplace=True)
+        self.term_structure['coupon_term'] = year_fraction(start_date=self.term_structure['effective_date'],
+                                                           end_date=self.term_structure['termination_date'],
                                                            day_count_basis=self.day_count_basis)
         self.term_structure['discount_factors'] = self.zero_curve.get_discount_factors(dates=self.term_structure['payment_dates'])
         self.term_structure['annuity_factor'] = self.term_structure['coupon_term'] * self.term_structure['discount_factors']
-        self.term_structure['expiry_years'] = year_fraction(self.curve_date, self.term_structure['period_start'], self.day_count_basis)
-        self.term_structure['F'] = self.zero_curve.get_forward_rates(period_start=self.term_structure['period_start'],
-                                                                     period_end=self.term_structure['period_end'],
+        self.term_structure['expiry_years'] = year_fraction(self.curve_date, self.term_structure['effective_date'], self.day_count_basis)
+        self.term_structure['F'] = self.zero_curve.get_forward_rates(period_start=self.term_structure['effective_date'],
+                                                                     period_end=self.term_structure['termination_date'],
                                                                      forward_rate_type=TermRate.SIMPLE)
 
-        self.term_structure[['vol_n_atm', 'vol_sln_atm', 'ln_shift', 'alpha', 'beta', 'rho', 'volvol']] = np.nan
-        self.term_structure['ln_shift'] = self.ln_shift
+        self.term_structure[['vol_n_atm', 'vol_sln_atm', 'alpha', 'beta', 'rho', 'volvol']] = np.nan
 
         self.term_structure.insert(loc=0, column='quote_nb', value=np.nan)
         for i, row in self.term_structure.iterrows():
-            mask = row['period_end'] <= self.quote_vol_sln['termination_date']
+            mask = row['termination_date'] <= self.quote_vol_sln['termination_date']
             if mask.any():
                 last_valid_index = mask.idxmax()
             else:
@@ -159,7 +160,7 @@ class Optionlet:
 
         # Calculate the forward rate (pre lognormal shift) for the cap/floor quotes
         for i, row in self.quote_vol_sln.iterrows():
-            mask = (self.term_structure['period_end'] <= self.quote_vol_sln.loc[i, 'termination_date'])
+            mask = (self.term_structure['termination_date'] <= self.quote_vol_sln.loc[i, 'termination_date'])
             self.quote_vol_sln.loc[i, 'F'] = \
                 (self.term_structure.loc[mask, 'F'] * self.term_structure.loc[mask, 'annuity_factor']).sum() \
                 / self.term_structure.loc[mask, 'annuity_factor'].sum()
@@ -187,13 +188,12 @@ class Optionlet:
             cp = self.quote_cp.loc[quote_nb, self.quote_cols].astype('float64').values
             K = self.quote_strikes.loc[quote_nb, self.quote_cols].astype('float64').values
             vol_sln = self.quote_vol_sln.loc[quote_nb, self.quote_cols].astype('float64').values
-            ln_shift = self.quote_vol_sln.loc[quote_nb, 'ln_shift']
+            ln_shift = self.ln_shift
 
             for i, row in self.term_structure[mask].iterrows():
                 optionlet_pxs[i, :] = black76(
                     F=row['F'],
                     tau=row['expiry_years'],
-                    r=0,
                     cp=cp,
                     K=K,
                     vol_sln=vol_sln,
@@ -209,7 +209,7 @@ class Optionlet:
 
         def obj_func_relative_px_error(vol_n):
             """Helper function for solving the equivalent normal (bachelier) volatility for a cap/floor quote"""
-            bachelier_optionlet_pxs = bachelier(F=F, tau=tau, r=0, cp=cp, K=K, vol_n=vol_n.item())['price'] * annuity_factor
+            bachelier_optionlet_pxs = bachelier(F=F, tau=tau, cp=cp, K=K, vol_n=vol_n.item())['price'] * annuity_factor
             # Return the square of the relative error (to the price, as we want invariance to the price) to be minimised.
             # Squared error ensures differentiability which is critical for gradient-based optimisation methods.
             return ((target - bachelier_optionlet_pxs.sum(axis=0)) / target) ** 2
@@ -231,12 +231,12 @@ class Optionlet:
                 K = self.quote_strikes.loc[quote_nb, quote_col]
                 target = self.quote_pxs.loc[quote_nb, quote_col]
 
-                x0 = np.atleast_1d(black76_ln_to_normal_vol_analytical(
+                x0 = np.atleast_1d(black76_sln_to_normal_vol_analytical(
                         F=row['F'],
                         tau=row['last_optionlet_expiry_years'],
                         K=K,
                         vol_sln=self.quote_vol_sln.loc[quote_nb, quote_col],
-                        ln_shift=row['ln_shift']))
+                        ln_shift=self.ln_shift))
 
                 res = scipy.optimize.minimize(
                     fun=obj_func_relative_px_error,
@@ -325,17 +325,15 @@ class Optionlet:
                     rho=optionlets['rho'].values,
                     volvol=optionlets['volvol'].values,
                     K=self.quote_strikes.loc[quote_nb, 'atm'],
-                    ln_shift=optionlets.ln_shift)
+                    ln_shift=self.ln_shift)
 
             optionlet_px = black76(
                 F=optionlets['F'].values,
                 tau=optionlets['expiry_years'].values,
-                r=0,
                 cp=self.quote_cp.loc[quote_nb, 'atm'],
                 K=self.quote_strikes.loc[quote_nb, 'atm'],
                 vol_sln=vol_sln,
-                ln_shift=optionlets['ln_shift'].values
-            )['price'] * optionlets['annuity_factor'].values
+                ln_shift=self.ln_shift)['price'] * optionlets['annuity_factor'].values
 
             N = len(optionlets) - 1
             normal_vol_prior_pillar = black76_sln_to_normal_vol(
@@ -343,7 +341,7 @@ class Optionlet:
                 tau=optionlets.loc[N,'expiry_years'],
                 K=self.quote_strikes.loc[quote_nb, 'atm'],
                 vol_sln=vol_sln[-1],
-                ln_shift=optionlets.ln_shift)
+                ln_shift=self.ln_shift)
 
             # The target of the numerical solve is (a) - (bi)
             target = self.quote_pxs.loc[quote_nb, 'atm'] - sum(optionlet_px)
@@ -362,7 +360,7 @@ class Optionlet:
                 """"Error function for the optimisation of the normal at-the-money volatility for pillar optionlet."""
                 Y = [normal_vol_prior_pillar, param.item()]
                 vol_n = np.interp(x, X, Y)
-                optionlet_pxs = bachelier(F=F, tau=tau, r=0, cp=cp, K=K, vol_n=vol_n)['price'] * annuity_factor
+                optionlet_pxs = bachelier(F=F, tau=tau, cp=cp, K=K, vol_n=vol_n)['price'] * annuity_factor
                 # Return the square of the relative error (to the price, as we want invariance to the price) to be minimised.
                 # Squared error ensures differentiability which is critical for gradient-based optimisation methods.
                 return ((target - optionlet_pxs.sum(axis=0)) / target)**2
@@ -402,7 +400,7 @@ class Optionlet:
                 tau=row['expiry_years'],
                 K=row['F'],
                 vol_n=row['vol_n_atm'],
-                ln_shift=row['ln_shift'])
+                ln_shift=self.ln_shift)
 
 
     def _solve_sabr_params(self, quote_nb, beta_overide=None):
@@ -414,7 +412,7 @@ class Optionlet:
             """
             Helper function producing the sum of squared errors between
             (a) cap/floor prices based on the quoted flat/scalar lognormal volatility quotes
-            (b) repricing where each component optionlet uses the volatility interploted of its SABR smiles.
+            (b) repricing where each component optionlet uses the volatility interpolated of its SABR smiles.
             """
 
             if beta_overide is None:
@@ -445,17 +443,16 @@ class Optionlet:
                 volvol = np.interp(x, X,[self.term_structure.loc[prior_pillar_idx, 'volvol'], volvol_pillar])
 
             for idx, (i, row) in enumerate(self.term_structure.loc[mask_current, :].iterrows()):
-                alpha = solve_alpha_from_sln_vol(tau=row['expiry_years'], F=row['F'], beta=beta[idx], rho=rho[idx], volvol=volvol[idx], vol_sln_atm=row['vol_sln_atm'],ln_shift=row['ln_shift'])
-                vols_sln = calc_sln_vol_for_strike_from_sabr_params(tau=row['expiry_years'], F=row['F'], alpha=alpha, beta=beta[idx], rho=rho[idx], volvol=volvol[idx], K=K, ln_shift=row['ln_shift'])
+                alpha = solve_alpha_from_sln_vol(tau=row['expiry_years'], F=row['F'], beta=beta[idx], rho=rho[idx], volvol=volvol[idx], vol_sln_atm=row['vol_sln_atm'],ln_shift=self.ln_shift)
+                vols_sln = calc_sln_vol_for_strike_from_sabr_params(tau=row['expiry_years'], F=row['F'], alpha=alpha, beta=beta[idx], rho=rho[idx], volvol=volvol[idx], K=K, ln_shift=self.ln_shift)
 
                 optionlet_pxs[idx, :] = black76(
                     F=row['F'],
                     tau=row['expiry_years'],
-                    r=0,
                     cp=self.quote_cp.loc[quote_nb, self.quote_cols].astype('float64').values,
                     K=K,
                     vol_sln=vols_sln,
-                    ln_shift=row['ln_shift'])['price'] * row['annuity_factor']
+                    ln_shift=self.ln_shift)['price'] * row['annuity_factor']
 
             relative_error_of_pxs = (target - optionlet_pxs.sum(axis=0)) / target
             return sum((relative_error_of_pxs ** 2) / len(relative_error_of_pxs))
@@ -489,17 +486,15 @@ class Optionlet:
                     rho=row['rho'],
                     volvol=row['volvol'],
                     K=self.quote_strikes.loc[quote_nb, self.quote_cols].astype('float64').values,
-                    ln_shift=row['ln_shift'])
+                    ln_shift=self.ln_shift)
 
                 prior_optionlet_pxs[i, :] = black76(
                     F=row['F'],
                     tau=row['expiry_years'],
-                    r=0,
                     cp=self.quote_cp.loc[quote_nb, self.quote_cols].astype('float64').values,
                     K=self.quote_strikes.loc[quote_nb, self.quote_cols].astype('float64').values,
                     vol_sln=vol_sln,
-                    ln_shift=row['ln_shift']
-            )['price'] * row['annuity_factor']
+                    ln_shift=self.ln_shift)['price'] * row['annuity_factor']
 
             target = self.quote_pxs.loc[quote_nb, self.quote_cols] - prior_optionlet_pxs.sum(axis=0)
 
@@ -537,7 +532,7 @@ class Optionlet:
         # Store the optionlets SABR params in 'term_structure'
         for idx, (i, row) in enumerate(self.term_structure.loc[mask_current, :].iterrows()):
             # Alpha is analytically solved from the other SABR parameters, the ATMF optionlet volatility and the forward rate.
-            alpha = solve_alpha_from_sln_vol(tau=row['expiry_years'], F=row['F'], beta=beta[idx], rho=rho[idx], volvol=volvol[idx], vol_sln_atm=row['vol_sln_atm'], ln_shift=row['ln_shift'])
+            alpha = solve_alpha_from_sln_vol(tau=row['expiry_years'], F=row['F'], beta=beta[idx], rho=rho[idx], volvol=volvol[idx], vol_sln_atm=row['vol_sln_atm'], ln_shift=self.ln_shift)
             self.term_structure.loc[i, 'alpha'] = alpha
             self.term_structure.loc[i, 'beta'] = beta[idx]
             self.term_structure.loc[i, 'rho'] = rho[idx]
@@ -547,17 +542,20 @@ class Optionlet:
 
 
 
-    def interpolate_term_structure(self, effective_dates: Union[pd.Timestamp, np.datetime64, dt.datetime, dt.date, pd.Series, pd.DatetimeIndex]):
+    def interpolate_sabr_term_structure(
+            self,
+            fixing_dates: Union[pd.Timestamp, np.datetime64, dt.datetime, dt.date, pd.Series, pd.DatetimeIndex],
+    ) -> pd.DataFrame:
         """ Interpolates the SABR term structure for the given optionlet effective date"""
         #TODO - Add a check to ensure the effective date is within the term structure
         # Currently we are using the objects daycountbasis, calendar etc.
         #TODO - consider how to support stubs, non-default day count basis, payment delays, etc.
         # TODO - how to consider rolled effective dates be rolled if weekends or holidays
 
-        if isinstance(effective_dates, (pd.Series, pd.DatetimeIndex)):
-            effective_dates = pd.DatetimeIndex(effective_dates)
+        if isinstance(fixing_dates, (pd.Series, pd.DatetimeIndex)):
+            effective_dates = pd.DatetimeIndex(fixing_dates)
         else:
-            effective_dates = pd.DatetimeIndex([effective_dates])
+            effective_dates = pd.DatetimeIndex([fixing_dates])
 
         effective_dates = pd.DatetimeIndex(np.busday_offset(
             dates=effective_dates.to_numpy().astype('datetime64[D]'),
@@ -570,25 +568,23 @@ class Optionlet:
         F = self.zero_curve.get_forward_rates(
             period_start=effective_dates, period_end=termination_dates, forward_rate_type=TermRate.SIMPLE)
 
-        # Selecting the specific columns for interpolation
+        # Selecting the specific columns for linear interpolation
         cols_to_interpolate = ['beta', 'rho', 'volvol', 'vol_n_atm']
 
         # Linearly interpolate for each date in 'effective_dates'
         interpolated_params = (
-            pd.concat([self.term_structure, pd.DataFrame({'period_start': effective_dates})])
-            .set_index('period_start')
+            pd.concat([self.term_structure, pd.DataFrame({'effective_date': effective_dates})])
+            .set_index('effective_date')
             .sort_index()[cols_to_interpolate]
             .interpolate(method='index')
         ).loc[effective_dates]
+
         # Remove any duplicate (occurs if duplicate across term structure and effective_dates)
         interpolated_params = interpolated_params[~interpolated_params.index.duplicated(keep='first')]
 
-        interpolated_params['period_start'] = effective_dates
-        interpolated_params['period_end'] = termination_dates
-        interpolated_params['payment_dates'] = termination_dates
-        interpolated_params['coupon_term'] = year_fraction(effective_dates, termination_dates, self.day_count_basis)
-        interpolated_params['discount_factors'] = self.zero_curve.get_discount_factors(dates=termination_dates)
-        interpolated_params['annuity_factor'] = interpolated_params['coupon_term'] * interpolated_params['discount_factors']
+        interpolated_params['effective_date'] = effective_dates
+        interpolated_params['termination_date'] = termination_dates
+
         interpolated_params['expiry_years'] = year_fraction(self.curve_date, effective_dates, self.day_count_basis)
         interpolated_params['F'] = F
         interpolated_params[['vol_sln_atm', 'alpha']] = np.nan
@@ -604,8 +600,94 @@ class Optionlet:
             interpolated_params.loc[period_start, 'vol_sln_atm'] = vol_sln_atm
             interpolated_params.loc[period_start, 'alpha'] = alpha
 
-        column_order = [col for col in interpolated_params.columns if col in self.term_structure.columns]
-
+        column_order = [col for col in self.term_structure.columns if col in interpolated_params.columns]
+        interpolated_params.reset_index(inplace=True, drop=True)
         return interpolated_params[column_order]
 
 
+    def price_vanilla_optionlets(self,
+                    effective_dates: Union[pd.Timestamp, np.datetime64, dt.datetime, dt.date, pd.Series, pd.DatetimeIndex],
+                    termination_dates: Union[pd.Timestamp, np.datetime64, dt.datetime, dt.date, pd.Series, pd.DatetimeIndex],
+                    payment_dates : Union[pd.Timestamp, np.datetime64, dt.datetime, dt.date, pd.Series, pd.DatetimeIndex],
+                    K: [float, list[float], np.array],
+                    cp: [int, list[int], np.array],
+                    vol_sln_override: [float, list[float], np.array] = None,
+                    day_count_basis: DayCountBasis = None):
+
+        if day_count_basis is None:
+            day_count_basis = self.day_count_basis
+
+        # Ensure that 'K' is either a scalar or an array/list of the same length as 'effective_dates'
+        if isinstance(K, (list, np.ndarray)):
+            assert len(K) == len(
+                effective_dates), "'K' must have the same length as 'effective_dates' if it's a list or array."
+        else:
+            assert isinstance(K, numbers.Real), "'K' must be a numeric scalar."
+
+        # Ensure that 'cp' is either a scalar or an array/list of the same length as 'effective_dates' and that its values are -1 or 1
+        if isinstance(cp, (list, np.ndarray)):
+            assert len(cp) == len(
+                effective_dates), "'cp' must have the same length as 'effective_dates' if it's a list or array."
+            assert all(val in [-1, 1] for val in cp), "'cp' must only contain values of -1 or 1."
+        else:
+            assert isinstance(cp, int) and cp in [-1, 1], "'cp' must be a scalar and must be either -1 or 1."
+
+        # Ensure both 'K' and 'cp' are either both scalars or both arrays/lists
+        assert isinstance(K, (list, np.ndarray)) == isinstance(cp, (list, np.ndarray)), \
+            "'K' and 'cp' must both be scalars or both arrays/lists of the same length."
+
+        results = self.interpolate_sabr_term_structure(fixing_dates=effective_dates)
+
+        if vol_sln_override is not None:
+            results['vol_sln'] = vol_sln_override
+        else:
+            results['vol_sln'] = calc_sln_vol_for_strike_from_sabr_params(
+                tau=results['expiry_years'].values,
+                F=results['F'].values,
+                alpha=results['alpha'].values,
+                beta=results['beta'].values,
+                rho=results['rho'].values,
+                volvol=results['volvol'].values,
+                K=K,
+                ln_shift=self.ln_shift
+            )
+
+        results['K'] = K
+        results['cp'] = cp
+        results['coupon_term'] = year_fraction(effective_dates, termination_dates, day_count_basis)
+        results['discount_factor'] = self.zero_curve.get_discount_factors(dates=payment_dates)
+        results['annuity_factor'] = self.zero_curve.get_discount_factors(dates=payment_dates)
+
+        optionlet_pricing = black76(
+            F=results['F'].values,
+            tau=results['expiry_years'].values,
+            cp=results['cp'].values,
+            K=results['K'].values,
+            vol_sln=results['vol_sln'].values,
+            ln_shift=self.ln_shift,
+            annuity_factor=results['coupon_term'].values * results['discount_factor'].values,
+            intrinsic_time_split=True,
+            analytical_greeks=True)
+
+        results['price'] = optionlet_pricing['price']
+        results['intrinsic'] = optionlet_pricing['intrinsic']
+        results['time'] = optionlet_pricing['time']
+        results['delta'] = optionlet_pricing['analytical_greeks']['delta']
+        results['vega'] = optionlet_pricing['analytical_greeks']['vega']
+
+
+        summary = dict()
+        summary['price'] = results['price'].sum()
+        summary['intrinsic'] = results['intrinsic'].sum()
+        summary['time'] = results['time'].sum()
+        summary['delta'] = results['delta'].sum()
+        summary['vega'] = results['vega'].sum()
+        summary['F'] = sum(results['F'].values * results['annuity_factor'].values / sum(results['annuity_factor'].values))
+        summary['K'] = sum(results['K'].values * results['annuity_factor'].values / sum(results['annuity_factor'].values))
+
+        # TODO Solve the flat vol (black and normal) that would give the same price as term structure vol.
+        # Then retest to the IDD strike data.
+        # See if any capfloor data from Westpac FY23 and FY24 is available.
+
+
+        return results

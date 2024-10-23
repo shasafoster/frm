@@ -15,16 +15,19 @@ import scipy
 
 def black76(F: [float, np.array],
             tau: [float, np.array],
-            r: [float, np.array],
             cp: [float, np.array],
             K: [float, np.array],
             vol_sln: [float, np.array],
             ln_shift: [float, np.array],
+            annuity_factor: [float, np.array]=1,
             intrinsic_time_split: bool=False,
             analytical_greeks: bool=False,
             numerical_greeks: bool=False):
     """
-    Black76 pricing for European options.
+    Black76 pricing + greeks.
+
+    The function has the parameters 'annuity_factor' instead of a risk-free rate.
+    This adjustment allows for more generic applications of Black76 to caplets/floorlets and swaptions instead of just European options delivered at expiry.
 
     Parameters
     ----------
@@ -40,6 +43,9 @@ def black76(F: [float, np.array],
         Volatility (annualized).
     ln_shift : float, optional
         Log-normal shift, applied to forward price and strike (default is 0).
+    annuity_factor : float, optional
+        Multiplier to adjust the Black76 forward price to present value (default is 1).
+        This is composed of the discount factor and the accrual period fraction.
     analytical_greeks : bool, optional
         If True, analytical greeks will be calculated and returned (default is False).
     numerical_greeks : bool, optional
@@ -65,15 +71,17 @@ def black76(F: [float, np.array],
     # Set to Greek letter so code review to analytical formulae is easier
     σB = vol_sln
 
+
     # Convert to arrays. Function is vectorised.
-    F, tau, r, cp, K, σB, ln_shift = [np.atleast_1d(arg).astype(float) for arg in [F, tau, r, cp, K, σB, ln_shift]]
+    F, tau, cp, K, σB, ln_shift, annuity_factor = \
+        [np.atleast_1d(arg).astype(float) for arg in [F, tau, cp, K, σB, ln_shift, annuity_factor]]
     F = F + ln_shift
     K = K + ln_shift
 
     # Price per Black76 formula
     d1 = (np.log(F/K) + (0.5 * σB**2 * tau)) / (σB*np.sqrt(tau))
     d2 = d1 - σB*np.sqrt(tau)
-    X = np.exp(-r*tau) * cp * (F * norm.cdf(cp * d1) - K * norm.cdf(cp * d2))
+    X = annuity_factor * cp * (F * norm.cdf(cp * d1) - K * norm.cdf(cp * d2))
     results['price'] = X
 
     # Intrinsic / time value split
@@ -85,31 +93,54 @@ def black76(F: [float, np.array],
         results['time'] = X - intrinsic
 
     if analytical_greeks:
-        # To be validated
-        results['analytical_greeks'] = pd.DataFrame
-        results['analytical_greeks']['delta'] = cp * norm.cdf(cp * d1)
-        results['analytical_greeks']['vega'] = F * np.sqrt(tau) * norm.pdf(d1)
-        results['analytical_greeks']['theta'] = -F * σB * norm.pdf(d1) / (2 * np.sqrt(tau)) - r * K * np.exp(-r*tau) * norm.cdf(cp * d2)
-        results['analytical_greeks']['gamma'] = norm.pdf(d1) / (F * σB * np.sqrt(tau))
-        results['analytical_greeks']['rho'] = cp * K * tau * np.exp(-r*tau) * norm.cdf(cp * d2)
+        results['analytical_greeks'] = pd.DataFrame()
+
+        results['analytical_greeks']['delta'] = cp * norm.cdf(cp * d1) * annuity_factor
+
+        analytical_vega = F * np.sqrt(tau) * norm.pdf(d1)
+        # In practice, vega is displayed as normalised to a 1% shift, hence the 0.01 multiplier.
+        results['analytical_greeks']['vega'] = 0.01 * analytical_vega *  annuity_factor
 
     if numerical_greeks:
-        results['numerical_greeks'] = pd.DataFrame
+        results['numerical_greeks'] = pd.DataFrame()
+
+        # Delta, Δ, is the change in an option's price for a small change in the underlying assets (forward) price.
+        # Δ := ∂X/∂F ≈ (X(F_plus) − X(F_minus)) / (F_plus - F_minus)
+        Δ_shift = 0.01
+        results_F_plus = black76(F=F*(1+Δ_shift), tau=tau, K=K, cp=cp, vol_sln=vol_sln, ln_shift=ln_shift,
+                           annuity_factor=annuity_factor, analytical_greeks=True)
+        results_F_minus = black76(F=F*(1-Δ_shift), tau=tau, K=K, cp=cp, vol_sln=vol_sln, ln_shift=ln_shift,
+                            annuity_factor=annuity_factor, analytical_greeks=True)
+        results['numerical_greeks']['delta'] = (results_F_plus['price'] - results_F_minus['price']) / (2 * F * Δ_shift)
+
+        # Vega, ν, is the change in an options price for a small change in the volatility input
+        # ν = ∂X/∂σ ≈ (X(σ_plus) − X(σ_minus)) / (σ_plus - σ_minus).
+        # We divide by 0.01 (1%) to normalise the vega to a 1% change in the volatility input, per market convention.
+        σ_shift = 0.01
+        results_σ_plus = black76(F=F, tau=tau, K=K, cp=cp, vol_sln=vol_sln+σ_shift, ln_shift=ln_shift,
+                           annuity_factor=annuity_factor, analytical_greeks=True)
+        results_σ_minus = black76(F=F, tau=tau, K=K, cp=cp, vol_sln=vol_sln-σ_shift, ln_shift=ln_shift,
+                            annuity_factor=annuity_factor, analytical_greeks=True)
+        results['numerical_greeks']['vega'] = (results_σ_plus['price'] - results_σ_minus['price']) / (2 * (σ_shift / 0.01))
 
     return results
 
 
 def bachelier(F: [float, np.array],
               tau: [float, np.array],
-              r: [float, np.array],
               cp: [float, np.array],
               K: [float, np.array],
               vol_n: [float, np.array],
+              annuity_factor: [float, np.array] = 1,
               intrinsic_time_split: bool=False,
               analytical_greeks: bool=False,
               numerical_greeks: bool=False):
     """
-    Bachelier pricing for European options.
+    Bachelier pricing + greeks.
+
+    The function has the parameters 'annuity_factor' instead of a risk-free rate.
+    This adjustment allows for more generic applications of Bacheliers to caplets/floorlets and swaptions instead of just European options delivered at expiry.
+
 
     Parameters
     ----------
@@ -117,20 +148,21 @@ def bachelier(F: [float, np.array],
         Forward price.
     tau : float
         Time to expiry (in years).
-    r : float
-        Risk-free interest rate (annualized continuously compounded).
     cp : int
         Option type: 1 for call option, -1 for put option.
     K : float
         Strike price.
     vol_n : float
         Volatility (annualized).
+    annuity_factor : float, optional
+        Multiplier to adjust the Black76 forward price to present value (default is 1).
+        This is composed of the discount factor and the accrual period fraction.
+    intrinsic_time_split : bool, optional
+        If True, splits option value into intrinsic and time value components (default is False).
     analytical_greeks : bool, optional
         If True, analytical greeks will be calculated and returned (default is False).
     numerical_greeks : bool, optional
         If True, numerical greeks will be calculated and returned using finite differences (default is False).
-    intrinsic_time_split : bool, optional
-        If True, splits option value into intrinsic and time value components (default is False).
 
     Returns
     -------
@@ -151,11 +183,11 @@ def bachelier(F: [float, np.array],
     σN = vol_n
 
     # Convert to arrays. Function is vectorised.
-    F, tau, r, cp, K, σN = [np.atleast_1d(arg).astype(float) for arg in [F, tau, r, cp, K, σN]]
+    F, tau, cp, K, σN, annuity_factor = [np.atleast_1d(arg).astype(float) for arg in [F, tau, cp, K, σN, annuity_factor]]
 
     # Price per Bachelier formula
     d = (F - K) / (σN * np.sqrt(tau))
-    X = np.exp(-r*tau) * ( cp * (F - K) * norm.cdf(cp * d) + σN * np.sqrt(tau) * norm.pdf(d) )
+    X = annuity_factor * ( cp * (F - K) * norm.cdf(cp * d) + σN * np.sqrt(tau) * norm.pdf(d) )
 
     results['price'] = X
 
@@ -170,13 +202,18 @@ def bachelier(F: [float, np.array],
     if analytical_greeks:
         results['analytical_greeks'] = pd.DataFrame()
 
-    if numerical_greeks:
-        results['numerical_greeks'] = pd.DataFrame()
+        results['analytical_greeks']['delta'] = cp * norm.cdf(cp * d) * annuity_factor
+
+        # Market convention is to adjust normal vega to a 1 basis point impact hence the 0.0001 multiplier.
+        results['analytical_greeks']['vega'] = np.sqrt(tau) * norm.pdf(cp * d) * annuity_factor * 0.0001
+
+        # Normalised to 1 calendar day.
+        results['analytical_greeks']['theta'] = (-0.5 * norm.pdf(d) * σN / np.sqrt(tau)) * annuity_factor / (1/365.25)
 
     return results
 
 
-def black76_ln_to_normal_vol_analytical(
+def black76_sln_to_normal_vol_analytical(
         F: float,
         tau: float,
         K: float,
@@ -230,16 +267,14 @@ def black76_sln_to_normal_vol(
         ln_shift: float
     ) -> float:
     # If needed, faster method detailed in: Le Floc'h, Fabien, Fast and Accurate Analytic Basis Point Volatility (April 10, 2016).
-    # The solve is invariant to the risk-free rate or the call/put perspective.
-
-    r = 0.0
+    # This solve is invariant to the call/put perspective and the risk-free rate.
     cp = 1
 
-    black76_px = black76(F=F, tau=tau, K=K, r=r, cp=cp, vol_sln=vol_sln, ln_shift=ln_shift)['price'][0]
-    vol_n_guess = np.atleast_1d(black76_ln_to_normal_vol_analytical(F=F, tau=tau, K=K, vol_sln=vol_sln, ln_shift=ln_shift))
+    black76_px = black76(F=F, tau=tau, K=K, cp=cp, vol_sln=vol_sln, ln_shift=ln_shift)['price'][0]
+    vol_n_guess = np.atleast_1d(black76_sln_to_normal_vol_analytical(F=F, tau=tau, K=K, vol_sln=vol_sln, ln_shift=ln_shift))
 
     def obj_func_relative_px_error(vol_n):
-        bachelier_px = bachelier(F=F, tau=tau, r=r, cp=cp, K=K, vol_n=vol_n)['price'][0]
+        bachelier_px = bachelier(F=F, tau=tau, cp=cp, K=K, vol_n=vol_n)['price'][0]
         # Return the square of the relative error (to the price, as we want invariance to the price) to be minimised.
         # Squared error ensures differentiability which is critical for gradient-based optimisation methods.
         return ((black76_px - bachelier_px) / black76_px)**2
@@ -274,12 +309,12 @@ def shift_black76_vol(
     # The solve is invariant to the risk-free rate or the call/put perspective.
     r = 0.0; cp = 1
 
-    black76_px = black76(F=F, tau=tau, K=K, r=r, cp=cp, vol_sln=vol_sln, ln_shift=from_ln_shift)['price'][0]
+    black76_px = black76(F=F, tau=tau, K=K, cp=cp, vol_sln=vol_sln, ln_shift=from_ln_shift)['price'][0]
 
     def obj_func_relative_px_error(vol_new_ln_shift):
         # Return the square of the relative error (to the price, as we want invariance to the price) to be minimised.
         # Squared error ensures differentiability which is critical for gradient-based optimisation methods.
-        return ((black76(F=F, tau=tau, K=K, r=r, cp=cp, vol_sln=vol_new_ln_shift, ln_shift=to_ln_shift)['price'][0] - black76_px) / black76_px)**2
+        return ((black76(F=F, tau=tau, K=K, cp=cp, vol_sln=vol_new_ln_shift, ln_shift=to_ln_shift)['price'][0] - black76_px) / black76_px)**2
 
     # Want prices to be within 0.001% - i.e. if price is 100,000, acceptable range is (99999, 100001)
     # Hence set obj function tol 'ftol' to (0.001%)**2 = 1e-10 (due to the squaring of the relative error in the obj function)
@@ -301,7 +336,7 @@ def shift_black76_vol(
         # (ii) addition of 'xtol' parameter into the optimisation (it is a parameter that is not available in 'L-BFGS-B')
         #      'xtol' allows termination of the optimisation when the solved parameter (i.e. vol_sln) only changes by a small amount (e.g. 0.001%)
         vol_new_ln_shift = res.x[0]
-        black76_px_shifted = black76(F=F, tau=tau, K=K, r=r, cp=cp, vol_sln=vol_new_ln_shift, ln_shift=to_ln_shift)['price'][0]
+        black76_px_shifted = black76(F=F, tau=tau, K=K, cp=cp, vol_sln=vol_new_ln_shift, ln_shift=to_ln_shift)['price'][0]
         print({'F': F, 'tau': tau, 'K': K, 'vol_n': vol_sln, 'ln_shift': from_ln_shift})
         print({'black76_px': black76_px, 'black76_px_shifted': black76_px_shifted, 'vol_new_ln_shift': vol_new_ln_shift,
                'relative_error': obj_func_relative_px_error(vol_sln)})
@@ -320,12 +355,12 @@ def normal_vol_to_black76_sln(
     # The solve is invariant to the risk-free rate or the call/put perspective.
     r = 0.0; cp = 1
 
-    bachelier_px = bachelier(F=F, tau=tau, K=K, r=r, cp=cp, vol_n=vol_n)['price'][0]
+    bachelier_px = bachelier(F=F, tau=tau, K=K, cp=cp, vol_n=vol_n)['price'][0]
 
     def obj_func_relative_px_error(vol_sln):
         # Return the square of the relative error (to the price, as we want invariance to the price) to be minimised.
         # Squared error ensures differentiability which is critical for gradient-based optimisation methods.
-        return ((bachelier_px - black76(F=F, tau=tau, K=K, r=r, cp=cp, vol_sln=vol_sln, ln_shift=ln_shift)['price'][0]) / bachelier_px)**2
+        return ((bachelier_px - black76(F=F, tau=tau, K=K, cp=cp, vol_sln=vol_sln, ln_shift=ln_shift)['price'][0]) / bachelier_px)**2
 
     # Want prices to be within 0.001% - i.e. if price is 100,000, acceptable range is (99999, 100001)
     # Hence set obj function tol 'ftol' to (0.001%)**2 = 1e-10 (due to the squaring of the relative error in the obj function)
@@ -346,10 +381,50 @@ def normal_vol_to_black76_sln(
         # (ii) addition of 'xtol' parameter into the optimisation (it is a parameter that is not available in 'L-BFGS-B')
         #      'xtol' allows termination of the optimisation when solved parameter (i.e. vol_sln) only changes by a small amount (e.g. 0.001%)
         vol_sln = res.x[0]
-        black76_px = black76(F=F, tau=tau, K=K, r=r, cp=cp, vol_sln=vol_sln, ln_shift=ln_shift)['price'][0]
+        black76_px = black76(F=F, tau=tau, K=K, cp=cp, vol_sln=vol_sln, ln_shift=ln_shift)['price'][0]
         print({'F': F, 'tau': tau, 'K': K, 'vol_n': vol_n, 'ln_shift': ln_shift})
         print({'bachelier_px': bachelier_px, 'black76_px': black76_px, 'vol_sln': vol_sln,
                'relative_error': obj_func_relative_px_error(vol_sln)})
         print(res)
         raise ValueError('Optimisation to convert normal volatility to log-normal volatility did not converge.')
 
+
+
+# if __name__ == "__main__":
+#
+#     F = 4.47385 / 100
+#     tau = 0.758904109589041
+#     K = 4 / 100
+#     vol_sln = 14.07 / 100
+#     vol_n = 0.008767
+#     ln_shift = 0.02
+#     cp = 1
+#     discount_factor = 0.95591
+#     term_multiplier = 24.9315068493151 / 100
+#     annuity_factor = discount_factor * term_multiplier
+#
+#     σB = vol_sln
+#
+#
+#     # # Convert to arrays. Function is vectorised.
+#     # F, tau, cp, K, σB, ln_shift, discount_factor, term_multiplier = \
+#     #     [np.atleast_1d(arg).astype(float) for arg in [F, tau, cp, K, σB, ln_shift, discount_factor, term_multiplier]]
+#     # F = F + ln_shift
+#     # K = K + ln_shift
+#     #
+#     # # Price per Black76 formula
+#     # d1 = (np.log(F/K) + (0.5 * σB**2 * tau)) / (σB*np.sqrt(tau))
+#     # d2 = d1 - σB*np.sqrt(tau)
+#     # X = 100e6 * discount_factor * term_multiplier * cp * (F * norm.cdf(cp * d1) - K * norm.cdf(cp * d2))
+#     #
+#     #delta = cp * norm.cdf(cp * d1)
+#
+#     # result = black76(F=F, tau=tau, K=K, cp=cp, vol_sln=vol_sln, ln_shift=ln_shift, discount_factor=discount_factor,
+#     #                  term_multiplier=term_multiplier, analytical_greeks=True, numerical_greeks=True)
+#     # for k,v in result.items():
+#     #     print(k,np.round(v * 100e6,0))
+#
+#     result = bachelier(F=F, tau=tau, K=K, cp=cp, vol_n=vol_n, annuity_factor=annuity_factor, analytical_greeks=True)
+#
+#     for k,v in result.items():
+#         print(k,np.round(v * 100e6,0))
