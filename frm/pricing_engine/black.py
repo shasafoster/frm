@@ -433,40 +433,50 @@ if __name__ == "__main__":
     # print(sigma_B)
     #
 
+    #from frm.pricing_engine.black import black76
 
-
-    F = 4.47385 / 100
-    tau = 0.758904109589041
-    K = F
-    vol_sln = 14.07 / 100
-    vol_n = 0.008767
+    F = 3.97565 / 100,
+    tau = 1.01944
+    vol_sln = 19.96 / 100
     ln_shift = 0.02
-    cp = 1
-    discount_factor = 0.95591
-    term_multiplier = 24.9315068493151 / 100
-    annuity_factor = discount_factor * term_multiplier
 
-    σB = vol_sln
-    σN = vol_n
-
-    # Convert to arrays. Function is vectorised.
-    F, tau, cp, K, σB, ln_shift, discount_factor, term_multiplier = \
-        [np.atleast_1d(arg).astype(float) for arg in [F, tau, cp, K, σB, ln_shift, discount_factor, term_multiplier]]
-    F = F + ln_shift
-    K = K + ln_shift
-
-    # Price per Black76 formula
-    d1 = (np.log(F/K) + (0.5 * σB**2 * tau)) / (σB*np.sqrt(tau))
-    d2 = d1 - σB*np.sqrt(tau)
-    Xb = 100e6 * annuity_factor * cp * (F * norm.cdf(cp * d1) - K * norm.cdf(cp * d2))
+    black76(F=F, K=F, tau=tau, cp=1, vol_sln=vol_sln, ln_shift=ln_shift)
 
 
-    # Price per Bachelier formula
-    d = (F - K) / (σN * np.sqrt(tau))
-    Xn = 100e6 * annuity_factor * ( cp * (F - K) * norm.cdf(cp * d) + σN * np.sqrt(tau) * norm.pdf(d) )
-    Xn_ = 100e6 * annuity_factor * σN * np.sqrt(tau) * norm.pdf(0)
+    # F = 4.47385 / 100
+    # tau = 0.758904109589041
+    # K = F
+    # vol_sln = 14.07 / 100
+    # vol_n = 0.008767
+    # ln_shift = 0.02
+    # cp = 1
+    # discount_factor = 0.95591
+    # term_multiplier = 24.9315068493151 / 100
+    # annuity_factor = discount_factor * term_multiplier
+    #
+    # σB = vol_sln
+    # σN = vol_n
+    #
+    # # Convert to arrays. Function is vectorised.
+    # F, tau, cp, K, σB, ln_shift, discount_factor, term_multiplier = \
+    #     [np.atleast_1d(arg).astype(float) for arg in [F, tau, cp, K, σB, ln_shift, discount_factor, term_multiplier]]
+    # F = F + ln_shift
+    # K = K + ln_shift
+    #
+    # # Price per Black76 formula
+    # d1 = (np.log(F/K) + (0.5 * σB**2 * tau)) / (σB*np.sqrt(tau))
+    # d2 = d1 - σB*np.sqrt(tau)
+    # Xb = 100e6 * annuity_factor * cp * (F * norm.cdf(cp * d1) - K * norm.cdf(cp * d2))
+    #
+    #
+    # # Price per Bachelier formula
+    # d = (F - K) / (σN * np.sqrt(tau))
+    # Xn = 100e6 * annuity_factor * ( cp * (F - K) * norm.cdf(cp * d) + σN * np.sqrt(tau) * norm.pdf(d) )
+    # Xn_ = 100e6 * annuity_factor * σN * np.sqrt(tau) * norm.pdf(0)
+    #
+    # print(Xb, Xn, Xn_)
 
-    print(Xb, Xn, Xn_)
+
 
 
 

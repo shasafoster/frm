@@ -4,6 +4,7 @@ import os
 from Demos.mmapfile_demo import offset
 
 from frm.enums.term_structures import TermRate
+from frm.pricing_engine.black import black76
 from frm.utils.tenor import tenor_to_date_offset, clean_tenor
 
 if __name__ == "__main__":
@@ -64,8 +65,7 @@ zero_curve_6m = ZeroCurve(curve_date=curve_date,
                           interpolation_method='linear_on_log_of_discount_factors')
 
 swaption_quotes = pd.read_excel(io=fp, sheet_name='Swaption1Y')
-vol_ln_df = swaption_quotes.loc[swaption_quotes['field']=='lognormal_vol', :].reset_index(drop=True)
-df = vol_ln_df
+vol_sln_df = swaption_quotes.loc[swaption_quotes['field']=='lognormal_vol', :].reset_index(drop=True)
 
 
 fixed_frequency = PeriodFrequency.QUARTERLY
@@ -73,7 +73,17 @@ settlement_delay = 1
 ln_shift = 0.01
 
 
+# Convert the quote columns to standardised format.
+col_name_update_atmf = standardise_atmf_quote_col_names(col_names=list(vol_sln_df.columns))
+vol_sln_df.rename(columns=col_name_update_atmf, inplace=True)
+col_name_update_relative, col_name_adj_to_forward = standardise_relative_quote_col_names(col_names=list(vol_sln_df.columns))
+vol_sln_df.rename(columns=col_name_update_relative, inplace=True)
+quote_columns = list(col_name_update_atmf.values()) + list(col_name_update_relative.values())
 
+
+#%%
+
+df = vol_sln_df[['expiry', 'swap_term', 'frequency']].copy()
 
 # Set the swaption expiry date, and the underlying swap effective date and swap termination date.
 df['expiry'] = df['expiry'].apply(clean_tenor)
@@ -91,20 +101,9 @@ df['swap_termination_date'] = np.busday_offset(
 
 df['expiry_years'] = year_fraction(curve_date, df['expiry_date'], day_count_basis)
 
-# Convert the quote columns to standardised format.
-col_name_update_atmf = standardise_atmf_quote_col_names(col_names=list(df.columns))
-df.rename(columns=col_name_update_atmf, inplace=True)
-col_name_update_relative, col_name_adj_to_forward = standardise_relative_quote_col_names(col_names=list(df.columns))
-df.rename(columns=col_name_update_relative, inplace=True)
-quote_columns = list(col_name_update_atmf.values()) + list(col_name_update_relative.values())
-
 for i, row in df.iterrows():
-    df.loc[i,'fixed_freq'] = PeriodFrequency.from_value(row['fixed_freq'])
-    df.loc[i, 'float_freq'] = PeriodFrequency.from_value(row['float_freq'])
+    df.loc[i,'frequency'] = PeriodFrequency.from_value(row['frequency'])
 
-
-
-#%%
 
 # Functions
 
@@ -115,15 +114,12 @@ for i, row in df.iterrows():
 #  Composed of zero curves and term fixings.
 #
 
-
-
-
 # Calculate the par swap rate for each swap term / expiry combo. This is a bit slow (0.2s) for 14 rows.
 # Could be optimised by creating the longest schedule over each fixed frequency then indexing.
 df['F'] = np.nan
 for i, row in df.iterrows():
 
-    frequency = PeriodFrequency.from_value(row['fixed_freq'])
+    frequency = row['frequency']
 
     fixed_schedule = Schedule(start_date=row['swap_effective_date'],
                              end_date=row['swap_termination_date'],
@@ -143,37 +139,40 @@ for i, row in df.iterrows():
 
     fixed_schedule.df['discount_factor'] = zero_curve_3m.get_discount_factors(dates=fixed_schedule.df['payment_date'])
     fixed_schedule.df['annuity_factor'] = fixed_schedule.df['period_years'] * fixed_schedule.df['discount_factor']
-    df.loc[i,'F'] = (fixed_schedule.df['forward_rate'] * fixed_schedule.df['annuity_factor'] / fixed_schedule.df[
-        'annuity_factor'].sum()).sum()
+    df.loc[i,'F'] = (fixed_schedule.df['forward_rate'] * fixed_schedule.df['annuity_factor'] \
+                     / fixed_schedule.df['annuity_factor'].sum()).sum()
 
 # Setup strikes dataframe
-strikes_df = df[quote_columns].copy()
+strikes_df = vol_sln_df[quote_columns].copy()
 strikes_df[quote_columns] = np.nan
 strikes_df.loc[:,'atmf'] = df['F'].values
 for col, adj in col_name_adj_to_forward.items():
     strikes_df[col] = strikes_df['atmf'] + adj
 
+#%%
 
 # Each loop is independent, so can be parallelised. 0.27s for 14 rows.
-df[['alpha_', 'beta_', 'rho_', 'volvol_']] = np.nan
-for (i,vols_sln_row),(j,strikes_row) in zip(df.iterrows(),strikes_df.iterrows()):
-    result = fit_sabr_params_to_sln_smile(tau=vols_sln_row['expiry_years'],
-                                          F=vols_sln_row['F'],
+df[['alpha', 'beta', 'rho', 'volvol']] = np.nan
+for (i,sabr_row),(j,strikes_row),(k,vol_sln_row) in zip(df.iterrows(),strikes_df.iterrows(),vol_sln_df.iterrows()):
+    result = fit_sabr_params_to_sln_smile(tau=sabr_row['expiry_years'],
+                                          F=sabr_row['F'],
                                           K=strikes_row[quote_columns],
-                                          vols_sln=vols_sln_row[quote_columns],
+                                          vols_sln=vol_sln_row[quote_columns],
                                           ln_shift=ln_shift,
-                                          beta=vols_sln_row['beta'])
+                                          beta=vol_sln_row['beta'])
 
     (alpha, beta, rho, volvol), res = result
     if res.success:
-        df.loc[i, ['alpha_', 'beta_', 'rho_', 'volvol_']] = alpha, beta, rho, volvol
+        df.loc[i, ['alpha', 'beta', 'rho', 'volvol']] = alpha, beta, rho, volvol
     else:
         print(res)
-        raise ValueError(f"SABR calibration of expiry-swap term {vols_sln_row['expiry']}{vols_sln_row['swap_term']} failed.")
-
-
+        raise ValueError(f"SABR calibration of expiry-swap term {vol_sln_row['expiry']}{vol_sln_row['swap_term']} failed.")
 
 df.to_clipboard()
+
+
+#%%%
+
 
 
 #%%
