@@ -1,13 +1,11 @@
 # -*- coding: utf-8 -*-
 import os
-from dataclasses import dataclass, field
-
 if __name__ == "__main__":
     os.chdir(os.environ.get('PROJECT_DIR_FRM'))
     
 import numpy as np
 import pandas as pd
-from typing import List, Tuple, Optional, Union
+from typing import List, Tuple, Optional
 from frm.enums.utils import RollConvention, TimingConvention, StubType, PeriodFrequency, DayRoll, DayCountBasis
 from frm.utils.daycount import year_fraction, day_count
 
@@ -103,111 +101,24 @@ def set_default(value, default):
 #     return pd.DatetimeIndex(dates_np).astype('datetime64[ns]')
 
 
+def add_period_length_to_schedule(schedule: pd.DataFrame,
+                                  day_count_basis: DayCountBasis) -> pd.DataFrame:
 
-
-@dataclass
-class Schedule:
-    # Schedule parameters
-    start_date: [pd.Timestamp, np.datetime64]
-    end_date: [pd.Timestamp, np.datetime64]
-    frequency: PeriodFrequency
-    roll_convention: RollConvention = RollConvention.MODIFIED_FOLLOWING
-    day_roll: DayRoll = DayRoll.NONE
-    first_cpn_end_date: Union[pd.Timestamp, np.datetime64, None] = None
-    last_cpn_start_date: Union[pd.Timestamp, np.datetime64, None] = None
-    first_stub_type: StubType = StubType.DEFAULT
-    last_stub_type: StubType = StubType.DEFAULT
-    roll_user_specified_dates: bool = False
-    busdaycal: np.busdaycalendar = np.busdaycalendar()
-    # Payment date parameters
-    add_payment_dates: bool = True
-    payment_delay: int = 0
-    payment_timing: TimingConvention = TimingConvention.IN_ARREARS
-    # Fixing date parameters
-    add_fixing_dates: bool = False
-    fixing_days_ahead: int = 0
-    fixing_timing: TimingConvention = TimingConvention.IN_ADVANCE
-
-    # The schedule DataFrame is initialized after the object is created
-    df: pd.DataFrame = field(init=False)
-
-    def __post_init__(self):
-        self.generate_schedule()
-
-    def generate_schedule(self):
-        # Generate the schedule DataFrame using the stored parameters
-        self.df = get_schedule(
-            start_date=self.start_date,
-            end_date=self.end_date,
-            frequency=self.frequency,
-            roll_convention=self.roll_convention,
-            day_roll=self.day_roll,
-            first_cpn_end_date=self.first_cpn_end_date,
-            last_cpn_start_date=self.last_cpn_start_date,
-            first_stub_type=self.first_stub_type,
-            last_stub_type=self.last_stub_type,
-            roll_user_specified_dates=self.roll_user_specified_dates,
-            busdaycal=self.busdaycal,
-            add_payment_dates=self.add_payment_dates,
-            payment_delay=self.payment_delay,
-            payment_timing=self.payment_timing,
-            add_fixing_dates=self.add_fixing_dates,
-            fixing_days_ahead=self.fixing_days_ahead,
-            fixing_timing=self.fixing_timing,
-        )
-
-    def update_and_regenerate(self, **kwargs):
-        """
-        Update specified parameters and regenerate the schedule.
-
-        Parameters:
-            **kwargs: Dictionary of parameters to update.
-        """
-        # Update the parameters
-        for key, value in kwargs.items():
-            if hasattr(self, key):
-                setattr(self, key, value)
-            else:
-                raise AttributeError(f"'Schedule' object has no attribute '{key}'")
-        # Regenerate the schedule with updated parameters
-        self.generate_schedule()
-
-
-    def add_period_length_to_schedule(self, day_count_basis: DayCountBasis):
-        self.df = add_period_length_to_schedule(self.df, day_count_basis)
-
-
-
-def add_period_length_to_schedule(schedule_df: pd.DataFrame, day_count_basis: DayCountBasis):
-    """ Add the period length in days and years to the schedule DataFrame, always replacing existing columns"""
-
-    # Remove 'period_days' and 'period_years' if they already exist
-    if 'period_days' in schedule_df.columns:
-        schedule_df.pop('period_days')
-    if 'period_years' in schedule_df.columns:
-        schedule_df.pop('period_years')
-
-    # Get the column index for 'period_end'
-    col_index = schedule_df.columns.get_loc('period_end')
-
-    # Insert 'period_days' and 'period_years' at the specified positions
-    schedule_df.insert(loc=col_index + 1, column='period_days',
-                       value=day_count(schedule_df['period_start'], schedule_df['period_end'], day_count_basis))
-    schedule_df.insert(loc=col_index + 2, column='period_years',
-                       value=year_fraction(schedule_df['period_start'], schedule_df['period_end'], day_count_basis))
-
-    return schedule_df
+    col_index = schedule.columns.get_loc('period_end')
+    schedule.insert(loc=col_index + 1, column='period_days', value=day_count(schedule['period_start'], schedule['period_end'], day_count_basis))
+    schedule.insert(loc=col_index + 2, column='period_years', value=year_fraction(schedule['period_start'], schedule['period_end'], day_count_basis))
+    return schedule
 
 
 def get_schedule(
         # Schedule parameters
-        start_date: [pd.Timestamp, np.datetime64],
-        end_date: [pd.Timestamp, np.datetime64],
+        start_date: pd.Timestamp,
+        end_date: pd.Timestamp,
         frequency: PeriodFrequency,
         roll_convention: RollConvention=RollConvention.MODIFIED_FOLLOWING,
         day_roll: DayRoll=DayRoll.NONE,
-        first_cpn_end_date: Union[pd.Timestamp, np.datetime64, None] = None,
-        last_cpn_start_date: Union[pd.Timestamp, np.datetime64, None] = None,
+        first_cpn_end_date: Optional[pd.Timestamp]=None,
+        last_cpn_start_date: Optional[pd.Timestamp]=None,
         first_stub_type: StubType=StubType.DEFAULT,
         last_stub_type: StubType=StubType.DEFAULT,
         roll_user_specified_dates: bool=False,
@@ -247,7 +158,7 @@ def get_schedule(
     roll_user_specified_dates : bool
         Boolean flag for whether to roll (per business day calendar and roll convention) the user specified dates (start_date, end_date, first_cpn_end_date, last_cpn_start_date)
     busdaycal : np.busdaycalendar
-        Specifies the business day calendar to observe.
+        Specifies the business day calendar to observe. 
     add_payment_dates : bool
         Boolean flag for whether to add payment dates to the schedule. The default is True.
     payment_delay : int
@@ -260,7 +171,7 @@ def get_schedule(
         Specifies how many days prior to period start_date/end_date (if payments are in_advance/in_arrears), the fixing is made. The default is 0.
     fixing_timing : TimingConvention
         Specifies when fixings occur. The default is TimingConvention.IN_ADVANCE
-
+        
     Returns
     -------
     schedule : pandas.DataFrame
@@ -270,11 +181,11 @@ def get_schedule(
             - period_end
             - payment_date (if add_payment_dates=True)
     """
-
+            
     # Set defaults for optional parameters
     #first_cpn_end_date = set_default(first_cpn_end_date, None)
     #last_cpn_start_date = set_default(last_cpn_start_date, None)
-
+    
     #busdaycal = set_default(busdaycal, np.busdaycalendar())
     #roll_user_specified_dates = set_default(roll_user_specified_dates, False)
 
@@ -284,19 +195,15 @@ def get_schedule(
     #first_stub_type = StubType.from_value(first_stub_type)
     #last_stub_type = StubType.from_value(last_stub_type)
 
-    start_date, end_date, first_cpn_end_date, last_cpn_start_date = \
-        [pd.Timestamp(d) if isinstance(d, np.datetime64) else d for d in \
-         [start_date, end_date, first_cpn_end_date, last_cpn_start_date]]
-
     # Input validation
     if start_date >= end_date:
         raise ValueError(f"start_date {start_date} must be before end_date {end_date}")
-
+    
     #if PeriodFrequency.is_valid(frequency):
     #    freq_obj = PeriodFrequency.from_value(frequency)
     #else:
     #    raise ValueError(f"Invalid 'frequency' {frequency}")
-
+    
     if first_cpn_end_date is not None:
         assert start_date < first_cpn_end_date <= end_date
 
@@ -310,12 +217,12 @@ def get_schedule(
         # Function inputs explicitly specify 2 periods
         d1 = [start_date, first_cpn_end_date]
         d2 = [last_cpn_start_date, end_date]
-    else:
+    else:        
         # Need to generate the schedule
-        if first_cpn_end_date is None and last_cpn_start_date is None:
+        if first_cpn_end_date is None and last_cpn_start_date is None:  
             assert first_stub_type != StubType.DEFINED_PER_FIRST_CPN_END_DATE
             assert last_stub_type != StubType.DEFINED_PER_LAST_CPN_START_DATE
-
+            
             if first_stub_type == StubType.DEFAULT and last_stub_type == StubType.DEFAULT:
                 # If no stub is specified, defaults to market convention on the 1st stub, no last stub.
                 first_stub_type = StubType.market_convention()
@@ -325,15 +232,15 @@ def get_schedule(
             elif last_stub_type == StubType.DEFAULT:
                 last_stub_type = StubType.NONE
             else:
-                raise ValueError("Unexpected logic branch - please raise GitHub issue")
-
+                raise ValueError("Unexpected logic branch - please raise GitHub issue")                
+                
             if last_stub_type == StubType.NONE:
-                d1, d2 = generate_date_schedule(start_date, end_date, frequency, 'backward', roll_convention, day_roll, roll_user_specified_dates, busdaycal)
+                d1, d2 = generate_date_schedule(start_date, end_date, frequency, 'backward', roll_convention, day_roll, busdaycal, roll_user_specified_dates)
                 if first_stub_type == StubType.LONG:
                     d1 = [d1[0]] + d1[2:]
                     d2 = d2[1:]
             elif first_stub_type == StubType.NONE and last_stub_type != StubType.NONE:
-                d1, d2 = generate_date_schedule(start_date, end_date, frequency, 'forward', roll_convention, day_roll, roll_user_specified_dates, busdaycal)
+                d1, d2 = generate_date_schedule(start_date, end_date, frequency, 'forward', roll_convention, day_roll, busdaycal, roll_user_specified_dates)
                 if last_stub_type == StubType.LONG:
                     d1 = d1[:-1]
                     d2 = d2[:-2] + [d2[-1]]
@@ -341,33 +248,33 @@ def get_schedule(
                 raise ValueError("If a schedule has first and last stubs they must be specified via first_cpn_end_date and last_cpn_start_date")
             else:
                 raise ValueError("Unexpected logic branch - please raise GitHub issue")
-
+                
         else:
             # If first_cpn_end_date or last_cpn_start_date are specified we want to generate the schedule
-            # via generate_date_schedule(start_date, end_date, ...) and see if
+            # via generate_date_schedule(start_date, end_date, ...) and see if 
             # the first_cpn_end_date or last_cpn_start_date match the generated schedule.
             #
-            # If they align, we use this generated schedule.
+            # If they align, we use this generated schedule. 
             #
             # If they don't align, we generate the schedule:
             # (i) via backward generation from last_cpn_start_date if only last_cpn_start_date is specified
             # (ii) via forward generation from first_cpn_end_date if only first_cpn_end_date is specified
             # (iii) between first_cpn_end_date and last_cpn_start_date if both are specified
-
+            
             # Step 1: Generate the schedule by backward and forward date generation
-            d1_backward, d2_backward = generate_date_schedule(start_date, end_date, frequency, 'backward', roll_convention, day_roll, roll_user_specified_dates, busdaycal)
-            d1_forward, d2_forward = generate_date_schedule(start_date, end_date, frequency, 'forward', roll_convention, day_roll, roll_user_specified_dates, busdaycal)
+            d1_backward, d2_backward = generate_date_schedule(start_date, end_date, frequency, 'backward', roll_convention, day_roll, busdaycal, roll_user_specified_dates)
+            d1_forward, d2_forward = generate_date_schedule(start_date, end_date, frequency, 'forward', roll_convention, day_roll, busdaycal, roll_user_specified_dates)
 
             # Step 2a : Check if the first_cpn_end_date matches any generated schedules
-
+            
             direction = []
             if first_cpn_end_date is not None:
                 if first_cpn_end_date == d2_forward[0]:
                     direction.append('forward')
-                    first_stub_type = StubType.NONE
+                    first_stub_type = StubType.NONE      
                 elif first_cpn_end_date == d2_backward[0]:
                     direction.append('backward')
-                    first_stub_type = StubType.SHORT
+                    first_stub_type = StubType.SHORT 
                 elif first_cpn_end_date == d2_backward[1]:
                     direction.append('backward')
                     first_stub_type = StubType.LONG
@@ -376,20 +283,20 @@ def get_schedule(
                     first_stub_type = StubType.DEFINED_PER_FIRST_CPN_END_DATE
 
             # Step 2a : Check if the last_cpn_start_date matches any generated schedules
-            if last_cpn_start_date is not None:
+            if last_cpn_start_date is not None:    
                 if last_cpn_start_date == d1_backward[-1]:
                     direction.append('backward')
-                    last_stub_type = StubType.NONE
+                    last_stub_type = StubType.NONE                      
                 elif last_cpn_start_date == d1_forward[-1]:
                     direction.append('forward')
-                    last_stub_type = StubType.SHORT
+                    last_stub_type = StubType.SHORT  
                 elif last_cpn_start_date == d1_forward[-2]:
                     direction.append('forward')
                     last_stub_type = StubType.LONG
                 else:
                     # Need to construct schedule using last_cpn_start_date
                     last_stub_type = StubType.DEFINED_PER_LAST_CPN_START_DATE
-
+            
             # Step 2c : Set default stub values to:
             #              (i) NONE if other stub is SHORT/LONG
             #              (ii) SHORT if other stub is NONE
@@ -404,17 +311,17 @@ def get_schedule(
                 if first_stub_type == StubType.NONE:
                     last_stub_type = StubType.market_convention()
                 else:
-                    last_stub_type = StubType.NONE
-
+                    last_stub_type = StubType.NONE         
+                
             # Step 3: Construct the schedules
             if first_stub_type == StubType.DEFINED_PER_FIRST_CPN_END_DATE and last_stub_type == StubType.DEFINED_PER_LAST_CPN_START_DATE:
                 # Generate date schedule between first_cpn_end_date and last_cpn_start_date
-                d1, d2 = generate_date_schedule(first_cpn_end_date, last_cpn_start_date, frequency, 'backward', roll_convention, day_roll, roll_user_specified_dates, busdaycal)
+                d1, d2 = generate_date_schedule(first_cpn_end_date, last_cpn_start_date, frequency, 'backward', roll_convention, day_roll, busdaycal, roll_user_specified_dates)
                 d1 = [start_date] + d1 + [last_cpn_start_date]
                 d2 = [first_cpn_end_date] + d2 + [end_date]
             elif first_stub_type == StubType.DEFINED_PER_FIRST_CPN_END_DATE and last_stub_type != StubType.DEFINED_PER_LAST_CPN_START_DATE:
                 # Forward generation from from first_cpn_end_date and if long last stub, combine last two periods
-                d1, d2 = generate_date_schedule(first_cpn_end_date, end_date, frequency, 'forward', roll_convention, day_roll, roll_user_specified_dates, busdaycal)
+                d1, d2 = generate_date_schedule(first_cpn_end_date, end_date, frequency, 'forward', roll_convention, day_roll, busdaycal, roll_user_specified_dates)
                 d1 = [start_date] + d1
                 d2 = [first_cpn_end_date] + d2
                 if last_stub_type == StubType.LONG:
@@ -422,16 +329,16 @@ def get_schedule(
                     d2 = d2[:-2] + [d2[-1]]
             elif first_stub_type != StubType.DEFINED_PER_FIRST_CPN_END_DATE and last_stub_type == StubType.DEFINED_PER_LAST_CPN_START_DATE:
                 # Backward generation from last_cpn_start_date and if long first stub, combine first two periods
-                d1, d2 = generate_date_schedule(start_date, last_cpn_start_date, frequency, 'backward', roll_convention, day_roll, roll_user_specified_dates, busdaycal)
+                d1, d2 = generate_date_schedule(start_date, last_cpn_start_date, frequency, 'backward', roll_convention, day_roll, busdaycal, roll_user_specified_dates)
                 d1 = d1 + [last_cpn_start_date]
-                d2 = d2 + [end_date]
+                d2 = d2 + [end_date]                
                 if first_stub_type == StubType.LONG:
                     d1 = [d1[0]] + d1[2:]
                     d2 = d2[1:]
             else:
                 # Don't need to generate any additional schedules
                 assert len(set(direction)) == 1
-
+                
                 if first_stub_type == StubType.NONE:
                     # Forward date generation
                     d1, d2 = d1_forward, d2_forward
@@ -443,7 +350,7 @@ def get_schedule(
                     d1, d2 = d1_backward, d2_backward
                     if first_stub_type == StubType.LONG:
                         d1 = [d1[0]] + d1[2:]
-                        d2 = d2[1:]
+                        d2 = d2[1:]          
                 else:
                     raise ValueError("Unexpected logic branch - please raise GitHub issue")
 

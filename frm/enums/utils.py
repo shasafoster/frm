@@ -104,7 +104,7 @@ class CompoundingFrequency(Enum):
         # # List all valid codes in case of an error
         # valid_values = [enum_member.value for enum_member in cls]
         # raise ValueError(f"Invalid value: {value}. Valid codes are: {valid_values}")
-        
+
 
 class PeriodFrequency(Enum):
     # If storing instrument definitions in CDM, use 'code' to define valid fieldnames
@@ -150,12 +150,32 @@ class PeriodFrequency(Enum):
 
     @classmethod
     def is_valid(cls, value):
-        value = clean_enum_value(value)
+        value = clean_enum_value(value, cls._transform_value)
         return value in {enum_member.value for enum_member in cls}
 
     @classmethod
     def from_value(cls, value):
-        return get_enum_member(cls, value)
+        return get_enum_member(cls, value, cls._transform_value)
+
+    @staticmethod
+    def _transform_value(value: str) -> str:
+        value = value.replace('/', '').replace('_', '').replace('per', '').lower().strip()
+
+        period_frequency_aliases = {
+            'daily': ['d', 'day', 'days', '1d', '1day', '1days'],
+            'weekly': ['w', 'week', 'weeks', 'wk', '1w', '1wk', '1week', '1weeks'],
+            '28days': ['28d', '28day', '28days'],
+            'monthly': ['m', 'month', 'months', 'mon', '1m', '1mo', '1month', '1months'],
+            'quarterly': ['q', 'quarter', 'quarters', 'quart', '3m', '3mo', '3month', '3months'],
+            'semiannual': ['s','sa', 'semiannual', 'semiannually', 'semi','6m', '6mo', '6month', '6months'],
+            'annual': ['a', 'year', 'years', 'yrs', 'yr', 'annually', '1y', '1yr', '1year', '1years'],
+            'zerocoupon': ['z', 'zc', 'zerocoupon', 'zero']
+        }
+
+        for key, aliases in period_frequency_aliases.items():
+            if value == key or value in aliases:
+                return key
+        return value
 
 
 class DayRoll(Enum):

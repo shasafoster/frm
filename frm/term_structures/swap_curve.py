@@ -8,8 +8,8 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from frm.enums.utils import CompoundingFrequency
-from frm.enums.term_structures import OISCouponCalcMethod
+from frm.enums.utils import CompoundingFrequency, PeriodFrequency
+from frm.enums.term_structures import OISCouponCalcMethod, TermRate
 from frm.utils.daycount import year_fraction
 from frm.term_structures.zero_curve import ZeroCurve
 from frm.term_structures.historical_swap_index_fixings import OISFixings, TermFixings
@@ -21,19 +21,25 @@ class TermSwapCurve:
     zero_curve: ZeroCurve
     historical_fixings: TermFixings
 
+    # TODO: Term swap curve must require a fixing frequency.
+
+
     def __post_init__(self):
         assert self.zero_curve.day_count_basis == self.historical_fixings.day_count_basis
 
     def get_fixings(self,
                     period_start: pd.DatetimeIndex,
                     period_end: pd.DatetimeIndex,
-                    cpn_calc_method: CompoundingFrequency):
+                    fixing_frequency: PeriodFrequency, # TODO think about this and the enum
+                    cpn_calc_method: CompoundingFrequency=TermRate.SIMPLE):
 
         fixings = np.full(period_start.shape, np.nan)
 
+        # TODO Choose the zero curve based on the fixing frequency
+        #   Would be nice to have public API to call for data whenever needed for examples.
         # Get forward fixings
         mask_future = period_start >= self.zero_curve.curve_date
-        forward_fixings = self.zero_curve.forward_rate(
+        forward_fixings = self.zero_curve.get_forward_rates(
             period_start=period_start[mask_future],
             period_end=period_end[mask_future],
             forward_rate_type=cpn_calc_method)
@@ -57,19 +63,19 @@ class OISCurve:
         assert self.zero_curve.day_count_basis == self.historical_fixings.day_count_basis
 
     def get_discount_factors(self, dates):
-        return self.zero_curve.discount_factor(dates=dates)
+        return self.zero_curve.get_discount_factors(dates=dates)
 
     def get_fixings(self,
                     period_start: pd.DatetimeIndex,
                     period_end: pd.DatetimeIndex,
-                    cpn_calc_method: OISCouponCalcMethod):
+                    cpn_calc_method: OISCouponCalcMethod=OISCouponCalcMethod.DAILY_COMPOUNDED):
 
         fixings = np.full(period_start.shape, np.nan)
 
         # Get forward fixings
         mask_future = period_start >= self.zero_curve.curve_date
         if mask_future.any():
-            forward_fixings = self.zero_curve.forward_rate(
+            forward_fixings = self.zero_curve.get_forward_rates(
                 period_start=period_start[mask_future],
                 period_end=period_end[mask_future],
                 forward_rate_type=cpn_calc_method)
@@ -108,7 +114,7 @@ class OISCurve:
             period_start=crossover_period_start,
             period_end=curve_datetime_index,
             cpn_calc_method=cpn_calc_method)
-        future_component = self.zero_curve.forward_rate(
+        future_component = self.zero_curve.get_forward_rates(
             period_start=curve_datetime_index,
             period_end=crossover_period_end,
             forward_rate_type=cpn_calc_method)

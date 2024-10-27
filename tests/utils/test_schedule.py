@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
 import os
-if __name__ == "__main__":
-    os.chdir(os.environ.get('PROJECT_DIR_FRM')) 
+os.chdir(os.environ.get('PROJECT_DIR_FRM'))
   
-from frm.utils.schedule import get_schedule, generate_date_schedule, PeriodFrequency, StubType, RollConvention, DayRoll, PaymentType
+from frm.utils.schedule import get_schedule, generate_date_schedule, PeriodFrequency, StubType, RollConvention, DayRoll, TimingConvention
 import pandas as pd
 import pytest    
 
@@ -13,7 +12,9 @@ def test_schedule():
 
     df = pd.read_excel(io=fp, sheet_name='test_cases')
     df_test_description = df[['test_#','test_bucket','description']]
-    function_parameters = ['start_date', 'end_date', 'frequency', 'roll_convention', 'day_roll', 'first_cpn_end_date', 'last_cpn_start_date', 'first_stub_type', 'last_stub_type', 'roll_user_specified_dates']
+    function_parameters = ['start_date', 'end_date', 'frequency', 'roll_convention', 'day_roll',
+                           'first_cpn_end_date', 'last_cpn_start_date', 'first_stub_type', 'last_stub_type',
+                           'roll_user_specified_dates', 'add_payment_dates', 'payment_timing', 'payment_delay']
 
     df_input = df[['test_#'] + function_parameters]
     df_input = df_input[~df_input.drop(columns=['test_#']).isna().all(axis=1)]
@@ -49,8 +50,8 @@ def test_schedule():
             function_parameters['last_stub_type'] = StubType.from_value(function_parameters['last_stub_type'])
         if 'day_roll' in function_parameters.keys():
             function_parameters['day_roll'] = DayRoll.from_value(function_parameters['day_roll'])
-        if 'payment_type' in function_parameters.keys():
-            function_parameters['payment_type'] = PaymentType.from_value(function_parameters['payment_type'])
+        if 'payment_timing' in function_parameters.keys():
+            function_parameters['payment_timing'] = TimingConvention.from_value(function_parameters['payment_timing'])
 
         df_schedule = get_schedule(**function_parameters)
 

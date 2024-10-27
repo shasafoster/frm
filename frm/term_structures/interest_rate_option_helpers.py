@@ -4,19 +4,14 @@ if __name__ == "__main__":
     os.chdir(os.environ.get('PROJECT_DIR_FRM'))
 import numpy as np
 import pandas as pd
-import scipy
 import re
-from frm.pricing_engine.sabr import fit_sabr_params_to_sln_smile
-from frm.pricing_engine.black import black76, bachelier, normal_vol_to_black76_sln, black76_sln_to_normal_vol, black76_ln_to_normal_vol_analytical
-from frm.pricing_engine.sabr import solve_alpha_from_sln_vol, calc_sln_vol_for_strike
 
-from frm.utils.business_day_calendar import get_busdaycal
 from frm.utils.daycount import year_fraction
 from frm.enums.utils import DayCountBasis, PeriodFrequency
 from frm.enums.term_structures import TermRate
 from frm.utils.tenor import clean_tenor, tenor_to_date_offset
 from frm.utils.utilities import convert_column_to_consistent_data_type
-from frm.utils.schedule import get_schedule, get_payment_dates
+from frm.utils.schedule import get_schedule
 from frm.term_structures.zero_curve import ZeroCurve
 
 from typing import Optional
@@ -68,37 +63,13 @@ def process_capfloor_quotes(
     column_order = first_columns + [col for col in vol_ln_df.columns if col not in first_columns]
     vol_ln_df = vol_ln_df[column_order]
 
-    # Two methods of specifying quotes
+    # Two methods of specifying quotes, same functions can be used for Caps/Floors and Swaptions
     # 1. Quotes relative to the atm forward rate (e.g. ATM, ATM+/-50bps, ATM+/-100bps...)
     # 2. Absolute quotes (e.g. 2.5%, 3.0%, 3.5%...)
 
-    # Code block for method 1
-    quote_str_map = dict()
-    for col_name in vol_ln_df.columns:
-
-        # Convert column name to common data format
-        bps_quote = r'[+-]?\s?\d+\s?(bps|bp)'
-        percentage_quote = r'[+-]?\s?\d+(\.\d+)?\s?%'
-        atm_quote = '(a|at)[ -]?(t|the)[ -]?(m|money)[ -]?(f|forward)?'
-
-        if re.search(bps_quote, col_name):
-            v = round(float(col_name.replace('bps', '').replace('bp', '').replace(' ', '')) / 10000,8)
-            new_col_name = (str(int(v * 10000)) if (round(v * 10000,8)).is_integer() else str(round(v * 10000, 8))) + 'bps'
-            vol_ln_df = vol_ln_df.rename(columns={col_name: new_col_name})
-            quote_str_map[new_col_name] = v
-
-        elif re.search(percentage_quote, col_name):
-            v = round(float(col_name.replace('%', '').replace(' ', '')) / 100,8)
-            new_col_name = (str(int(v * 100)) if (round(v * 100,8)).is_integer() else str(round(v * 100, 8))) + 'bps'
-            vol_ln_df = vol_ln_df.rename(columns={col_name: new_col_name})
-            quote_str_map[new_col_name] = v
-        elif re.search(atm_quote, col_name):
-            new_col_name = 'atm'
-            vol_ln_df = vol_ln_df.rename(columns={col_name: new_col_name})
-            quote_str_map[new_col_name] = 0
-
+    col_name_update_dict, quote_str_map = standardise_relative_quote_col_names(col_names=list(vol_ln_df.columns))
+    vol_ln_df.rename(columns=col_name_update_dict, inplace=True)
     vol_ln_df.reset_index(drop=True, inplace=True)
-
 
     N = len(vol_ln_df) - 1
     effective_date = vol_ln_df.loc[N,'effective_date']
@@ -107,7 +78,6 @@ def process_capfloor_quotes(
                                 end_date=termination_date,
                                 frequency=PeriodFrequency.QUARTERLY,
                                 busdaycal=busdaycal)
-    optionlet_df['payment_dates'] = get_payment_dates(schedule=optionlet_df, busdaycal=busdaycal)
     optionlet_df['coupon_term'] = year_fraction(optionlet_df['period_start'], optionlet_df['period_end'], day_count_basis)
     optionlet_df['discount_factors'] = zero_curve.get_discount_factors(dates=optionlet_df['payment_dates'])
     optionlet_df['annuity_factor'] = optionlet_df['coupon_term'] * optionlet_df['discount_factors']
@@ -152,5 +122,78 @@ def process_capfloor_quotes(
 
 
 
+def settlement_date_helper(curve_date: pd.Timestamp,
+                           settlement_date: Optional[pd.Timestamp],
+                           settlement_delay: Optional[int],
+                           busdaycal: Optional[np.busdaycalendar]=np.busdaycalendar()):
+
+        if settlement_date is None and settlement_delay is None:
+            raise ValueError('Either settlement_date or settlement_delay must be provided.')
+
+        elif settlement_date is None and settlement_delay is not None:
+            settlement_date = np.busday_offset(curve_date.to_numpy().astype('datetime64[D]'),
+                                                    offsets=settlement_delay,
+                                                    roll='following',
+                                                    busdaycal=busdaycal)
+        elif settlement_date is not None and settlement_delay is None:
+            assert settlement_date >= curve_date, f"settlement_date {settlement_date} must be on or after curve_date {curve_date}."
+
+        return settlement_date
 
 
+def standardise_atmf_quote_col_names(col_names: list[str]):
+    col_name_update = dict()
+    atm_quote = '(a|at)[ -]?(t|the)[ -]?(m|money)[ -]?(f|forward)?'
+
+    for col_name in col_names:
+        if re.search(atm_quote, col_name, re.IGNORECASE):
+            new_col_name = 'atmf'
+            col_name_update[col_name] = new_col_name
+
+    assert len(col_name_update) == 1, f"Expected 1 ATMF quote, found {len(col_name_update)}."
+
+    return col_name_update
+
+
+def standardise_relative_quote_col_names(col_names: list[str]):
+    col_name_update = dict()
+    col_name_adj_to_forward = dict()
+    bps_quote = r'[+-]?\s?\d+\s?(bps|bp)'
+    percentage_quote = r'[+-]?\s?\d+(\.\d+)?\s?%'
+
+    for col_name in col_names:
+        if re.search(bps_quote, col_name, re.IGNORECASE):
+            v = round(float(col_name.replace('bps', '').replace('bp', '').replace(' ', '')) / 10000,8)
+            new_col_name = (str(int(v * 10000)) if (round(v * 10000,8)).is_integer() else str(round(v * 10000, 8))) + 'bps'
+            col_name_update[col_name] = new_col_name
+            col_name_adj_to_forward[new_col_name] = v
+
+        elif re.search(percentage_quote, col_name, re.IGNORECASE):
+            v = round(float(col_name.replace('%', '').replace(' ', '')) / 100,8)
+            new_col_name = (str(int(v * 100)) if (round(v * 100,8)).is_integer() else str(round(v * 100, 8))) + 'bps'
+            col_name_update[col_name] = new_col_name
+            col_name_adj_to_forward[new_col_name] = v
+
+    return col_name_update, col_name_adj_to_forward
+
+
+def standardise_absolute_quote_col_names(col_names: list[str]):
+    col_name_update = dict()
+    col_name_strike = dict()
+    bps_quote = r'[+-]?\s?\d+\s?(bps|bp)'
+    percentage_quote = r'[+-]?\s?\d+(\.\d+)?\s?%'
+
+    for col_name in col_names:
+        if re.search(bps_quote, col_name, re.IGNORECASE):
+            v = round(float(col_name.replace('bps', '').replace('bp', '').replace(' ', '')) / 10000,8)
+            new_col_name = (str(int(v * 10000)) if (round(v * 10000,8)).is_integer() else str(round(v * 10000, 8))) + 'bps'
+            col_name_update[col_name] = new_col_name
+            col_name_strike[new_col_name] = v
+
+        elif re.search(percentage_quote, col_name, re.IGNORECASE):
+            v = round(float(col_name.replace('%', '').replace(' ', '')) / 100,8)
+            new_col_name = (str(int(v * 100)) if (round(v * 100,8)).is_integer() else str(round(v * 100, 8))) + 'bps'
+            col_name_update[col_name] = new_col_name
+            col_name_strike[new_col_name] = v
+
+    return col_name_update, col_name_strike

@@ -1,17 +1,16 @@
 # -*- coding: utf-8 -*-
 import os
 
-from scipy.constants import precision
-
 if __name__ == "__main__":
     os.chdir(os.environ.get('PROJECT_DIR_FRM'))
 
-from numba import njit
 import numpy as np
 import pandas as pd
 from scipy.stats import norm
 import scipy
 
+VOL_SLN_BOUNDS = [(0.1 / 100, 1000 / 100)]  # 0.1% to 1000% (0.001 to 10)
+VOL_N_BOUNDS = [(0.01 / 100, 100 / 100)]  # 0.01% to 100% (0.0001 to 1)
 
 def black76(F: [float, np.array],
             tau: [float, np.array],
@@ -82,6 +81,7 @@ def black76(F: [float, np.array],
     d1 = (np.log(F/K) + (0.5 * σB**2 * tau)) / (σB*np.sqrt(tau))
     d2 = d1 - σB*np.sqrt(tau)
     X = annuity_factor * cp * (F * norm.cdf(cp * d1) - K * norm.cdf(cp * d2))
+
     results['price'] = X
 
     # Intrinsic / time value split
@@ -139,8 +139,7 @@ def bachelier(F: [float, np.array],
     Bachelier pricing + greeks.
 
     The function has the parameters 'annuity_factor' instead of a risk-free rate.
-    This adjustment allows for more generic applications of Bacheliers to caplets/floorlets and swaptions instead of just European options delivered at expiry.
-
+    This adjustment allows for more generic applications of Bachelier to caplets/floorlets and swaptions instead of just European options delivered at expiry.
 
     Parameters
     ----------
@@ -266,10 +265,15 @@ def black76_sln_to_normal_vol(
         vol_sln: float,
         ln_shift: float
     ) -> float:
-    # If needed, faster method detailed in: Le Floc'h, Fabien, Fast and Accurate Analytic Basis Point Volatility (April 10, 2016).
-    # This solve is invariant to the call/put perspective and the risk-free rate.
-    cp = 1
 
+    # If the forward and strike are equal, we can equate the Black76 & Bachelier formulae, and solve analytically.
+    if abs(F - K) < 1e-10:
+        F = F + ln_shift # K is not used as K=F
+        return (2.0 * F * norm.cdf((vol_sln * np.sqrt(tau)) / 2.0) - F) / (np.sqrt(tau) * norm.pdf(0))
+
+    # If needed, faster method detailed in: Le Floc'h, Fabien, Fast and Accurate Analytic Basis Point Volatility (April 10, 2016).
+    # This solve is invariant to the call/put perspective and the risk-free rate / annuity factor.
+    cp = 1
     black76_px = black76(F=F, tau=tau, K=K, cp=cp, vol_sln=vol_sln, ln_shift=ln_shift)['price'][0]
     vol_n_guess = np.atleast_1d(black76_sln_to_normal_vol_analytical(F=F, tau=tau, K=K, vol_sln=vol_sln, ln_shift=ln_shift))
 
@@ -286,7 +290,7 @@ def black76_sln_to_normal_vol(
     options = {'ftol': obj_func_tol, 'gtol': 0}
     res = scipy.optimize.minimize(fun=obj_func_relative_px_error,
                                   x0=vol_n_guess,
-                                  bounds=[(0.00001, 1)],
+                                  bounds=VOL_N_BOUNDS,
                                   method='L-BFGS-B',
                                   options=options)
     # 2nd condition required as we have overridden options to terminate based on ftol
@@ -306,8 +310,8 @@ def shift_black76_vol(
         to_ln_shift: [float, np.float64]
     ):
 
-    # The solve is invariant to the risk-free rate or the call/put perspective.
-    r = 0.0; cp = 1
+    # The solve is invariant to the call/put perspective, risk-free rate/annuity factor.
+    cp = 1
 
     black76_px = black76(F=F, tau=tau, K=K, cp=cp, vol_sln=vol_sln, ln_shift=from_ln_shift)['price'][0]
 
@@ -321,10 +325,9 @@ def shift_black76_vol(
     # We set gtol to zero, so that the optimisation is terminated based on ftol.
     obj_func_tol = 1e-5 ** 2  # 0.001%^2
     options = {'ftol': obj_func_tol, 'gtol': 0}
-
     res = scipy.optimize.minimize(fun=obj_func_relative_px_error,
                                   x0=np.atleast_1d(vol_sln * (F / (F + (to_ln_shift - from_ln_shift)))),
-                                  bounds=[(0.0001, 100)],
+                                  bounds=VOL_SLN_BOUNDS,
                                   method='L-BFGS-B',
                                   options=options)
     # 2nd condition required as we have overridden options to terminate based on ftol
@@ -344,6 +347,15 @@ def shift_black76_vol(
         raise ValueError('Optimisation to shift Black76 volatility did not converge.')
 
 
+def normal_vol_atm_to_black76_sln_atm(
+        F: [float, np.float64, np.array],
+        tau: [float, np.float64, np.array],
+        vol_n_atm: [float, np.float64, np.array],
+        ln_shift: [float, np.float64, np.array]):
+    F = F + ln_shift
+    return (2.0 / np.sqrt(tau)) * norm.ppf((vol_n_atm * np.sqrt(tau) * norm.pdf(0) + F) / (2.0 * F))
+
+
 def normal_vol_to_black76_sln(
         F: [float, np.float64],
         tau: [float, np.float64],
@@ -351,10 +363,12 @@ def normal_vol_to_black76_sln(
         vol_n: [float, np.float64],
         ln_shift: [float, np.float64]
     ) -> float:
+    # If the forward and strike are equal, we use an analytical solution from equating the Black76 & Bachelier formulae
+    if abs(F - K) < 1e-10:
+        normal_vol_atm_to_black76_sln_atm(F=F, tau=tau, vol_n_atm=vol_n, ln_shift=ln_shift)
 
     # The solve is invariant to the risk-free rate or the call/put perspective.
-    r = 0.0; cp = 1
-
+    cp = 1
     bachelier_px = bachelier(F=F, tau=tau, K=K, cp=cp, vol_n=vol_n)['price'][0]
 
     def obj_func_relative_px_error(vol_sln):
@@ -369,7 +383,7 @@ def normal_vol_to_black76_sln(
     options = {'ftol': obj_func_tol, 'gtol': 0}
     res = scipy.optimize.minimize(fun=obj_func_relative_px_error,
                                   x0=np.atleast_1d(vol_n / (F + ln_shift)),
-                                  bounds=[(0.0001, 100)],
+                                  bounds=VOL_SLN_BOUNDS,
                                   method='L-BFGS-B',
                                   options=options)
     # 2nd condition required as we have overridden options to terminate based on ftol
@@ -390,41 +404,81 @@ def normal_vol_to_black76_sln(
 
 
 
-# if __name__ == "__main__":
-#
-#     F = 4.47385 / 100
-#     tau = 0.758904109589041
-#     K = 4 / 100
-#     vol_sln = 14.07 / 100
-#     vol_n = 0.008767
-#     ln_shift = 0.02
-#     cp = 1
-#     discount_factor = 0.95591
-#     term_multiplier = 24.9315068493151 / 100
-#     annuity_factor = discount_factor * term_multiplier
-#
-#     σB = vol_sln
-#
-#
-#     # # Convert to arrays. Function is vectorised.
-#     # F, tau, cp, K, σB, ln_shift, discount_factor, term_multiplier = \
-#     #     [np.atleast_1d(arg).astype(float) for arg in [F, tau, cp, K, σB, ln_shift, discount_factor, term_multiplier]]
-#     # F = F + ln_shift
-#     # K = K + ln_shift
-#     #
-#     # # Price per Black76 formula
-#     # d1 = (np.log(F/K) + (0.5 * σB**2 * tau)) / (σB*np.sqrt(tau))
-#     # d2 = d1 - σB*np.sqrt(tau)
-#     # X = 100e6 * discount_factor * term_multiplier * cp * (F * norm.cdf(cp * d1) - K * norm.cdf(cp * d2))
-#     #
-#     #delta = cp * norm.cdf(cp * d1)
-#
-#     # result = black76(F=F, tau=tau, K=K, cp=cp, vol_sln=vol_sln, ln_shift=ln_shift, discount_factor=discount_factor,
-#     #                  term_multiplier=term_multiplier, analytical_greeks=True, numerical_greeks=True)
-#     # for k,v in result.items():
-#     #     print(k,np.round(v * 100e6,0))
-#
-#     result = bachelier(F=F, tau=tau, K=K, cp=cp, vol_n=vol_n, annuity_factor=annuity_factor, analytical_greeks=True)
-#
-#     for k,v in result.items():
-#         print(k,np.round(v * 100e6,0))
+if __name__ == "__main__":
+
+    # sigma_N = 0.006637982346968922
+    # F = 0.03368593485365877 + 0.02
+    #
+    # # B.63 from Hagan 2002 rearranged as a quartic equation in σ_B, for when f=K.
+    # # σ_B^4 + 240σ_B^2 + (-5760*F/σ_N)σ_B + 5760 = 0
+    # # Aσ_B^4 + Bσ_B^3 + Cσ_B^2 + Dσ_B + K = 0
+    # A = 1
+    # B = 0  # There is no σ_B^3 term
+    # C = 240
+    # D = -1 * 5760 * F / sigma_N
+    # K = 5760
+    # coeffs = [A, B, C, D, K]
+    #
+    # # Find all roots of the quartic equation
+    # roots = np.roots(coeffs)
+    #
+    # # Filter out complex roots and negative roots (since volatility must be positive and real)
+    # real_positive_roots = [root.real for root in roots if np.isreal(root) and root.real > 0]
+    #
+    # if not real_positive_roots:
+    #     raise ValueError("No positive real roots found for σ_B.")
+    #
+    # # Choose the smallest positive real root (could also choose based on other criteria)
+    # sigma_B = min(real_positive_roots)
+    # print(sigma_B)
+    #
+
+
+
+    F = 4.47385 / 100
+    tau = 0.758904109589041
+    K = F
+    vol_sln = 14.07 / 100
+    vol_n = 0.008767
+    ln_shift = 0.02
+    cp = 1
+    discount_factor = 0.95591
+    term_multiplier = 24.9315068493151 / 100
+    annuity_factor = discount_factor * term_multiplier
+
+    σB = vol_sln
+    σN = vol_n
+
+    # Convert to arrays. Function is vectorised.
+    F, tau, cp, K, σB, ln_shift, discount_factor, term_multiplier = \
+        [np.atleast_1d(arg).astype(float) for arg in [F, tau, cp, K, σB, ln_shift, discount_factor, term_multiplier]]
+    F = F + ln_shift
+    K = K + ln_shift
+
+    # Price per Black76 formula
+    d1 = (np.log(F/K) + (0.5 * σB**2 * tau)) / (σB*np.sqrt(tau))
+    d2 = d1 - σB*np.sqrt(tau)
+    Xb = 100e6 * annuity_factor * cp * (F * norm.cdf(cp * d1) - K * norm.cdf(cp * d2))
+
+
+    # Price per Bachelier formula
+    d = (F - K) / (σN * np.sqrt(tau))
+    Xn = 100e6 * annuity_factor * ( cp * (F - K) * norm.cdf(cp * d) + σN * np.sqrt(tau) * norm.pdf(d) )
+    Xn_ = 100e6 * annuity_factor * σN * np.sqrt(tau) * norm.pdf(0)
+
+    print(Xb, Xn, Xn_)
+
+
+
+
+    # #delta = cp * norm.cdf(cp * d1)
+    #
+    # # result = black76(F=F, tau=tau, K=K, cp=cp, vol_sln=vol_sln, ln_shift=ln_shift, discount_factor=discount_factor,
+    # #                  term_multiplier=term_multiplier, analytical_greeks=True, numerical_greeks=True)
+    # # for k,v in result.items():
+    # #     print(k,np.round(v * 100e6,0))
+    #
+    # result = bachelier(F=F, tau=tau, K=K, cp=cp, vol_n=vol_n, annuity_factor=annuity_factor, analytical_greeks=True)
+    #
+    # for k,v in result.items():
+    #     print(k,np.round(v * 100e6,0))

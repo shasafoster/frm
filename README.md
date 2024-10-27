@@ -25,7 +25,7 @@ pip install --upgrade frm
 ## Tests/examples in progress
 - Interest rate swaps pricing
 - Interest rate curve bootstrapping
-- Caplet/floorlet term structure bootstrapper (smiles fit to SABR)
+- Caplet/floorlet term structure bootstrapper (smiles fit to SABR) & caplet/floorlet pricing
 
 ## In development / pipeline
 - Swaption term structure bootstrapper (smiles fit to SABR)

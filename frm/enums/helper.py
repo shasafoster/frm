@@ -5,9 +5,11 @@ if __name__ == "__main__":
 
 import pandas as pd
 
-def clean_enum_value(value):
+def clean_enum_value(value, transform_fn=None):
     if isinstance(value, str):
         value = value.lower().strip().replace(' ','_')
+        if transform_fn:
+            value = transform_fn(value)
         if value.isdigit():
             value = int(value)
     elif pd.isna(value) or value is None:
@@ -20,8 +22,8 @@ def is_valid_enum_value(enum_class, value):
     return value in {enum_member.value for enum_member in enum_class}
 
 
-def get_enum_member(enum_class, value):
-    cleaned_value= clean_enum_value(value)
+def get_enum_member(enum_class, value, transform_fn=None):
+    cleaned_value= clean_enum_value(value, transform_fn)
     if cleaned_value is None:
         return enum_class.default()
     for enum_member in enum_class:

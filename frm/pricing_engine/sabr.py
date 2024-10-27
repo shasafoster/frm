@@ -4,67 +4,76 @@ if __name__ == "__main__":
     os.chdir(os.environ.get('PROJECT_DIR_FRM'))
 
 import numpy as np
+from numpy.typing import NDArray
 import scipy
 from typing import Optional
 import numbers
 
-# TODO additional tests for calc_sln_vol_for_strike_from_sabr_params
-# Checks: F&tau must have same shape, K must be scalar or same shape as F&tau
-# Want to be able to pass term structure of sabr params / optiolet and get all the vols needed to price cap/floor in one call.
-# TODO
-# alpha, beta, rho, volvol must have same shape
-# TODO
-
 
 def calc_sln_vol_for_strike_from_sabr_params(
-        tau: [float, np.array],
-        F: [float, np.array],
-        alpha: [float, np.array],
-        beta: [float, np.array],
-        rho: [float, np.array],
-        volvol: [float, np.array],
-        K: [float, np.array],
-        ln_shift: float) -> float:
+        tau: [float, NDArray[float]],
+        F: [float, NDArray[float]],
+        alpha: [float, NDArray[float]],
+        beta: [float, NDArray[float]],
+        rho: [float, NDArray[float]],
+        volvol: [float, NDArray[float]],
+        K: [float, NDArray[float]],
+        ln_shift: float) -> [float, NDArray[float]]:
     """
-    Calculate the log-normal (Black76) volatility for a given strike per the SABR model.
-    Calculation is per original Hagan 2002 paper, [1] equations 2.17 and 2.18.
+    Calculate the log-normal (Black76) volatility for a given strike price using SABR model parameters.
+
+    This implementation follows the Hagan et al. (2002) model for managing smile risk, applying formulas 2.17 and 2.18.
 
     Parameters:
     -----------
-    tau: float
-        Time to maturity in years.
-    F: float
-        Forward rate.
-    alpha: float
-        Initial volatility level.
-    beta: float
-        Elasticity of the volatility with respect to the forward rate.
-    rho: float
-        Correlation between the forward rate and the volatility.
-    volvol: float
-        Volatility of volatility.
-    K: float
-        Strike price.
-    ln_shift: float
-        Log-normal shift.
+    tau : float or array-like of float
+        Time to expiry in years. Must be either scalar or 1D array matching the dimensions of `F`, `alpha`, etc.
+    F : float or array-like of float
+        Forward rate, scalar or 1D array.
+    alpha : float or array-like of float
+        Initial volatility level, scalar or 1D array.
+    beta : float or array-like of float
+        Elasticity of the volatility with respect to the forward rate, scalar or 1D array.
+    rho : float or array-like of float
+        Correlation between the forward rate and the volatility, scalar or 1D array.
+    volvol : float or array-like of float
+        Volatility of volatility, scalar or 1D array.
+    K : float or array-like of float
+        Strike price, scalar or 1D array.
+    ln_shift : float
+        Log-normal shift to adjust both `F` and `K` to prevent zero or near-zero log values.
 
     Returns:
     --------
-    float
-        Log-normal volatility for the given strike.
+    float or ndarray
+        Log-normal volatility for the given strike price(s). Returns a scalar if all inputs are scalars, otherwise returns an ndarray.
+
+    Notes:
+    ------
+    If the `F` and `K` values are very close (at-the-money condition), an alternate formula (2.18) is applied for higher accuracy.
 
     References:
-    [1] Hagan, Patrick & Lesniewski, Andrew & Woodward, Diana. (2002). Managing Smile Risk. Wilmott Magazine. 1. 84-108.
+    -----------
+    [1] Hagan, P., Lesniewski, A., & Woodward, D. (2002). Managing Smile Risk. Wilmott Magazine, 1, 84-108.
     """
 
     tau, F, alpha, beta, rho, volvol, K, ln_shift = map(np.atleast_1d, (tau, F, alpha, beta, rho, volvol, K, ln_shift))
 
+    # Input must be 1D column vector
+    for param in (tau, F, alpha, beta, rho, volvol):
+        assert param.ndim == 1, 'Parameters must be 1D arrays or 2D column vectors with shape (n, 1).'
+
     assert tau.shape == F.shape == alpha.shape == beta.shape == rho.shape == volvol.shape, \
-        'tau, F, alpha, beta, rho, volvol must have the same shape as they define the SABR smile.'
+        'tau, F, alpha, beta, rho, volvol must have the same shape as they define the SABR smile for a given expiry.'
+
+    if K.size > 1:
+        assert tau.size == K.size or tau.size == 1, \
+            'K must be the same shape as the SABR smile parameters (tau, F, alpha, beta, rho, volvol), and/or a scalar, (1,).'
 
     if ln_shift.size == 1:
         ln_shift = ln_shift.item()
     assert isinstance(ln_shift, numbers.Real), 'ln_shift must be a valid numeric scalar.'
+
 
     F = F + ln_shift
     K = K + ln_shift
@@ -120,13 +129,13 @@ def calc_sln_vol_for_strike_from_sabr_params(
 
 
 def solve_alpha_from_sln_vol(
-    tau: [float, np.float64],
-    F: [float, np.float64],
-    beta: [float, np.float64],
-    rho: [float, np.float64],
-    volvol: [float, np.float64],
-    vol_sln_atm: [float, np.float64],
-    ln_shift: [float, np.float64] = 0.0) -> float:
+    tau: float,
+    F: float,
+    beta: float,
+    rho: float,
+    volvol: float,
+    vol_sln_atm: float,
+    ln_shift: float = 0.0) -> float:
     """
     Solve alpha analytically by rearranging (2.18) in [1] for alpha.
     The equation is a 3rd degree polynomial (in alpha).
@@ -144,7 +153,7 @@ def solve_alpha_from_sln_vol(
     volvol: float
         Volatility of volatility.
     vol_sln_atm: float
-        ATM log-normal volatility.
+        ATMF log-normal volatility.
     ln_shift: float
         Log-normal shift.
 
@@ -162,7 +171,7 @@ def solve_alpha_from_sln_vol(
     ρ = rho; del rho
     v = volvol; del volvol
 
-    # Rearrange equation 2.18 from Hagan 2002 into  form Aα^3 + Bα^2 + Cα + K = 0
+    # Rearrange equation 2.18 from Hagan 2002 into cubic form: Aα^3 + Bα^2 + Cα + K = 0
     A = (1/24) * ((1-β)**2) * tau / (F**(2-2*β))
     B = (1/4) * ρ * β * v * tau / (F**(1-β))
     C = (1 + (2-3*ρ**2) * v**2 * tau/ 24)
@@ -180,8 +189,8 @@ def solve_alpha_from_sln_vol(
 
 def fit_sabr_params_to_sln_smile(tau: float,
                                  F: float,
-                                 K: np.array,
-                                 vols_sln: np.array,
+                                 K: NDArray[float],
+                                 vols_sln: NDArray[float],
                                  ln_shift: float=None,
                                  beta: Optional[float]=None)-> tuple:
     """

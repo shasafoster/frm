@@ -48,7 +48,7 @@ from pandas import DateOffset
 
 def clean_tenor(tenor: str) -> str:
     if not isinstance(tenor, str):
-        raise TypeError("function input 'tenor' must be a string")      
+        raise TypeError(f"'tenor' {tenor} must be a string. Instead is type {type(tenor)}")
     
     tenor = unicodedata.normalize('NFKD', tenor)
     tenor = tenor.lower().replace(' ','').replace('/','').replace('\n', '').replace('\r', '')
