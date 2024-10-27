@@ -1,8 +1,5 @@
 # -*- coding: utf-8 -*-
 import os
-
-from Demos.mmapfile_demo import offset
-
 from frm.enums.term_structures import TermRate
 from frm.pricing_engine.black import black76
 from frm.utils.tenor import tenor_to_date_offset, clean_tenor
@@ -44,7 +41,8 @@ from frm.enums.utils import DayCountBasis, RollConvention
 from frm.pricing_engine.sabr import solve_alpha_from_sln_vol, calc_sln_vol_for_strike_from_sabr_params, fit_sabr_params_to_sln_smile
 from frm.term_structures.interest_rate_option_helpers import standardise_relative_quote_col_names, standardise_atmf_quote_col_names
 
-fp = './tests_private/term_structures/test_optionlet_support_20240628.xlsm'
+
+fp = 'C:/Users/shasa/Documents/frm_private/tests_private/term_structures/test_optionlet_support_20240628.xlsm'
 #idd_quote_details = pd.read_excel(io=fp, sheet_name='Quotes')
 discount_factors_3m = pd.read_excel(io=fp, sheet_name='DF_3M')
 discount_factors_6m = pd.read_excel(io=fp, sheet_name='DF_6M')
