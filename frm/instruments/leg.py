@@ -17,6 +17,66 @@ from dataclasses import dataclass, field, InitVar
 from typing import Optional
 
 
+# THe key methods for a leg are
+# (i) schedule → schedule with forward coupon cashflow amount (will be different for each leg type)
+# (ii) discount cashflows & get PV (this will be identical for all leg types)
+# (iii) solve parameter (coupon rate, spread) in order to match leg to given price/value.
+# (iv) clean mv, dirty mv, accrued interest, cashflow buckets, current, non-current, etc.
+# (v) DV01, +/- 100 bps shift to par rates
+# Leg types:
+# Fixed, Zerocoupon
+# FloatTerm, FloatRFR, InflationZC, InflationYoY
+# Each leg type will have a different method for calculating the forward coupon cashflow amount.
+
+# Swap class
+# Two legs, pay leg and rcv leg.
+#
+
+# Multi curve class
+# It is possible to use zero curves + fixings though there will be lots of fiddly bits to get right:
+# - DV01 (if swap uses multiple curves of same currency)
+# - the kinked AUD swap curve (for swaption term structure construction / IRS bootstrapping
+# - converting a swaption vol surface from 3M to 6M using basis spreads.
+# - keeping track of basis spread curves.
+# - stub coupon calculation - use part of the 1M and 3M curves.
+# Hence, in a multi-curve class we would:
+# - have helpers for G10 swap curves
+# - do global DV01 shift across AONIA, BBSW 1M/3M/6M.
+# - bootstrap
+# - +/- 100 bps shift to par rates or DV01 done on par rates
+# We want to be able to add various rates:
+
+# AONIA
+# (a) AONIA swap rates
+# (b) AONIA and BBSW 3M basis spreads
+
+# Defining the 3M and 6M curves:
+# (a) BBSW 3M swap rates for <= 3Y and BBSW 6M swap rates for > 3Y and basis spreads
+# (b) BBSW 6M swap rates and 3M/6M basis spreads
+# (c) BBSW 3M swap rates and 3M/6M basis spreads
+# (d) BBSW 6M swap rates and BBSW 3M swap rates
+
+# Defining the 1M curve.
+# BBSW 1m/3m basis spreads
+
+# Defining the FCB curve
+# AONIA/BBSW 3M basis spread curve
+# AONIA vs SOFR FCB curve, BBSW 3M vs SOFR FCB curve
+
+# The user defines buckets of quotes:
+# The quotes either (i) purely define a zero curve or (ii) define the basis between two curves.
+# It is probably best to "hard code" the process.
+
+# Method:
+# Choice (a) OIS DC Stripping? Requires to have fixed rates for OIS curve if doing a iterative bootstrap solve.
+# For each instruments defining a solve user needs to define
+# (i) if the curve is a forward curve only solve
+# (ii) or fwd and discount curve solve (i.e AONIA, or BBSW 3M under pure IBOR curve)
+# (iii) or discount curve only solve (for FCB)
+# If it is a forward curve solve, the user needs to the discount curve.
+# 
+
+
 class ExchangeNotionals(Enum):
     START = 'start'
     END = 'end'
@@ -31,11 +91,13 @@ class PayRcv(Enum):
     def multiplier(self):
         return -1 if self == PayRcv.PAY else 1
 
-class SwapLegType(Enum):
+class LegType(Enum):
     FIXED = 'fixed'
-    FLOAT = 'float'
-    OIS = 'ois'
     ZEROCOUPON = 'zerocoupon'
+    FLOAT_TERM = 'float'
+    FLOAT_RFR = 'ois'
+    INFLATION_ZEROCOUPON = 'zerocoupon_inflation'
+    INFLATION_YOY = 'zerocoupon_yoy'
 
     def __init__(self, value):
         rate_names = {
