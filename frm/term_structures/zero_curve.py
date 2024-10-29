@@ -6,7 +6,7 @@ if __name__ == "__main__":
 from frm.utils.daycount import day_count, year_fraction
 from frm.utils.tenor import clean_tenor, tenor_to_date_offset
 from frm.utils.utilities import convert_column_to_consistent_data_type
-from frm.enums.utils import DayCountBasis, CompoundingFrequency
+from frm.enums.utils import DayCountBasis, CompoundingFrequency, PeriodFrequency
 from frm.enums.term_structures import OISCouponCalcMethod, TermRate
 from frm.term_structures.zero_curve_helpers import zero_rate_from_discount_factor, discount_factor_from_zero_rate
 
@@ -245,8 +245,8 @@ class ZeroCurve:
         
         else:
             Δt = pd.Series(year_fraction(period_start, period_end, self.day_count_basis))            
-            DF_t1 = self.get_discount_factors(period_start)
-            DF_t2 = self.get_discount_factors(period_end)
+            DF_t1 = self.get_discount_factors(dates=period_start)
+            DF_t2 = self.get_discount_factors(dates=period_end)
         
             # https://en.wikipedia.org/wiki/Forward_rate
             if forward_rate_type in {TermRate.SIMPLE, OISCouponCalcMethod.DAILY_COMPOUNDED}:
@@ -260,7 +260,7 @@ class ZeroCurve:
 
             return result.values
         
-    def instantaneous_forward_rate(self, years):        
+    def get_instantaneous_forward_rate(self, years):
         if self.interpolation_method == 'cubic_spline_on_zero_rates':
             zero_rate = self.get_zero_rates(years=years, compounding_frequency=CompoundingFrequency.CONTINUOUS)
             zero_rate_1st_deriv = scipy.interpolate.splev(x=years, tck=self.cubic_spline_definition, der=1) 
@@ -309,15 +309,15 @@ class ZeroCurve:
             if self.interpolation_method == 'cubic_spline_on_zero_rates':
                 nacc = scipy.interpolate.splev(years, self.cubic_spline_definition, der=0)
                 discount_factor = np.exp(-1 * nacc * years)
-                df = pd.DataFrame({'years': years,'nacc': nacc,'discount_factor': discount_factor})
-                return df
-                
             elif self.interpolation_method == 'linear_on_log_of_discount_factors':
                 ln_df_interpolated = np.interp(x=years, xp=self.data['years'], fp= np.log(self.data['discount_factor']))
                 nacc = -1 * ln_df_interpolated / years
                 discount_factor = np.exp(ln_df_interpolated)
-                df = pd.DataFrame({'years': years,'nacc': nacc,'discount_factor': discount_factor})
-                return df
+
+            years, nacc, discount_factor = map(np.atleast_1d, (years, nacc, discount_factor))
+            return pd.DataFrame({'years': years, 'nacc': nacc, 'discount_factor': discount_factor})
+
+
         else:
             if days is not None:
                 dates = self.curve_date + dt.timedelta(days=days)
@@ -366,28 +366,26 @@ class ZeroCurve:
             return df    
 
        
-    def plot(self, forward_rate_terms=[90]):
+    def plot(self, forward_rate_term=pd.DateOffset(months=3)):
             
         # Zero rates
         min_date = self.data_daily['date'].iloc[1]
         max_date = self.data_daily['date'].iloc[-1]
         date_range = pd.date_range(min_date,max_date,freq='d')
         years_zr = year_fraction(self.curve_date, date_range, self.day_count_basis)
-        zero_rates = pd.Series(self.get_zero_rate(compounding_frequency=CompoundingFrequency.CONTINUOUS, dates=date_range)) * 100
+        zero_rates = pd.Series(self.get_zero_rates(compounding_frequency=CompoundingFrequency.CONTINUOUS, dates=date_range)) * 100
         
         fig, ax = plt.subplots()
-        
+
+        # Zero Rate
         ax.plot(years_zr, zero_rates, label='zero rate')  
   
         # Forward rates
-        for term in forward_rate_terms:
-            d1 = pd.date_range(min_date,max_date - pd.DateOffset(days=term),freq='d')
-            d2 = pd.date_range(min_date + pd.DateOffset(days=term),max_date ,freq='d')
-        
-            years_fwd = year_fraction(self.curve_date, d1, self.day_count_basis)
-            fwd_rates = pd.Series(self.forward_rate(d1, d2, TermRate.SIMPLE)) * 100
-        
-            ax.plot(years_fwd, fwd_rates, label=str(term)+' day forward rate') 
+        d1 = pd.date_range(min_date,max_date - forward_rate_term,freq='d')
+        d2 = pd.date_range(min_date + forward_rate_term,max_date ,freq='d')
+        years_fwd = year_fraction(self.curve_date, d1, self.day_count_basis)
+        fwd_rates = pd.Series(self.get_forward_rates(d1, d2, TermRate.SIMPLE)) * 100
+        ax.plot(years_fwd, fwd_rates)
         
         ax.set(xlabel='years', ylabel='interest rate (%)')
         

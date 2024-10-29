@@ -6,7 +6,7 @@ def generate_rand_nbs(nb_steps: int,
                       nb_rand_vars: int=1,
                       nb_simulations: int=None,  
                       flag_apply_antithetic_variates: bool=None,
-                      random_seed=0):
+                      random_seed: int=None):
     
     """
     Generate random numbers for Monte Carlo simulations with an option to apply antithetic variates.
@@ -37,15 +37,17 @@ def generate_rand_nbs(nb_steps: int,
       specified `nb_simulations`.
     - The generated random numbers follow a standard normal distribution (mean 0, standard deviation 1).
     """
-    
-    np.random.seed(random_seed)
-    
+
     if nb_simulations is None:
-        nb_simulations = 100 * 1000 
-        
+        nb_simulations = 100 * 1000
+
     if flag_apply_antithetic_variates is None:
         flag_apply_antithetic_variates = False
-    
+
+    if random_seed is None:
+        random_seed = 0
+    np.random.seed(random_seed)
+
     assert isinstance(nb_steps, int), type(nb_steps) 
     assert isinstance(nb_rand_vars, int), type(nb_rand_vars)
     assert isinstance(nb_simulations, int), type(nb_simulations)

@@ -74,7 +74,7 @@ from typing import Optional
 # (ii) or fwd and discount curve solve (i.e AONIA, or BBSW 3M under pure IBOR curve)
 # (iii) or discount curve only solve (for FCB)
 # If it is a forward curve solve, the user needs to the discount curve.
-# 
+#
 
 
 class ExchangeNotionals(Enum):
