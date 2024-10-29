@@ -119,8 +119,7 @@ class HullWhite1Factor():
                              for i in range(len(years_pillars) - 1)]
             years_grid = np.concatenate(interp_values)
 
-        self.theta_grid = self.get_thetas(years=years_grid)
-        self.theta_spline = scipy.interpolate.splrep(years_grid, self.theta_grid)
+        self.theta_spline = scipy.interpolate.splrep(years_grid, self.get_thetas(years=years_grid))
 
 
     def get_thetas(self, years):
@@ -216,7 +215,6 @@ class HullWhite1Factor():
         return scipy.integrate.quad(func=self.zero_curve.get_instantaneous_forward_rate, a=t, b=T)[0]
 
 
-
     def simulate(self,
                  tau: float,
                  nb_steps: int,
@@ -226,6 +224,19 @@ class HullWhite1Factor():
         """
         Simulate the Δt rate, R. Note this is not the short-rate, r.
         For a small Δt, we assume R follows the same dynamics os r, i.e. dR = (θ(t) - αR)dt + σdW.
+        From the rates R, we integrate to get the discount factors and zero rates for each simulation.
+
+        Results: dict with keys:
+            R: np.array
+                Simulated rates for each simulation and each time step.
+            years_grid: np.array
+                The time steps in years.
+            sim_dsc_factors: np.array
+                Simulated discount factors for each simulation and year grid.
+            sim_cczrs: np.array
+                Simulated continuously compounded zero rates for each simulation and year grid
+            averages_df: pd.DataFrame
+                Averages of the discount factors and zero rates across all simulations. Should align to the term structure.
 
         References:
         [1] MAFS525 – Computational Methods for Pricing Structured Products, Slide 7/41
@@ -241,34 +252,68 @@ class HullWhite1Factor():
 
         R = np.zeros((nb_steps + 1, nb_simulations))
         years_grid = np.linspace(start=0, stop=tau, num=nb_steps + 1)
-        theta_grid = self.get_thetas(years_grid)
+        thetas = self.get_thetas(years_grid)
 
+        # Simulate the Δt rate, R
         R[0, :] = self.r0
         for i in range(nb_steps):
             R[i + 1, :] = R[i, :] \
-                          + (theta_grid[i] - self.mean_rev_lvl * R[i, :]) * Δt \
+                          + (thetas[i] - self.mean_rev_lvl * R[i, :]) * Δt \
                           + self.vol * np.sqrt(Δt) * rand_nbs[i, :, :]
 
-        return R, years_grid
+        # Integration R to get simulation discount factors.
+        # Integration optimised by being is vectorised and cumulative.
+        # Cumulative by using prior period integration, so only the current step is integrated in each iteration.
+        sim_dsc_factors = np.full(R.shape, np.nan)
+        sim_dsc_factors[0, :] = 1.0
+        cumulative_integrated_R = np.full(R.shape, np.nan)
+
+        # Initial integration at step 1
+        step_nb = 1
+        cumulative_integrated_R[step_nb] = scipy.integrate.simpson(
+            y=R[(step_nb - 1):(step_nb + 1), :], x=years_grid[:(step_nb + 1)], axis=0)
+        sim_dsc_factors[step_nb, :] = np.exp(-cumulative_integrated_R[step_nb])
+
+        # Integration from step 2 to nb_steps
+        for step_nb in range(2, nb_steps + 1):
+            cumulative_integrated_R[step_nb] = cumulative_integrated_R[step_nb - 1] + scipy.integrate.simpson(
+                y=R[(step_nb - 1):(step_nb + 1), :], x=years_grid[(step_nb - 1):(step_nb + 1)], axis=0)
+            sim_dsc_factors[step_nb, :] = np.exp(-cumulative_integrated_R[step_nb])
+
+        # Transform the simulated discount factors to continuously compounded zero rates
+        sim_cczrs = -1 * np.log(sim_dsc_factors) / years_grid[:, np.newaxis]
+
+        # Averages - these should align to the discount factor / zero rates term structure
+        avg_sim_dsc_factors = np.mean(sim_dsc_factors, axis=1)
+        avg_cczrs = -1 * np.log(avg_sim_dsc_factors) / years_grid
+        averages_df = pd.DataFrame({'years': years_grid, 'discount_factor': avg_sim_dsc_factors, 'cczr': avg_cczrs})
+
+        results = {'R': R,
+                   'years_grid': years_grid,
+                   'sim_dsc_factors': sim_dsc_factors,
+                   'sim_cczrs': sim_cczrs,
+                   'averages_df': averages_df}
+
+        return results
 
 
-    def price_bond_option(self, T, S, K, cp):
+    def price_zero_coupon_bond_option(self, T, S, K, cp, t=0):
         """
-        Prices a European option on a zero-coupon bond using the Hull-White model.
+        Price (at time t) a European option on a zero-coupon bond using the Hull-White model.
 
         Parameters:
         T : float
-            expiry of the option.
+            expiry (in years) of the option.
         S : float
-            Maturity of the underlying zero-coupon bond.
+            Maturity (in years) of the underlying zero-coupon bond.
         K : float
-            Strike price of the option.
+            Strike price of the bond option.
         cp : int
             1 for call, -1 for put
 
         Returns:
         float
-            Price of the bond option.
+            Price of the zero-coupon bond option.
 
         References:
         [1] Damiano Brigo, Fabio Mercurio - Interest Rate Models Theory and Practice (2001, Springer)
@@ -278,18 +323,19 @@ class HullWhite1Factor():
         σ = self.vol
         α = self.mean_rev_lvl
 
-        P_0_T = self.get_discount_factor(0, T)  # Discount factor from 0 to T
-        P_0_S = self.get_discount_factor(0, S)  # Discount factor from 0 to S
+        assert S > T
+        P_t_T = self.get_discount_factor(t, T)  # DF(t,T)
+        P_t_S = self.get_discount_factor(t, S)  # DF(t,S)
 
         # Calculate bond price volatility between T and S
-        σP = σ * np.sqrt((1 - np.exp(-2 * α * T)) / (2 * α)) * self.calc_B(T, S)
-        h = (1/σP) * np.log(P_0_S / (K * P_0_T)) + 0.5 * σP
+        σP = σ * np.sqrt((1 - np.exp(-2 * α * (T-t))) / (2 * α)) * self.calc_B(T, S)
+        h = (1/σP) * np.log(P_t_S / (K * P_t_T)) + 0.5 * σP
 
         # Set to d1/d2 per Black76-like formula
         d1 = h
         d2 = h - σP
 
-        price = cp * (P_0_S * norm.cdf(cp*d1) - K * P_0_T * norm.cdf(cp*d2))
+        price = cp * (P_t_S * norm.cdf(cp*d1) - K * P_t_T * norm.cdf(cp*d2))
         return price
 
 

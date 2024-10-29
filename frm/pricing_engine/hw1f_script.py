@@ -6,7 +6,7 @@ if __name__ == "__main__":
 import numpy as np
 import pandas as pd
 from frm.term_structures.zero_curve import ZeroCurve
-from frm.pricing_engine.hull_white_1_factor_class import HullWhite1Factor
+from frm.pricing_engine.hw1f import HullWhite1Factor
 import matplotlib.pyplot as plt
 import scipy
 
@@ -27,7 +27,7 @@ grid_length = 50
 
 
 hw1f = HullWhite1Factor(zero_curve=zero_curve, mean_rev_lvl=mean_rev_lvl, vol=vol)
-hw1f.setup_theta(n=grid_length)
+hw1f.setup_theta(num=grid_length)
 
 
 years_grid = np.linspace(zero_curve.data['years'].min(), zero_curve.data['years'].max(),grid_length)
@@ -48,7 +48,7 @@ plt.legend()
 plt.ylabel('spot and forward rates')
 
 plt.subplot(122)
-plt.plot(years_grid, hw1f.theta_grid, marker='.',label =r'$\theta(t)$')
+plt.plot(years_grid, hw1f.get_thetas(years_grid), marker='.',label =r'$\theta(t)$')
 plt.xlabel(r'Maturity $T$')
 plt.title(r'$function$ $\theta(t)$')
 plt.grid(True)
@@ -66,23 +66,84 @@ plt.legend()
 plt.ylabel('Prices')
 plt.show()
 
+
 tau = 5
 nb_simulations = 10000
+nb_steps = tau*252
 
-R, years_grid = hw1f.simulate(tau=tau,
-                              nb_steps=tau*252,
-                              nb_simulations=nb_simulations,
-                              flag_apply_antithetic_variates=True,
-                              random_seed=1500)
+# R, years_grid = hw1f.simulate(tau=tau,
+#                               nb_steps=nb_steps,
+#                               nb_simulations=nb_simulations,
+#                               flag_apply_antithetic_variates=True,
+#                               random_seed=1500)
+#
+# terminal_discount_factor = np.full(nb_simulations, np.nan)
+#
+# # Calculate the terminal discount factor for each simulation
+# for i in range(nb_simulations):
+#     terminal_discount_factor[i] = np.exp(-(scipy.integrate.simpson(y=R[:, i], x=years_grid)))
+#
+# terminal_zero_rates = -1 * np.log(terminal_discount_factor) / tau
+#
+# print('Simulation average: ', round(100 * -1 * np.log(terminal_discount_factor.mean()) / 5.0,8))
+# print(' Analytical result: ', round(100 *hw1f.get_zero_rate(t=0,T=5),8))
 
-terminal_discount_factor = np.full(nb_simulations, np.nan)
-for i in range(nb_simulations):
-    terminal_discount_factor[i] = np.exp(-(scipy.integrate.simpson(y=R[:, i], x=years_grid)))
 
-print('Simulation average: ', -1 * np.log(terminal_discount_factor.mean()) / 5.0)
-print(' Analytical result: ', hw1f.get_zero_rate(t=0,T=5))
-
-
+results = hw1f.simulate(tau=tau,
+                        nb_steps=nb_steps,
+                        nb_simulations=nb_simulations,
+                        flag_apply_antithetic_variates=True,
+                        random_seed=1500)
 
 
+#%%
+#
+# simulation_discount_factors = np.full(R.shape, np.nan)
+#
+# for step_nb in range(1,nb_steps):
+#     print('step_nb: ', step_nb)
+#     for i in range(nb_simulations):
+#         simulation_discount_factors[step_nb, i] = np.exp(-(scipy.integrate.simpson(y=R[:step_nb, i], x=years_grid[:step_nb])))
 
+#%% Vectorised version
+
+simulation_discount_factors = np.full(R.shape, np.nan)
+simulation_discount_factors[0, :] = 1.0
+
+for step_nb in range(1, nb_steps+1):
+    print('step_nb:', step_nb)
+    integrated_R = scipy.integrate.simpson(y=R[:(step_nb+1), :], x=years_grid[:(step_nb+1)], axis=0)
+    simulation_discount_factors[step_nb, :] = np.exp(-integrated_R)
+
+avg_discount_factors = np.mean(simulation_discount_factors, axis=1)
+avg_zero_rates = -1 * np.log(avg_discount_factors) / years_grid
+
+print('Vectorised ZR[-1]:', round(100*avg_zero_rates[-1],8))
+
+df_v = pd.DataFrame({'years': years_grid, 'zero_rates': avg_zero_rates, 'discount_factors': avg_discount_factors})
+df_v.to_clipboard()
+
+#%% Cumulative, vectorised version
+
+simulation_discount_factors_CUM = np.full(R.shape, np.nan)
+simulation_discount_factors_CUM[0, :] = 1.0
+cumulative_integrated_R = np.full(R.shape, np.nan)
+
+# Initial integration value at step 1
+step_nb = 1
+cumulative_integrated_R[step_nb] = scipy.integrate.simpson(
+    y=R[(step_nb-1):(step_nb+1), :], x=years_grid[:(step_nb+1)], axis=0)
+simulation_discount_factors_CUM[step_nb, :] = np.exp(-cumulative_integrated_R[step_nb])
+
+for step_nb in range(2, nb_steps+1):
+    cumulative_integrated_R[step_nb] = cumulative_integrated_R[step_nb - 1] + scipy.integrate.simpson(
+        y=R[(step_nb-1):(step_nb+1), :],x=years_grid[(step_nb-1):(step_nb+1)],axis=0)
+    simulation_discount_factors_CUM[step_nb, :] = np.exp(-cumulative_integrated_R[step_nb])
+
+avg_simulation_discount_factors_CUM = np.mean(simulation_discount_factors_CUM, axis=1)
+avg_zero_rates_CUM = -1 * np.log(avg_simulation_discount_factors_CUM) / years_grid
+
+print('CUM ZR[-1]:', round(100*avg_zero_rates_CUM[-1],8))
+
+df_cum = pd.DataFrame({'years': years_grid, 'zero_rates': avg_zero_rates_CUM, 'discount_factors': avg_simulation_discount_factors_CUM})
+df_cum.to_clipboard()
