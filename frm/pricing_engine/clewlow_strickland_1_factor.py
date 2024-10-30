@@ -55,10 +55,8 @@ def clewlow_strickland_1_factor_simulate(forward_curve, nb_simulations, segments
 
     # this would need to be adjusted to the time between t and t+1 based on the forward curve
     dt = 1.0 / segments_per_day 
-    
-    
-    
-    nb_steps = T * segments_per_day # The Clewlow Strickland 1 Factor model requires granular discretisation in order to converge
+
+    nb_steps = int(T * segments_per_day) # The Clewlow Strickland 1 Factor model requires granular discretisation in order to converge
     tau = (np.arange(nb_steps+1) * dt)
     
     f = interp1d(forward_curve[:,0], forward_curve[:,1], kind='linear') # Interpolate the forward curve based on the steps 
@@ -80,7 +78,7 @@ def clewlow_strickland_1_factor_simulate(forward_curve, nb_simulations, segments
     term3 = np.concatenate(([np.nan], term3)) # Prefix with nan for t=0    
 
     for j in range(nb_loops):        
-        rand_nbs = generate_rand_nbs(nb_steps=nb_steps, nb_rand_vars=1, nb_simulations=nb_simulations_per_loop, flag_apply_antithetic_variates=False, random_seed=j)
+        rand_nbs = generate_rand_nbs(nb_steps=nb_steps, nb_rand_vars=1, nb_simulations=nb_simulations_per_loop, apply_antithetic_variates=False, random_seed=j)
 
         for i in range(1, ln_spot_px.shape[0]):
             term2 = a * (ln_forward_curve_interp[i-1] - ln_spot_px[i-1,:])

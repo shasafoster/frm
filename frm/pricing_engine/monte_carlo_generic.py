@@ -4,9 +4,9 @@ MAX_SIMULATIONS_PER_LOOP = 100e6
 
 def generate_rand_nbs(nb_steps: int,
                       nb_rand_vars: int=1,
-                      nb_simulations: int=None,  
-                      flag_apply_antithetic_variates: bool=None,
-                      random_seed: int=None):
+                      nb_simulations: int=100_000,
+                      apply_antithetic_variates: bool=False,
+                      random_seed: int=0):
     
     """
     Generate random numbers for Monte Carlo simulations with an option to apply antithetic variates.
@@ -38,20 +38,12 @@ def generate_rand_nbs(nb_steps: int,
     - The generated random numbers follow a standard normal distribution (mean 0, standard deviation 1).
     """
 
-    if nb_simulations is None:
-        nb_simulations = 100 * 1000
-
-    if flag_apply_antithetic_variates is None:
-        flag_apply_antithetic_variates = False
-
-    if random_seed is None:
-        random_seed = 0
     np.random.seed(random_seed)
 
     assert isinstance(nb_steps, int), type(nb_steps) 
     assert isinstance(nb_rand_vars, int), type(nb_rand_vars)
     assert isinstance(nb_simulations, int), type(nb_simulations)
-    assert isinstance(flag_apply_antithetic_variates, bool)
+    assert isinstance(apply_antithetic_variates, bool)
     assert nb_steps >= 1, nb_steps
     assert nb_rand_vars >= 1, nb_rand_vars
     assert nb_simulations >= 1, nb_simulations
@@ -59,10 +51,10 @@ def generate_rand_nbs(nb_steps: int,
     if (nb_steps * nb_simulations) > MAX_SIMULATIONS_PER_LOOP:
         raise ValueError("Too many steps & simulations for one refresh; may lead to memory leak")    
         
-    if flag_apply_antithetic_variates and nb_simulations == 1:
+    if apply_antithetic_variates and nb_simulations == 1:
         raise ValueError("Antithetic variates requiries >=2 simulations") 
         
-    if flag_apply_antithetic_variates:
+    if apply_antithetic_variates:
         nb_antithetic_variate_simulations = nb_simulations // 2
         nb_normal_simulations = nb_simulations - nb_antithetic_variate_simulations
         rand_nbs_normal = np.random.normal(0, 1, (nb_steps, nb_rand_vars, nb_normal_simulations)) # standard normal random numbers
@@ -96,6 +88,6 @@ if __name__ == "__main__":
     rand_nbs = generate_rand_nbs(nb_steps=20,
                                  nb_rand_vars=1,
                                  nb_simulations=1000,
-                                 flag_apply_antithetic_variates=True)
+                                 apply_antithetic_variates=True)
 
 

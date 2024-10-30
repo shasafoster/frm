@@ -27,24 +27,22 @@ from prettytable import PrettyTable
 class HullWhite1Factor():
     zero_curve: ZeroCurve
     mean_rev_lvl: float # Mean reversion level of the short rate
-    vol: float # Volatility of the short rate
+    vol: float # Volatility of the short rate. As mean_rev_lvl → 0, short rate vol → bachelier vol x T.
     dt: Optional[float]=1e-4 # Time step for numerical differentiation. Smaller is not always better.
     num: Optional[int]=1000 # Granularity of the theta grid between pillar points. Smaller is not always better.
 
     # Attributes set in __post_init__
     r0: str=field(init=False)
-    theta_grid: np.array=field(init=False)
     theta_spline: tuple=field(init=False) # tuple (t,c,k) used by scipy.interpolate.splev
 
     def __post_init__(self):
         assert self.zero_curve.interpolation_method == 'cubic_spline_on_zero_rates'
 
+        # Set to t=0 datapoint if available, otherwise extrapolate cubic spline to t=0.
         if self.zero_curve.data['years'].min() == 0:
             self.r0 = self.zero_curve.data['nacc'].iloc[0]
-            print(f"r0 set to: {round(100 * self.r0, 4)}% per the t=0, zero curve data point.\n")
         else:
             self.r0 = self.zero_curve.get_zero_rates(years=0, compounding_frequency=CompoundingFrequency.CONTINUOUS)[0]
-            print(f"r0 set to: {round(100 * self.r0, 4)}% by extrapolating the zero curve data, for t=0.\n")
 
     def fit_theta(self,
                   dts=(1e-3,1e-4,1e-5,1e-6),
@@ -175,7 +173,8 @@ class HullWhite1Factor():
             return theta_values * self.calc_B(t, T)
 
         integrand_1_res = scipy.integrate.quad(func=integrand_1, a=t, b=T)[0]
-        integrand_2_res = scipy.integrate.quad(func=integrand_2, a=t, b=T)[0]
+        # The 2nd integral is trickier. Increase limit to 100 (from default of 50) for better accuracy.
+        integrand_2_res = scipy.integrate.quad(func=integrand_2, a=t, b=T, limit=100)[0]
 
         return 0.5 * self.vol**2 * integrand_1_res - integrand_2_res
         
@@ -219,7 +218,7 @@ class HullWhite1Factor():
                  flag_apply_antithetic_variates: bool=True,
                  random_seed: int=None):
         """
-        Simulate the Δt rate, R. Note this is not the short-rate, r.
+        Euler simulation of the Δt rate, R. Note this is not the short-rate, r.
         For a small Δt, we assume R follows the same dynamics os r, i.e. dR = (θ(t) - αR)dt + σdW.
         From the rates R, we integrate to get the discount factors and zero rates for each simulation.
 
@@ -238,11 +237,12 @@ class HullWhite1Factor():
         References:
         [1] MAFS525 – Computational Methods for Pricing Structured Products, Slide 7/41
         """
+        # TODO, helper function to
 
         rand_nbs = generate_rand_nbs(nb_steps=nb_steps,
                                      nb_rand_vars=1,
                                      nb_simulations=nb_simulations,
-                                     flag_apply_antithetic_variates=flag_apply_antithetic_variates,
+                                     apply_antithetic_variates=flag_apply_antithetic_variates,
                                      random_seed=random_seed)
 
         Δt = tau / float(nb_steps)
@@ -300,7 +300,7 @@ class HullWhite1Factor():
 
         Parameters:
         T : float
-            expiry (in years) of the option.
+            expiry (in years) of the option, and the start of the underlying zero-coupon bond.
         S : float
             Maturity (in years) of the underlying zero-coupon bond.
         K : float
@@ -335,35 +335,20 @@ class HullWhite1Factor():
         return price
 
 
-    def get_model_analytical_price(self, t, r, capflr):
-        """ Calculates the price of a Cap or Floor at valuation time t
-        Args:
-            t: valuation time
-            r: instantaneous short rate at t
-            capflr: a dictionary with Cap or Floor info
-        """
-        dt = capflr.end_t - capflr.start_t
-        K = 1 + capflr.strike * dt
-
-        captlets_floorlets = capflr.notional * K * self.ZCBO(t, T=capflr.start_t, S=capflr.end_t,
-                                                             X=1 / K, r=r, type=capflr.capflr_type)
-
-        return np.sum(captlets_floorlets)
-
-
     def price_optionlet(self, effective_years, termination_years, K, cp):
         """
-        Prices a European optionlet (caplet/floorlet) using the HW1F model.
+        Prices a European optionlet (caplet/floorlet) with using the HW1F model.
+        Assumes fixing at the start and payment at the end of the effective period.
 
         Parameters:
         t1 : float
-            Start of the forward rate period (caplet expiry).
+            Start of the forward rate period (optionlet expiry).
         t2 : float
-            End of the forward rate period (caplet payment date).
+            End of the forward rate period (optionlet payment date).
         K : float
-            Cap rate or strike price of the caplet.
+            Strike price (cap rate / floor rate) of the optionlet.
         cp : int
-            1 for call, -1 for put
+            1 for caplet, -1 for floorlet
         annuity_factor : float, optional
             Multiplier to adjust the optionlet forward price to present value (default is 1).
 
@@ -377,15 +362,35 @@ class HullWhite1Factor():
 
         """
 
+        # Flip call/put perspective as:
+        # - Cap = Put option on a zero-coupon bond
+        # - Floor = Call option on a zero-coupon bond
+        cp_ = -1 * cp
+
         # (2.26) in [1]
         K_ = 1 / (1 + K * (termination_years - effective_years))
         px = self.price_zero_coupon_bond_option(expiry_years=effective_years,
                                                 maturity_years=termination_years,
                                                 K=K_,
-                                                cp=cp) / K_
+                                                cp=cp_) / K_
         return px
 
 
     def price_swaption(self):
-        # TODO - follow on in Damiano Brigo, Fabio Mercurio - Interest Rate Models Theory and Practice (2001, Springer)
+        """
+        References:
+        [1] Damiano Brigo, Fabio Mercurio - Interest Rate Models Theory and Practice (2001, Springer)
+            In section 3.3 'The Hull-White Extended Vasicek Model, page 77 (125&126/1007 of the pdf)
+        """
+
+        # Use Jamshidian's (1989) decomposition.
+        # Steps:
+        # 1. Solve the short rate, as at swaption expiry,
+        #    that makes the underlying swap of the swaption (per the given strike), a par swap.
+        # 2. For each fixing date of the swaption, calculate the discount factor as at the fixing date, per this short rate.
+        #    This discount factor is used to price a zero-coupon bond option (ZCBO) for the fixing period.
+        # 3. Sum the ZCBO prices to get the swaption price.
+
+        # TODO after defining the leg, swap, optionlet and cap/floor classes.
+
         pass
