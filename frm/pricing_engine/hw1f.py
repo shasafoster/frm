@@ -7,6 +7,7 @@ from scipy.stats import norm
 
 from frm.term_structures.zero_curve import ZeroCurve
 from frm.pricing_engine.monte_carlo_generic import generate_rand_nbs
+from frm.utils.daycount import DayCountBasis
 
 from dataclasses import dataclass, field, InitVar
 from typing import Optional
@@ -26,8 +27,8 @@ from prettytable import PrettyTable
 @dataclass
 class HullWhite1Factor():
     zero_curve: ZeroCurve
-    mean_rev_lvl: float
-    vol: float
+    mean_rev_lvl: float # Mean reversion level of the short rate
+    vol: float # Volatility of the short rate
     dt: Optional[float]=1e-4 # Time step for numerical differentiation. Smaller is not always better.
     num: Optional[int]=1000 # Granularity of the theta grid between pillar points. Smaller is not always better.
 
@@ -45,9 +46,6 @@ class HullWhite1Factor():
         else:
             self.r0 = self.zero_curve.get_zero_rates(years=0, compounding_frequency=CompoundingFrequency.CONTINUOUS)[0]
             print(f"r0 set to: {round(100 * self.r0, 4)}% by extrapolating the zero curve data, for t=0.\n")
-
-
-
 
     def fit_theta(self,
                   dts=(1e-3,1e-4,1e-5,1e-6),
@@ -297,7 +295,7 @@ class HullWhite1Factor():
         return results
 
 
-    def price_zero_coupon_bond_option(self, T, S, K, cp, t=0):
+    def price_zero_coupon_bond_option(self, expiry_years, maturity_years, K, cp):
         """
         Price (at time t) a European option on a zero-coupon bond using the Hull-White model.
 
@@ -320,8 +318,11 @@ class HullWhite1Factor():
             In section 3.3.2 'Bond and Option Pricing, formulae 3.40 and 3.41, page 76 (124/1007 of the pdf)
         """
 
+        t = 0
         σ = self.vol
         α = self.mean_rev_lvl
+        T = expiry_years # Per notation in [1
+        S = maturity_years # Per notation in [1]
 
         assert S > T
         P_t_T = self.get_discount_factor(t, T)  # DF(t,T)
@@ -331,22 +332,29 @@ class HullWhite1Factor():
         σP = σ * np.sqrt((1 - np.exp(-2 * α * (T-t))) / (2 * α)) * self.calc_B(T, S)
         h = (1/σP) * np.log(P_t_S / (K * P_t_T)) + 0.5 * σP
 
-        # Set to d1/d2 per Black76-like formula
-        d1 = h
-        d2 = h - σP
-
-        price = cp * (P_t_S * norm.cdf(cp*d1) - K * P_t_T * norm.cdf(cp*d2))
+        price = cp * (P_t_S * norm.cdf(cp*h) - K * P_t_T * norm.cdf(cp*(h - σP)))
         return price
 
 
-    def price_optionlet(self,
-                     t1,
-                     t2,
-                     K,
-                     cp,
-                     annuity_factor=1):
+    def get_model_analytical_price(self, t, r, capflr):
+        """ Calculates the price of a Cap or Floor at valuation time t
+        Args:
+            t: valuation time
+            r: instantaneous short rate at t
+            capflr: a dictionary with Cap or Floor info
         """
-        Prices a European optionlet using the Hull-White model.
+        dt = capflr.end_t - capflr.start_t
+        K = 1 + capflr.strike * dt
+
+        captlets_floorlets = capflr.notional * K * self.ZCBO(t, T=capflr.start_t, S=capflr.end_t,
+                                                             X=1 / K, r=r, type=capflr.capflr_type)
+
+        return np.sum(captlets_floorlets)
+
+
+    def price_optionlet(self, effective_years, termination_years, K, cp):
+        """
+        Prices a European optionlet (caplet/floorlet) using the HW1F model.
 
         Parameters:
         t1 : float
@@ -366,37 +374,17 @@ class HullWhite1Factor():
 
         References:
         [1] Damiano Brigo, Fabio Mercurio - Interest Rate Models Theory and Practice (2001, Springer)
-            In section 3.3.2 'Bond and Option Pricing, formulae 3.42 and 3.43, page 76&77 (124&125/1007 of the pdf)
+            In section 2.6 'The Fundamental Pricing Formulas, page 41 (124&125/1007 of the pdf)
 
         """
-        σ = self.vol
-        α = self.mean_rev_lvl
-        term = t2 - t1  # Day count fraction; adjust based on your convention if necessary
 
-        # Discount factors
-        P_0_t1 = self.get_discount_factor(0, t1)
-        P_0_t2 = self.get_discount_factor(0, t2)
-
-        # Calculate bond price volatility between the optionlet start and end date
-        σP = σ * np.sqrt((1 - np.exp(-2 * α * t1)) / (2 * α)) * self.calc_B(t1, t2)
-
-        # Calculate d1 and d2
-        # TODO this bit with F_i doesn't match exactly to [1]. Check.
-        F_i = self.get_forward_rate(t1, t2)
-        h = (1 / σP) * np.log(F_i / K) + 0.5 * σP
-
-        h2 = (1 / σP) * np.log(P_0_t2 * (1+K*term) / P_0_t1) + 0.5 * σP
-
-        d1 = h2
-        d2 = d1 - σP
-
-        # Caplet price using the Black-like formula
-        # Given similarity to Black76, calibration to caps could calibrate α and σ by matching σP and h.
-
-        annuity_factor = term * P_0_t2
-        caplet_price = annuity_factor * (F_i * norm.cdf(cp*d1) - K * norm.cdf(cp*d2))
-
-        return caplet_price
+        # (2.26) in [1]
+        K_ = 1 / (1 + K * (termination_years - effective_years))
+        px = self.price_zero_coupon_bond_option(expiry_years=effective_years,
+                                                maturity_years=termination_years,
+                                                K=K_,
+                                                cp=cp) / K_
+        return px
 
 
     def price_swaption(self):
