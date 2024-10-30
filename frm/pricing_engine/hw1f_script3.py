@@ -9,7 +9,7 @@ if __name__ == "__main__":
 import numpy as np
 import pandas as pd
 from frm.term_structures.zero_curve import ZeroCurve
-from frm.pricing_engine.hull_white_1_factor_class import HullWhite1Factor
+from frm.pricing_engine.hw1f import HullWhite1Factor
 from frm.enums.utils import DayCountBasis, CompoundingFrequency
 from frm.utils.business_day_calendar import get_busdaycal
 from prettytable import PrettyTable
@@ -26,9 +26,12 @@ zero_curve = ZeroCurve(curve_date=curve_date,
                        interpolation_method='cubic_spline_on_zero_rates')
 
 
-hw1f = HullWhite1Factor(zero_curve=zero_curve, mean_rev_lvl=0.001, vol=0.2)
+hw1f = HullWhite1Factor(zero_curve=zero_curve, mean_rev_lvl=0.05, vol=0.05)
 hw1f.setup_theta()
-#hw1f.calc_error_for_theta_fit(print_results=True)
+hw1f.calc_error_for_theta_fit(print_results=True)
+
+
+#%%
 
 
 t1 = 0.7589

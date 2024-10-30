@@ -1,15 +1,16 @@
-    # -*- coding: utf-8 -*-
-    import os
-    if __name__ == "__main__":
-        os.chdir(os.environ.get('PROJECT_DIR_FRM'))
+# -*- coding: utf-8 -*-
+import os
+if __name__ == "__main__":
+    os.chdir(os.environ.get('PROJECT_DIR_FRM'))
 
-    import numpy as np
-    import pandas as pd
-    from frm.term_structures.zero_curve import ZeroCurve
-    from frm.pricing_engine.hw1f import HullWhite1Factor
-    from frm.utils.daycount import year_fraction
-    from frm.enums.utils import DayCountBasis
-    import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from frm.term_structures.zero_curve import ZeroCurve
+from frm.pricing_engine.hw1f import HullWhite1Factor
+from frm.utils.daycount import year_fraction
+from frm.enums.utils import DayCountBasis
+import matplotlib.pyplot as plt
+import scipy
 
 # ESTR swap curve on 1 April 2024
 curve_date = pd.Timestamp('2024-04-01')
@@ -24,55 +25,48 @@ zero_curve = ZeroCurve(curve_date=curve_date,
                data=df[['years','discount_factor']],
                interpolation_method='cubic_spline_on_zero_rates')
 
+#%%
+
 # HW1F model parameters
 short_rate_mean_rev_lvl = 0.05 # Standard values are 1%-10% annualized
 short_rate_vol = 0.0196 # Standard values are 1%-10% annualized
-hw1f = HullWhite1Factor(zero_curve=zero_curve, mean_rev_lvl=short_rate_mean_rev_lvl, vol=short_rate_vol)
 
-# Demonstrate the fit of the model to the zero curve
+# Chosen settings
 grid_length = 50
+
+hw1f = HullWhite1Factor(zero_curve=zero_curve, mean_rev_lvl=short_rate_mean_rev_lvl, vol=short_rate_vol)
 hw1f.setup_theta(num=grid_length)
 
 years_grid = np.linspace(zero_curve.data['years'].min(), zero_curve.data['years'].max(),grid_length)
+
 hw1f_instantaneous_forward_rate  = [hw1f.get_instantaneous_forward_rate(t) for t in years_grid]
 hw1f_zero_rates = [hw1f.get_zero_rate(0,t) for t in years_grid]
 hw1f_discount_factors = [hw1f.get_discount_factor(0, t) for t in years_grid]
 
 plt.figure()
-plt.plot(years_grid, 100 * np.array(hw1f_instantaneous_forward_rate), label ='HW1F model instantaneous forward rates')
-plt.plot(years_grid, 100 * np.array(hw1f_zero_rates), label='HW1F model zero rates')
-plt.plot(zero_curve.data['years'], 100 * zero_curve.data['nacc'].values, marker='.', linestyle='None', label='Source data zero rates')
-plt.ylim(1.5,4.5)
-
-plt.xlabel(r'Years')
-plt.title(r'Plot of fit of HW1F interest rate term structure to source data')
+plt.plot(years_grid, hw1f_instantaneous_forward_rate, label ='HW1F model instantaneous forward rates')
+plt.plot(years_grid, hw1f_zero_rates, label='HW1F model zero rates')
+plt.plot(zero_curve.data['years'], zero_curve.data['nacc'], marker='.', linestyle='None', label='Source data zero rates')
+plt.xlabel(r'Maturity $T$ ')
+plt.title(r'Plot of interest rate term structure')
 plt.grid(True)
 plt.legend()
-plt.ylabel('Rate (%)')
+plt.ylabel('Rates (%')
 plt.show()
 
-# Demonstrate the HW1F simulations average zero rate matches the source data's zero rates
-nb_simulations = 5000
-nb_steps = pd.date_range(start=curve_date, end=df['date'].max()).shape[0]-1 # Daily Steps
 
-results = hw1f.simulate(tau=df['years'].max(),
+#%%
+
+tau = 5
+nb_simulations = 10000
+nb_steps = tau*252
+
+
+
+results = hw1f.simulate(tau=tau,
                         nb_steps=nb_steps,
                         nb_simulations=nb_simulations,
                         flag_apply_antithetic_variates=True,
                         random_seed=1500)
-
-plt.figure()
-sim_avg_zero_rates = 100 * results['averages_df']['cczr'].values
-years_grid = results['averages_df']['years'].values
-plt.plot(years_grid, sim_avg_zero_rates, label='Simulation average zero rates')
-plt.plot(zero_curve.data['years'], 100 * zero_curve.data['nacc'].values, marker='.', linestyle='None', label='Source data zero rates')
-plt.ylim(1.5,4.5)
-plt.xlabel(r'Years')
-plt.title(r"Plot of HW1F simulations average and source data's zero rates")
-plt.grid(True)
-plt.legend()
-plt.ylabel('Rate (%)')
-plt.show()
-
 
 

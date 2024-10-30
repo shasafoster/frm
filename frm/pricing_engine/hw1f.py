@@ -17,7 +17,6 @@ from prettytable import PrettyTable
 # Notes on calibration
 # The level of mean reversion should be set, so the implied volatility of the term structure is flatish per Figure 3 of [3]
 
-
 # [1] Damiano Brigo, Fabio Mercurio - Interest Rate Models Theory and Practice (2001, Springer)
 #     In section 3.3.2 'Bond and Option Pricing', page 75 (page 123/1007 of the pdf)
 # [2] MAFS525 – Computational Methods for Pricing Structured Products, Slide 3/41
