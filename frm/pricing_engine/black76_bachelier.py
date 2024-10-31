@@ -7,21 +7,23 @@ if __name__ == "__main__":
 import numpy as np
 import pandas as pd
 from scipy.stats import norm
-import scipy
+from scipy.optimize import root_scalar, newton, minimize
+import time
 
-VOL_SLN_BOUNDS = [(0.1 / 100, 1000 / 100)]  # 0.1% to 1000% (0.001 to 10)
-VOL_N_BOUNDS = [(0.01 / 100, 100 / 100)]  # 0.01% to 100% (0.0001 to 1)
+VOL_SLN_BOUNDS = (0.1 / 100, 1000 / 100)  # 0.1% to 1000% (0.001 to 10)
+VOL_N_BOUNDS = (0.01 / 100, 100 / 100)  # 0.01% to 100% (0.0001 to 1)
 
-def black76(F: [float, np.array],
-            tau: [float, np.array],
-            cp: [float, np.array],
-            K: [float, np.array],
-            vol_sln: [float, np.array],
-            ln_shift: [float, np.array],
-            annuity_factor: [float, np.array]=1,
-            intrinsic_time_split: bool=False,
-            analytical_greeks: bool=False,
-            numerical_greeks: bool=False):
+def black76_price(
+        F: [float, np.array],
+        tau: [float, np.array],
+        cp: [float, np.array],
+        K: [float, np.array],
+        vol_sln: [float, np.array],
+        ln_shift: [float, np.array],
+        annuity_factor: [float, np.array]=1,
+        intrinsic_time_split: bool=False,
+        analytical_greeks: bool=False,
+        numerical_greeks: bool=False):
     """
     Black76 pricing + greeks.
 
@@ -65,15 +67,17 @@ def black76(F: [float, np.array],
         - 'intrinsic_time_split' : float
             Dictionary of intrinsic and time value components; 'intrinsic', 'time'.
     """
-    results = dict()
-
-    # Set to Greek letter so code review to analytical formulae is easier
-    σB = vol_sln
-
 
     # Convert to arrays. Function is vectorised.
-    F, tau, cp, K, σB, ln_shift, annuity_factor = \
-        [np.atleast_1d(arg).astype(float) for arg in [F, tau, cp, K, σB, ln_shift, annuity_factor]]
+    F, tau, cp, K, σB, ln_shift, annuity_factor = map(np.atleast_1d, (F, tau, cp, K, vol_sln, ln_shift, annuity_factor))
+
+    # Validation checks
+    assert F.shape == tau.shape
+    shapes = set([param.shape for param in (F, tau, cp, K, σB, ln_shift, annuity_factor)])
+    assert len(shapes) in [1, 2]
+    if len(shapes) == 2:
+        assert (1,) in shapes
+
     F = F + ln_shift
     K = K + ln_shift
 
@@ -82,7 +86,7 @@ def black76(F: [float, np.array],
     d2 = d1 - σB*np.sqrt(tau)
     X = annuity_factor * cp * (F * norm.cdf(cp * d1) - K * norm.cdf(cp * d2))
 
-    results['price'] = X
+    results = {'price': X}
 
     # Intrinsic / time value split
     if intrinsic_time_split:
@@ -107,9 +111,9 @@ def black76(F: [float, np.array],
         # Delta, Δ, is the change in an option's price for a small change in the underlying assets (forward) price.
         # Δ := ∂X/∂F ≈ (X(F_plus) − X(F_minus)) / (F_plus - F_minus)
         Δ_shift = 0.01
-        results_F_plus = black76(F=F*(1+Δ_shift), tau=tau, K=K, cp=cp, vol_sln=vol_sln, ln_shift=ln_shift,
+        results_F_plus = black76_price(F=F*(1+Δ_shift), tau=tau, K=K, cp=cp, vol_sln=vol_sln, ln_shift=ln_shift,
                            annuity_factor=annuity_factor, analytical_greeks=True)
-        results_F_minus = black76(F=F*(1-Δ_shift), tau=tau, K=K, cp=cp, vol_sln=vol_sln, ln_shift=ln_shift,
+        results_F_minus = black76_price(F=F*(1-Δ_shift), tau=tau, K=K, cp=cp, vol_sln=vol_sln, ln_shift=ln_shift,
                             annuity_factor=annuity_factor, analytical_greeks=True)
         results['numerical_greeks']['delta'] = (results_F_plus['price'] - results_F_minus['price']) / (2 * F * Δ_shift)
 
@@ -117,24 +121,81 @@ def black76(F: [float, np.array],
         # ν = ∂X/∂σ ≈ (X(σ_plus) − X(σ_minus)) / (σ_plus - σ_minus).
         # We divide by 0.01 (1%) to normalise the vega to a 1% change in the volatility input, per market convention.
         σ_shift = 0.01
-        results_σ_plus = black76(F=F, tau=tau, K=K, cp=cp, vol_sln=vol_sln+σ_shift, ln_shift=ln_shift,
+        results_σ_plus = black76_price(F=F, tau=tau, K=K, cp=cp, vol_sln=vol_sln+σ_shift, ln_shift=ln_shift,
                            annuity_factor=annuity_factor, analytical_greeks=True)
-        results_σ_minus = black76(F=F, tau=tau, K=K, cp=cp, vol_sln=vol_sln-σ_shift, ln_shift=ln_shift,
+        results_σ_minus = black76_price(F=F, tau=tau, K=K, cp=cp, vol_sln=vol_sln-σ_shift, ln_shift=ln_shift,
                             annuity_factor=annuity_factor, analytical_greeks=True)
         results['numerical_greeks']['vega'] = (results_σ_plus['price'] - results_σ_minus['price']) / (2 * (σ_shift / 0.01))
 
     return results
 
 
-def bachelier(F: [float, np.array],
-              tau: [float, np.array],
-              cp: [float, np.array],
-              K: [float, np.array],
-              vol_n: [float, np.array],
-              annuity_factor: [float, np.array] = 1,
-              intrinsic_time_split: bool=False,
-              analytical_greeks: bool=False,
-              numerical_greeks: bool=False):
+def black76_solve_implied_vol(
+        F: [float, np.array],
+        tau: [float, np.array],
+        cp: [float, np.array],
+        K: [float, np.array],
+        ln_shift: [float, np.array],
+        X: float,
+        vol_sln_guess: float=0.1,
+        annuity_factor: [float, np.array]=1,
+        ) -> float:
+    """Solve the implied normal volatility with the Black76 pricing formula."""
+
+    def error_function(vol_):
+        # Return the errors (relative to the price, as we want invariance to the price) to be minimised.
+        # For gradient-based optimisation methods, return squared error to ensure differentiability.
+        relative_error = (black76_price(F=F, tau=tau, cp=cp, K=K, vol_sln=vol_, ln_shift=ln_shift, annuity_factor=annuity_factor)['price'].sum() - X) / X
+        error = relative_error**power
+        if abs(error) < obj_func_tol**power:  # Check against objective function tolerance
+            raise StopIteration(vol_)  # Use StopIteration to terminate optimization early if tolerance is met
+        return error
+
+    # Want prices to be within 0.001% - i.e. if price is 100,000, acceptable range is (99999, 100001)
+    # Hence set obj function tol to (0.001%)**2 = 1e-10 (due to the squaring of the relative error in the obj function)
+    xtol = 1e-6
+    obj_func_tol = 1e-5
+    x0 = vol_sln_guess
+    bounds = VOL_SLN_BOUNDS
+
+    # Note Brent's does not work for a SSE obj. function as f(a) and f(b) must have different signs.
+    # f(a), f(b) are the function values of the bracket.
+    try:
+        power = 1 # Use linear error for the root_scalar method
+        res = root_scalar(lambda vol_: error_function(vol_), x0=x0, bracket=bounds, xtol=xtol, method='brentq')
+        if abs(error_function(res.root)) < obj_func_tol**power:
+            return res.root
+        else:
+            raise RuntimeError
+    except StopIteration as e:
+        # Return the root if we meet the objective tolerance early
+        return e.value
+    except RuntimeError:
+        try:
+            # Fallback to L-BFGS-B if root_scalar fails
+            options = {'ftol': obj_func_tol, 'gtol': 0} # gtol set to 0, so optimisation is terminated based on ftol
+            power = 2 # Use squared error for the optimisation
+            res = minimize(fun=error_function, x0=np.atleast_1d(x0), bounds=[bounds], method='L-BFGS-B', options=options)
+            # 2nd condition required as we have overridden options to terminate based on ftol
+            if res.success or abs(res.fun) < obj_func_tol**power:
+                return res.x[0]
+            else:
+                raise ValueError('Optimisation to solve normal volatility did not converge.')
+        except StopIteration as e:
+            # Return the root if we meet the objective tolerance early
+            return e.value[0]
+
+
+def bachelier_price(
+        F: [float, np.array],
+        tau: [float, np.array],
+        cp: [float, np.array],
+        K: [float, np.array],
+        vol_n: [float, np.array],
+        annuity_factor: [float, np.array] = 1,
+        intrinsic_time_split: bool=False,
+        analytical_greeks: bool=False,
+        numerical_greeks: bool=False):
     """
     Bachelier pricing + greeks.
 
@@ -176,19 +237,22 @@ def bachelier(F: [float, np.array],
         - 'intrinsic_time_split' : float
             Dictionary of intrinsic and time value components; 'intrinsic', 'time'.
     """
-    results = dict()
-
-    # Set to Greek letter so code review to analytical formulae is easier
-    σN = vol_n
 
     # Convert to arrays. Function is vectorised.
-    F, tau, cp, K, σN, annuity_factor = [np.atleast_1d(arg).astype(float) for arg in [F, tau, cp, K, σN, annuity_factor]]
+    F, tau, cp, K, σN, annuity_factor = map(np.atleast_1d, (F, tau, cp, K, vol_n, annuity_factor))
+
+    # Validation checks
+    assert F.shape == tau.shape
+    shapes = set([param.shape for param in (F, tau, cp, K, σN, annuity_factor)])
+    assert len(shapes) in [1, 2]
+    if len(shapes) == 2:
+        assert (1,) in shapes
 
     # Price per Bachelier formula
     d = (F - K) / (σN * np.sqrt(tau))
     X = annuity_factor * ( cp * (F - K) * norm.cdf(cp * d) + σN * np.sqrt(tau) * norm.pdf(d) )
 
-    results['price'] = X
+    results = {'price': X}
 
     # Intrinsic / time value split
     if intrinsic_time_split:
@@ -210,6 +274,62 @@ def bachelier(F: [float, np.array],
         results['analytical_greeks']['theta'] = (-0.5 * norm.pdf(d) * σN / np.sqrt(tau)) * annuity_factor / (1/365.25)
 
     return results
+
+
+def bachelier_solve_implied_vol(
+        F: [float, np.array],
+        tau: [float, np.array],
+        cp: [float, np.array],
+        K: [float, np.array],
+        X: float,
+        vol_n_guess: float=0.01,
+        annuity_factor: [float, np.array]=1,
+        ) -> float:
+    """Solve the implied normal volatility with the Bachelier pricing formula."""
+
+    def error_function(vol_):
+        # Return the errors (relative to the price, as we want invariance to the price) to be minimised.
+        # For gradient-based optimisation methods, return squared error to ensure differentiability.
+        relative_error = (bachelier_price(F=F, tau=tau, cp=cp, K=K, vol_n=vol_, annuity_factor=annuity_factor)['price'].sum() - X) / X
+        error = relative_error**power
+        if abs(error) < obj_func_tol**power:  # Check against objective function tolerance
+            raise StopIteration(vol_)  # Use StopIteration to terminate optimization early if tolerance is met
+        return error
+
+    # Want prices to be within 0.001% - i.e. if price is 100,000, acceptable range is (99999, 100001)
+    # Hence set obj function tol to (0.001%)**2 = 1e-10 (due to the squaring of the relative error in the obj function)
+    xtol = 1e-6
+    obj_func_tol = 1e-5
+    x0 = vol_n_guess
+    bounds = VOL_N_BOUNDS
+
+    # Note Brent's does not work for a SSE obj. function as f(a) and f(b) must have different signs.
+    # f(a), f(b) are the function values of the bracket.
+    try:
+        power = 1 # Use linear error for the root_scalar method
+        res = root_scalar(lambda vol_: error_function(vol_), x0=x0, bracket=bounds, xtol=xtol, method='brentq')
+        if abs(error_function(res.root)) < obj_func_tol**power:
+            return res.root
+        else:
+            raise RuntimeError
+    except StopIteration as e:
+        # Return the root if we meet the objective tolerance early
+        return e.value
+    except RuntimeError:
+        try:
+            # Fallback to L-BFGS-B if root_scalar fails
+            options = {'ftol': obj_func_tol, 'gtol': 0} # gtol set to 0, so optimisation is terminated based on ftol
+            power = 2 # Use squared error for the optimisation
+            res = minimize(fun=error_function, x0=np.atleast_1d(x0), bounds=[bounds], method='L-BFGS-B', options=options)
+            # 2nd condition required as we have overridden options to terminate based on ftol
+            if res.success or abs(res.fun) < obj_func_tol**power:
+                return res.x[0]
+            else:
+                raise ValueError('Optimisation to solve normal volatility did not converge.')
+        except StopIteration as e:
+            # Return the root if we meet the objective tolerance early
+            return e.value[0]
+
 
 
 def black76_sln_to_normal_vol_analytical(
@@ -269,36 +389,15 @@ def black76_sln_to_normal_vol(
     # If the forward and strike are equal, we can equate the Black76 & Bachelier formulae, and solve analytically.
     if abs(F - K) < 1e-10:
         F = F + ln_shift # K is not used as K=F
-        return (2.0 * F * norm.cdf((vol_sln * np.sqrt(tau)) / 2.0) - F) / (np.sqrt(tau) * norm.pdf(0))
-
-    # If needed, faster method detailed in: Le Floc'h, Fabien, Fast and Accurate Analytic Basis Point Volatility (April 10, 2016).
-    # This solve is invariant to the call/put perspective and the risk-free rate / annuity factor.
-    cp = 1
-    black76_px = black76(F=F, tau=tau, K=K, cp=cp, vol_sln=vol_sln, ln_shift=ln_shift)['price'][0]
-    vol_n_guess = np.atleast_1d(black76_sln_to_normal_vol_analytical(F=F, tau=tau, K=K, vol_sln=vol_sln, ln_shift=ln_shift))
-
-    def obj_func_relative_px_error(vol_n):
-        bachelier_px = bachelier(F=F, tau=tau, cp=cp, K=K, vol_n=vol_n)['price'][0]
-        # Return the square of the relative error (to the price, as we want invariance to the price) to be minimised.
-        # Squared error ensures differentiability which is critical for gradient-based optimisation methods.
-        return ((black76_px - bachelier_px) / black76_px)**2
-
-    # Want prices to be within 0.001% - i.e. if price is 100,000, acceptable range is (99999, 100001)
-    # Hence set obj function tol 'ftol' to (0.001%)**2 = 1e-10 (due to the squaring of the relative error in the obj function)
-    # We set gtol to zero, so that the optimisation is terminated based on ftol.
-    obj_func_tol = 1e-5 ** 2  # 0.001%^2
-    options = {'ftol': obj_func_tol, 'gtol': 0}
-    res = scipy.optimize.minimize(fun=obj_func_relative_px_error,
-                                  x0=vol_n_guess,
-                                  bounds=VOL_N_BOUNDS,
-                                  method='L-BFGS-B',
-                                  options=options)
-    # 2nd condition required as we have overridden options to terminate based on ftol
-    if res.success or abs(res.fun) < obj_func_tol:
-        return res.x[0]
+        res = (2.0 * F * norm.cdf((vol_sln * np.sqrt(tau)) / 2.0) - F) / (np.sqrt(tau) * norm.pdf(0))
     else:
-        raise ValueError('Optimisation to solve normal volatility did not converge.')
-
+        # If needed, faster method detailed in: Le Floc'h, Fabien, Fast and Accurate Analytic Basis Point Volatility (April 10, 2016).
+        # This solve is invariant to the call/put perspective and the risk-free rate / annuity factor.
+        cp = 1
+        black76_px = black76_price(F=F, tau=tau, K=K, cp=cp, vol_sln=vol_sln, ln_shift=ln_shift)['price'][0]
+        vol_n_guess = np.atleast_1d(black76_sln_to_normal_vol_analytical(F=F, tau=tau, K=K, vol_sln=vol_sln, ln_shift=ln_shift))
+        res = bachelier_solve_implied_vol(F=F, tau=tau, cp=cp, K=K, X=black76_px, vol_n_guess=vol_n_guess.item())
+    return np.atleast_1d(res).item()
 
 
 def shift_black76_vol(
@@ -313,23 +412,23 @@ def shift_black76_vol(
     # The solve is invariant to the call/put perspective, risk-free rate/annuity factor.
     cp = 1
 
-    black76_px = black76(F=F, tau=tau, K=K, cp=cp, vol_sln=vol_sln, ln_shift=from_ln_shift)['price'][0]
+    black76_px = black76_price(F=F, tau=tau, K=K, cp=cp, vol_sln=vol_sln, ln_shift=from_ln_shift)['price'][0]
 
     def obj_func_relative_px_error(vol_new_ln_shift):
         # Return the square of the relative error (to the price, as we want invariance to the price) to be minimised.
         # Squared error ensures differentiability which is critical for gradient-based optimisation methods.
-        return ((black76(F=F, tau=tau, K=K, cp=cp, vol_sln=vol_new_ln_shift, ln_shift=to_ln_shift)['price'][0] - black76_px) / black76_px)**2
+        return ((black76_price(F=F, tau=tau, K=K, cp=cp, vol_sln=vol_new_ln_shift, ln_shift=to_ln_shift)['price'][0] - black76_px) / black76_px)**2
 
     # Want prices to be within 0.001% - i.e. if price is 100,000, acceptable range is (99999, 100001)
     # Hence set obj function tol 'ftol' to (0.001%)**2 = 1e-10 (due to the squaring of the relative error in the obj function)
     # We set gtol to zero, so that the optimisation is terminated based on ftol.
     obj_func_tol = 1e-5 ** 2  # 0.001%^2
     options = {'ftol': obj_func_tol, 'gtol': 0}
-    res = scipy.optimize.minimize(fun=obj_func_relative_px_error,
-                                  x0=np.atleast_1d(vol_sln * (F / (F + (to_ln_shift - from_ln_shift)))),
-                                  bounds=VOL_SLN_BOUNDS,
-                                  method='L-BFGS-B',
-                                  options=options)
+    res = minimize(fun=obj_func_relative_px_error,
+                   x0=np.atleast_1d(vol_sln * (F / (F + (to_ln_shift - from_ln_shift)))),
+                   bounds=[VOL_SLN_BOUNDS],
+                   method='L-BFGS-B',
+                   options=options)
     # 2nd condition required as we have overridden options to terminate based on ftol
     if res.success or abs(res.fun) < obj_func_tol:
         return res.x[0]
@@ -339,7 +438,7 @@ def shift_black76_vol(
         # (ii) addition of 'xtol' parameter into the optimisation (it is a parameter that is not available in 'L-BFGS-B')
         #      'xtol' allows termination of the optimisation when the solved parameter (i.e. vol_sln) only changes by a small amount (e.g. 0.001%)
         vol_new_ln_shift = res.x[0]
-        black76_px_shifted = black76(F=F, tau=tau, K=K, cp=cp, vol_sln=vol_new_ln_shift, ln_shift=to_ln_shift)['price'][0]
+        black76_px_shifted = black76_price(F=F, tau=tau, K=K, cp=cp, vol_sln=vol_new_ln_shift, ln_shift=to_ln_shift)['price'][0]
         print({'F': F, 'tau': tau, 'K': K, 'vol_n': vol_sln, 'ln_shift': from_ln_shift})
         print({'black76_px': black76_px, 'black76_px_shifted': black76_px_shifted, 'vol_new_ln_shift': vol_new_ln_shift,
                'relative_error': obj_func_relative_px_error(vol_sln)})
@@ -369,23 +468,23 @@ def normal_vol_to_black76_sln(
 
     # The solve is invariant to the risk-free rate or the call/put perspective.
     cp = 1
-    bachelier_px = bachelier(F=F, tau=tau, K=K, cp=cp, vol_n=vol_n)['price'][0]
+    bachelier_px = bachelier_price(F=F, tau=tau, K=K, cp=cp, vol_n=vol_n)['price'][0]
 
     def obj_func_relative_px_error(vol_sln):
         # Return the square of the relative error (to the price, as we want invariance to the price) to be minimised.
         # Squared error ensures differentiability which is critical for gradient-based optimisation methods.
-        return ((bachelier_px - black76(F=F, tau=tau, K=K, cp=cp, vol_sln=vol_sln, ln_shift=ln_shift)['price'][0]) / bachelier_px)**2
+        return ((bachelier_px - black76_price(F=F, tau=tau, K=K, cp=cp, vol_sln=vol_sln, ln_shift=ln_shift)['price'][0]) / bachelier_px)**2
 
     # Want prices to be within 0.001% - i.e. if price is 100,000, acceptable range is (99999, 100001)
     # Hence set obj function tol 'ftol' to (0.001%)**2 = 1e-10 (due to the squaring of the relative error in the obj function)
     # We set gtol to zero, so that the optimisation is terminated based on ftol.
     obj_func_tol = 1e-5 ** 2  # 0.001%^2
     options = {'ftol': obj_func_tol, 'gtol': 0}
-    res = scipy.optimize.minimize(fun=obj_func_relative_px_error,
-                                  x0=np.atleast_1d(vol_n / (F + ln_shift)),
-                                  bounds=VOL_SLN_BOUNDS,
-                                  method='L-BFGS-B',
-                                  options=options)
+    res = minimize(fun=obj_func_relative_px_error,
+                   x0=np.atleast_1d(vol_n / (F + ln_shift)),
+                   bounds=[VOL_SLN_BOUNDS],
+                   method='L-BFGS-B',
+                   options=options)
     # 2nd condition required as we have overridden options to terminate based on ftol
     if res.success or abs(res.fun) < obj_func_tol:
         return res.x[0]
@@ -395,7 +494,7 @@ def normal_vol_to_black76_sln(
         # (ii) addition of 'xtol' parameter into the optimisation (it is a parameter that is not available in 'L-BFGS-B')
         #      'xtol' allows termination of the optimisation when solved parameter (i.e. vol_sln) only changes by a small amount (e.g. 0.001%)
         vol_sln = res.x[0]
-        black76_px = black76(F=F, tau=tau, K=K, cp=cp, vol_sln=vol_sln, ln_shift=ln_shift)['price'][0]
+        black76_px = black76_price(F=F, tau=tau, K=K, cp=cp, vol_sln=vol_sln, ln_shift=ln_shift)['price'][0]
         print({'F': F, 'tau': tau, 'K': K, 'vol_n': vol_n, 'ln_shift': ln_shift})
         print({'bachelier_px': bachelier_px, 'black76_px': black76_px, 'vol_sln': vol_sln,
                'relative_error': obj_func_relative_px_error(vol_sln)})
@@ -404,91 +503,3 @@ def normal_vol_to_black76_sln(
 
 
 
-if __name__ == "__main__":
-
-    # sigma_N = 0.006637982346968922
-    # F = 0.03368593485365877 + 0.02
-    #
-    # # B.63 from Hagan 2002 rearranged as a quartic equation in σ_B, for when f=K.
-    # # σ_B^4 + 240σ_B^2 + (-5760*F/σ_N)σ_B + 5760 = 0
-    # # Aσ_B^4 + Bσ_B^3 + Cσ_B^2 + Dσ_B + K = 0
-    # A = 1
-    # B = 0  # There is no σ_B^3 term
-    # C = 240
-    # D = -1 * 5760 * F / sigma_N
-    # K = 5760
-    # coeffs = [A, B, C, D, K]
-    #
-    # # Find all roots of the quartic equation
-    # roots = np.roots(coeffs)
-    #
-    # # Filter out complex roots and negative roots (since volatility must be positive and real)
-    # real_positive_roots = [root.real for root in roots if np.isreal(root) and root.real > 0]
-    #
-    # if not real_positive_roots:
-    #     raise ValueError("No positive real roots found for σ_B.")
-    #
-    # # Choose the smallest positive real root (could also choose based on other criteria)
-    # sigma_B = min(real_positive_roots)
-    # print(sigma_B)
-    #
-
-    #from frm.pricing_engine.black import black76
-
-    F = 3.97565 / 100,
-    tau = 1.01944
-    vol_sln = 19.96 / 100
-    ln_shift = 0.02
-
-    black76(F=F, K=F, tau=tau, cp=1, vol_sln=vol_sln, ln_shift=ln_shift)
-
-
-    # F = 4.47385 / 100
-    # tau = 0.758904109589041
-    # K = F
-    # vol_sln = 14.07 / 100
-    # vol_n = 0.008767
-    # ln_shift = 0.02
-    # cp = 1
-    # discount_factor = 0.95591
-    # term_multiplier = 24.9315068493151 / 100
-    # annuity_factor = discount_factor * term_multiplier
-    #
-    # σB = vol_sln
-    # σN = vol_n
-    #
-    # # Convert to arrays. Function is vectorised.
-    # F, tau, cp, K, σB, ln_shift, discount_factor, term_multiplier = \
-    #     [np.atleast_1d(arg).astype(float) for arg in [F, tau, cp, K, σB, ln_shift, discount_factor, term_multiplier]]
-    # F = F + ln_shift
-    # K = K + ln_shift
-    #
-    # # Price per Black76 formula
-    # d1 = (np.log(F/K) + (0.5 * σB**2 * tau)) / (σB*np.sqrt(tau))
-    # d2 = d1 - σB*np.sqrt(tau)
-    # Xb = 100e6 * annuity_factor * cp * (F * norm.cdf(cp * d1) - K * norm.cdf(cp * d2))
-    #
-    #
-    # # Price per Bachelier formula
-    # d = (F - K) / (σN * np.sqrt(tau))
-    # Xn = 100e6 * annuity_factor * ( cp * (F - K) * norm.cdf(cp * d) + σN * np.sqrt(tau) * norm.pdf(d) )
-    # Xn_ = 100e6 * annuity_factor * σN * np.sqrt(tau) * norm.pdf(0)
-    #
-    # print(Xb, Xn, Xn_)
-
-
-
-
-
-
-    # #delta = cp * norm.cdf(cp * d1)
-    #
-    # # result = black76(F=F, tau=tau, K=K, cp=cp, vol_sln=vol_sln, ln_shift=ln_shift, discount_factor=discount_factor,
-    # #                  term_multiplier=term_multiplier, analytical_greeks=True, numerical_greeks=True)
-    # # for k,v in result.items():
-    # #     print(k,np.round(v * 100e6,0))
-    #
-    # result = bachelier(F=F, tau=tau, K=K, cp=cp, vol_n=vol_n, annuity_factor=annuity_factor, analytical_greeks=True)
-    #
-    # for k,v in result.items():
-    #     print(k,np.round(v * 100e6,0))

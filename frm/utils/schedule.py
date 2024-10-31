@@ -7,7 +7,7 @@ if __name__ == "__main__":
     
 import numpy as np
 import pandas as pd
-from typing import List, Tuple, Optional, Union
+from typing import List, Tuple, Union
 from frm.enums.utils import RollConvention, TimingConvention, StubType, PeriodFrequency, DayRoll, DayCountBasis
 from frm.utils.daycount import year_fraction, day_count
 

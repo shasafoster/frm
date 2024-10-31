@@ -52,25 +52,23 @@ def clean_tenor(tenor: str) -> str:
     
     tenor = unicodedata.normalize('NFKD', tenor)
     tenor = tenor.lower().replace(' ','').replace('/','').replace('\n', '').replace('\r', '')
-    
+
     replacements = {
-        'days': 'd', 'day': 'd',
-        'weeks': 'w', 'week': 'w',
-        'months': 'm', 'month': 'm', 'mon': 'm',
-        'years': 'y', 'year': 'y', 'yrs': 'y', 'yr': 'y',
-        'overnight': 'on', 
-        'tomorrownext': 'tn', 
-        'tomnext': 'tn',
-        'spotweek': 'sw', 
-        'spotnext': 'sn', 
-        'spot': 'sp'
-    }    
-    
-    pattern = re.compile('|'.join(map(re.escape, replacements.keys())))
-    tenor = pattern.sub(lambda match: replacements[match.group(0)], tenor)
-    
-    return tenor 
-   
+        'd': ['days', 'day'],
+        'w': ['weeks', 'week'],
+        'm': ['months', 'month', 'mon'],
+        'y': ['years', 'year', 'yrs', 'yr'],
+        'on': ['overnight'],
+        'tn': ['tomorrownext', 'tomnext'],
+        'sw': ['spotweek'],
+        'sn': ['spotnext'],
+        'sp': ['spot']
+    }
+
+    pattern = re.compile('|'.join(map(re.escape, [val for sublist in replacements.values() for val in sublist])))
+    tenor = pattern.sub(lambda match: next(k for k, v in replacements.items() if match.group(0) in v), tenor)
+
+    return tenor
 
 
 def tenor_to_date_offset(tenor: str) -> pd.DateOffset:    

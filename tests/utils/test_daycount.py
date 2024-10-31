@@ -8,8 +8,9 @@ import pandas as pd
 import numpy as np
 import math
 
-from frm.utils.daycount import day_count, year_fraction, to_datetimeindex
-from frm.enums.utils import DayCountBasis
+from frm.enums import DayCountBasis
+from frm.utils import day_count, year_fraction, to_datetimeindex
+
 
 def isclose_custom(a, b, abs_tol=1e-10):
     return math.isclose(a, b, abs_tol=abs_tol)

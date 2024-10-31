@@ -9,22 +9,19 @@ from scipy.stats import norm
 from scipy.optimize import root_scalar, newton
 
 
-def to_np_array(*args):
-    return [np.atleast_1d(arg).astype(float) for arg in args]
-
-
-def gk_price(S0: [float, np.ndarray],
-             tau: [float, np.ndarray],
-             r_d: [float, np.ndarray],
-             r_f: [float, np.ndarray],
-             cp: [int, np.ndarray],
-             K: [float, np.ndarray],
-             vol: [float, np.ndarray],
-             F: [float, np.ndarray] = None,
-             analytical_greeks: bool=False,
-             numerical_greeks: bool=False,
-             intrinsic_time_split: bool=False
-             ) -> dict:
+def garman_kohlhagen_price(
+        S0: [float, np.ndarray],
+        tau: [float, np.ndarray],
+        r_d: [float, np.ndarray],
+        r_f: [float, np.ndarray],
+        cp: [int, np.ndarray],
+        K: [float, np.ndarray],
+        vol: [float, np.ndarray],
+        F: [float, np.ndarray] = None,
+        analytical_greeks: bool=False,
+        numerical_greeks: bool=False,
+        intrinsic_time_split: bool=False
+        ) -> dict:
     """
     Garman-Kohlhagen European FX option pricing formula for:
     - option total, intrinsic, and time value (in the domestic currency per 1 unit of foreign currency notional).
@@ -73,16 +70,12 @@ def gk_price(S0: [float, np.ndarray],
     4. Numerical greeks are calculated using finite differences with small shifts (e.g., 1% for delta and vega, 1 day for theta).
     5. If tau equals 0, time value is set to zero. 
     """
-    results = dict()
 
-    # Set to Greek letter so code review to analytical formulae is easier
-    σ = vol
 
     # Convert to arrays. Function is vectorised.
-    S0, tau, r_d, r_f, cp, K, σ = [np.atleast_1d(arg).astype(float) for arg in [S0, tau, r_d, r_f, cp, K, σ]]
-    
-    # Value bounds checks
-    # No >0 check for σ, as when doing numerical solving, need to allow for -ve σ
+    S0, tau, r_d, r_f, cp, K, σ = map(lambda x: np.atleast_1d(x).astype(float), (S0, tau, r_d, r_f, cp, K, vol))
+
+    # Value bounds checks. No >0 check for σ, as when doing numerical solving, need to allow for -ve σ
     assert (S0 > 0.0).all(), S0
     assert (tau >= 0.0).all(), tau 
     assert np.all(np.isin(cp, [1, -1])), cp
@@ -92,38 +85,28 @@ def gk_price(S0: [float, np.ndarray],
     if F is not None: 
         # Use market forward rate and imply the currency basis-adjusted domestic interest rate
         F = np.atleast_1d(F).astype(float)
+        assert (F > 0.0).all()
         r_d_basis_adj = np.log(F / S0) / tau + r_f # from F = S0 * exp((r_d - r_f) * tau)
         r = r_d_basis_adj
         q = r_f
     else:
-        # By interest rate parity
-        F = S0 * np.exp((r_d - r_f) * tau)   
         r = r_d
         q = r_f
-    assert (F > 0.0).all()   
-    
+
     μ = r - q
     d1 = (np.log(S0 / K) + (μ + 0.5 * σ**2) * tau) / (σ * np.sqrt(tau))
     d2 = d1 - σ * np.sqrt(tau)   
     X = cp * (S0 * np.exp(-q * tau) * norm.cdf(cp * d1) - K * np.exp(-r * tau) * norm.cdf(cp * d2))
 
-    X[tau==0] = np.maximum(0, cp * (S0 - K))[tau==0] # If time-to-maturity is 0.0, set to intrinsic value 
-    results['price'] = X
-    
+    X[tau==0] = np.maximum(0, cp * (S0 - K))[tau==0] # If time to maturity is 0.0, set to intrinsic value
+    results = {'price': X}
+
     if intrinsic_time_split:
         intrinsic = np.full_like(X, np.nan)
         intrinsic[tau>0] = np.maximum(0, cp * (S0 * np.exp(-q * tau) - K * np.exp(-r * tau)))[tau>0]
         intrinsic[tau==0] = X[tau==0]
         results['intrinsic'] = intrinsic
         results['time'] = X - intrinsic
-
-    # Checks to alternative formulae
-    epsilon = 1e-10
-    assert (abs(d1 - (np.log(F / K) + (0.5 * σ**2) * tau) / (σ * np.sqrt(tau))) < epsilon).all()
-    assert (abs(X - cp * np.exp(-r * tau) * (F * norm.cdf(cp * d1) - K * norm.cdf(cp * d2))) < epsilon).all()
-    if intrinsic_time_split:
-        assert (abs(intrinsic[tau>0] - np.maximum(0, cp * np.exp(-r * tau) * (F - K))[tau>0]) < epsilon).all()
-
 
     if analytical_greeks:
         results['analytical_greeks'] = pd.DataFrame()
@@ -168,9 +151,9 @@ def gk_price(S0: [float, np.ndarray],
         else:
             F_upshift, F_downshift = None, None
 
-        results_S0_plus = gk_price(S0=S0*(1+Δ_shift), tau=tau, r_d=r_d, r_f=r_f , cp=cp, K=K, vol=σ, F=F_upshift,analytical_greeks=True)
+        results_S0_plus = garman_kohlhagen_price(S0=S0*(1+Δ_shift), tau=tau, r_d=r_d, r_f=r_f , cp=cp, K=K, vol=σ, F=F_upshift,analytical_greeks=True)
         X_S_plus, analytical_greeks_S0_plus = results_S0_plus['price'], results_S0_plus['analytical_greeks']
-        results_S0_minus = gk_price(S0=S0*(1-Δ_shift), tau=tau, r_d=r_d, r_f=r_f, cp=cp, K=K, vol=σ, F=F_downshift,analytical_greeks=True)
+        results_S0_minus = garman_kohlhagen_price(S0=S0*(1-Δ_shift), tau=tau, r_d=r_d, r_f=r_f, cp=cp, K=K, vol=σ, F=F_downshift,analytical_greeks=True)
         X_S_minus, analytical_greeks_S0_minus = results_S0_minus['price'], results_S0_minus['analytical_greeks']
 
         # Delta, Δ, is the change in an option's price for a small change in the underlying assets price.
@@ -184,8 +167,8 @@ def gk_price(S0: [float, np.ndarray],
         # Vega, ν, is the change in an options price for a small change in the volatility input
         # ν = ∂X/∂σ ≈ (X(σ_plus) − X(σ_minus)) / (σ_plus - σ_minus).
         # We divide by 0.01 (1%) to normalise the vega to a 1% change in the volatility input, per market convention.
-        X_σ_plus = gk_price(S0=S0, tau=tau, r_d=r_d, r_f=r_f, cp=cp, K=K, vol=σ+σ_shift, F=F)['price']
-        X_σ_minus = gk_price(S0=S0, tau=tau, r_d=r_d, r_f=r_f, cp=cp, K=K, vol=σ-σ_shift, F=F)['price']
+        X_σ_plus = garman_kohlhagen_price(S0=S0, tau=tau, r_d=r_d, r_f=r_f, cp=cp, K=K, vol=σ+σ_shift, F=F)['price']
+        X_σ_minus = garman_kohlhagen_price(S0=S0, tau=tau, r_d=r_d, r_f=r_f, cp=cp, K=K, vol=σ-σ_shift, F=F)['price']
         results['numerical_greeks']['vega'] = (X_σ_plus - X_σ_minus) / (2 * (σ_shift / 0.01))
 
         # Theta, θ, is the change in an options price for a small change in the time to expiry
@@ -195,8 +178,8 @@ def gk_price(S0: [float, np.ndarray],
         #               i.e., the time value price tomorrow minus the time value price today.
         # 2. Cost of carry: the interest rate sensitivity that causes the value of the portfolio to change as time progresses,
         #                   e.g., the cost of carry on spots and forwards is included in the theta value.
-        X_plus = gk_price(S0=S0, tau=tau+θ_shift, r_d=r_d, r_f=r_f, cp=cp, K=K, vol=σ, F=F)['price']
-        X_minus = gk_price(S0=S0, tau=tau-θ_shift, r_d=r_d, r_f=r_f, cp=cp, K=K, vol=σ, F=F)['price']
+        X_plus = garman_kohlhagen_price(S0=S0, tau=tau+θ_shift, r_d=r_d, r_f=r_f, cp=cp, K=K, vol=σ, F=F)['price']
+        X_minus = garman_kohlhagen_price(S0=S0, tau=tau-θ_shift, r_d=r_d, r_f=r_f, cp=cp, K=K, vol=σ, F=F)['price']
         results['numerical_greeks']['theta'] = (X_minus - X_plus) / 2
 
         # Gamma, Γ, is the change in an option's delta for a small change in the underlying assets price.
@@ -205,23 +188,25 @@ def gk_price(S0: [float, np.ndarray],
 
         # Rho, ρ, is the rate at which the price of an option changes relative to a change in the interest rate.
         # This formulae will yield meaningfully different results on whether the forward rate is an input (or if it is calculated from the interest rate differential)
-        X_ρ_plus = gk_price(S0=S0, tau=tau, r_d=r_d, r_f=r_f+ρ_shift, cp=cp, K=K, vol=σ+σ_shift, F=F)['price']
-        X_ρ_minus = gk_price(S0=S0, tau=tau, r_d=r_d, r_f=r_f+ρ_shift, cp=cp, K=K, vol=σ-σ_shift, F=F)['price']
+        X_ρ_plus = garman_kohlhagen_price(S0=S0, tau=tau, r_d=r_d, r_f=r_f+ρ_shift, cp=cp, K=K, vol=σ+σ_shift, F=F)['price']
+        X_ρ_minus = garman_kohlhagen_price(S0=S0, tau=tau, r_d=r_d, r_f=r_f+ρ_shift, cp=cp, K=K, vol=σ-σ_shift, F=F)['price']
         results['numerical_greeks']['rho'] = (X_ρ_plus - X_ρ_minus) / 2
 
     return results
-            
-def gk_solve_strike(S0: float,
-                    tau: float,
-                    r_d: float,
-                    r_f: float,
-                    vol: [float, np.ndarray],
-                    signed_delta: [float, np.ndarray],
-                    delta_convention: str,
-                    F: float = None,
-                    atm_delta_convention: str='forward') -> float:
+
+
+def garman_kohlhagen_solve_strike_from_delta(
+        S0: float,
+        tau: float,
+        r_d: float,
+        r_f: float,
+        vol: [float, np.ndarray],
+        signed_delta: [float, np.ndarray],
+        delta_convention: str,
+        F: float = None,
+        atm_delta_convention: str='forward') -> float:
     """
-    Solves the strike for a given Delta-volatility (Δ-σ) quate.
+    Solves the strike for a given Delta-volatility (Δ-σ) quote.
 
     Parameters
     ----------
@@ -254,15 +239,8 @@ def gk_solve_strike(S0: float,
     [1] Reiswich, Dimitri & Wystup, Uwe. (2010). A Guide to FX Options Quoting Conventions. The Journal of Derivatives. 18. 58-68. 10.3905jod.2010.18.2.058
     """
 
-    # Set to greek letter so code review to reference [1] is easier
-    σ = vol
-    Δ = signed_delta
-
     # Convert to arrays. Function is vectorised.
-    S0, tau, r_f, r_d, σ, Δ = to_np_array(S0, tau, r_f, r_d, σ, Δ)
-    if F is not None: 
-        F = np.atleast_1d(F).astype(float)
-        assert (F > 0.0).all() 
+    S0, tau, r_f, r_d, σ, Δ = map(lambda x: np.atleast_1d(x).astype(float), (S0, tau, r_f, r_d, vol, signed_delta))
 
     # Value checks
     assert (S0 > 0.0).all(), S0
@@ -275,22 +253,26 @@ def gk_solve_strike(S0: float,
                                 'regular_forward',
                                 'premium_adjusted_spot',
                                 'premium_adjusted_forward'}, delta_convention
-    assert atm_delta_convention in {'forward', 'per_delta_convention'}, atm_delta_convention
+    assert atm_delta_convention in {'forward',
+                                    'per_delta_convention'}, atm_delta_convention
 
-    result = np.zeros(shape=Δ.shape)
     if F is None:
         # If market forward rate not supplied, calculate it per interest rate parity
-        F = np.atleast_1d(S0 * np.exp((r_d - r_f) * tau))  
-    
-    mask_atm = Δ == 0.5
+        F = np.atleast_1d(S0 * np.exp((r_d - r_f) * tau))
+    else:
+        F = np.atleast_1d(F).astype(float)
+        assert (F > 0.0).all()
+
+    result = np.zeros(shape=Δ.shape)
+    mask_atm = np.abs(Δ) == 0.5
     mask_not_atm = np.logical_not(mask_atm)
 
     if delta_convention in {'regular_spot','regular_forward'}:
 
         if delta_convention == 'regular_spot':
             norm_func = norm.ppf(cp * Δ * np.exp(r_f * tau))
-        elif delta_convention == 'regular_forward':
-            norm_func = norm.ppf(cp * Δ) # Note: norm.ppf(0.5) = 0. Applicable to for atm-delta-neutral quotes.
+        else:
+             norm_func = norm.ppf(cp * Δ) # Note: norm.ppf(0.5) = 0. Applicable to for atm-delta-neutral quotes.
         result = (F * np.exp(-cp * norm_func * σ * np.sqrt(tau) + 0.5 * σ**2 * tau))
 
         if atm_delta_convention == 'per_delta_convention':
@@ -305,42 +287,40 @@ def gk_solve_strike(S0: float,
             result[mask_atm] = (F * np.exp(-1 * 0.5 * σ**2 * tau))[mask_atm]
                        
         if np.any(mask_not_atm):
-        
             for i in range(len(Δ)):
                 if Δ[i] != 0.5:
-                    # For premium adjusted quotes the solution must be solved numerically
-                    # Please refer to Reference [1] for full details
-                    match delta_convention:
-                        case 'premium_adjusted_spot':
-                            def solve_delta(K, σ, cp, F, tau, Δ):
-                                return np.exp(-r_f * tau) * (cp * K / F) * norm.cdf(cp * (np.log(F/K) - 0.5 * σ ** 2 * tau) / (σ * np.sqrt(tau))) - Δ
-                        case 'premium_adjusted_forward':
-                            def solve_delta(K, σ, cp, F, tau, Δ):
-                                return (cp * K / F) * norm.cdf(cp * (np.log(F/K) - 0.5 * σ ** 2 * tau) / (σ * np.sqrt(tau))) - Δ
-        
+                    # For premium adjusted quotes the strike must be solved numerically. Refer to [1] for full details.
+
+                    def solve_delta(K_):
+                        if delta_convention == 'premium_adjusted_spot':
+                            multiplier = np.exp(-r_f * tau)
+                        else:
+                            multiplier = 1
+                        return (multiplier * (cp[i] * K_ / F) * norm.cdf(cp[i] * (np.log(F/K_) - 0.5 * σ[i]**2 * tau) / (σ[i] * np.sqrt(tau)))) - Δ[i]
+
                     # Solve the upper bound, 'K_max' for the numerical solver
-                    # The strike of a premium adjusted Δ-σ quote is ALWAYS below the regular (non premium adjusted) Δ-σ quote
+                    # The strike of a premium adjusted Δ-σ quote is ALWAYS below the regular (non premium-adjusted) Δ-σ quote
                     # Hence, we analytically calculate the K, assuming the σ was a regular Δ quote
                     delta_convention_adj = delta_convention.replace('premium_adjusted','regular')
-                    K_max = gk_solve_strike(S0=S0,tau=tau, r_d=r_d, r_f=r_f, vol=σ[i], signed_delta=Δ[i], delta_convention=delta_convention_adj, F=F)
-                    K_max = K_max.item()
+                    K_max = garman_kohlhagen_solve_strike_from_delta(
+                        S0=S0,tau=tau, r_d=r_d, r_f=r_f, vol=σ[i], signed_delta=Δ[i], delta_convention=delta_convention_adj, F=F).item()
     
                     # Put Option
                     if Δ[i] < 0: 
-                        solution = root_scalar(solve_delta, args=(σ[i], cp[i], F, tau, Δ[i]), x0=F, bracket=[0.00001, K_max])
+                        solution = root_scalar(solve_delta, x0=F, bracket=[0.000001, K_max])
                         
                     # Call Option
                     if Δ[i] > 0: 
                         # For the premium adjusted call Δ, due to non-monotonicity, two strikes can be solved numerically for call options (but not put options).
                         # To avoid this, we solve a lower bound, 'K_min' to guarantee we get the correct solution in the numerical solver.
                         # The lower bound is the 'maximum' Δ, hence we numerically solve the maximum Δ
-                        def solve_K_min(K, σ, cp, F, tau): # TODO test and remove cp, F
-                            d1 = (np.log(S0 / K) + (r_d - r_f + 0.5 * σ**2) * tau) / (σ * np.sqrt(tau))
-                            d2 = d1 - σ * np.sqrt(tau)
-                            return σ * np.sqrt(tau) * norm.cdf(d2) - norm.pdf(d2)
+                        def solve_k_lower_bound(K): # TODO test and remove cp, F
+                            d1 = (np.log(S0 / K) + (r_d - r_f + 0.5 * σ[i]**2) * tau) / (σ[i] * np.sqrt(tau))
+                            d2 = d1 - σ[i] * np.sqrt(tau)
+                            return σ[i] * np.sqrt(tau) * norm.cdf(d2) - norm.pdf(d2)
                         
                         try: 
-                            solution = root_scalar(solve_K_min, args=(σ[i], cp[i], F, tau), x0=F ,bracket=[0.00001, K_max])
+                            solution = root_scalar(solve_k_lower_bound, x0=F ,bracket=[0.00001, K_max])
                         except ValueError('the numerical solve for K_min, for delta', Δ[i], ', resulted in an error'):
                             pass
                     
@@ -350,7 +330,7 @@ def gk_solve_strike(S0: float,
                             raise ValueError('the numerical solver for K_min, for delta', Δ[i], ', did not converge')
                         
                         try:
-                            solution = root_scalar(solve_delta, args=(σ[i], cp[i], F, tau, Δ[i]), x0=K_max, bracket=[K_min,K_max])
+                            solution = root_scalar(solve_delta, x0=K_max, bracket=[K_min,K_max])
                         except ValueError('the numerical solve for premium adjusted strike for delta', Δ[i], ', resulted in an error'):
                             print('This is likely due to an error in the input, for example typos or specifying the delta_convention as spot-delta when it is actually forward-delta')
                         
@@ -365,14 +345,15 @@ def gk_solve_strike(S0: float,
     return result
                     
 
-def gk_solve_implied_volatility(S0: float,
-                                tau: float,
-                                r_d: float,
-                                r_f: float,
-                                cp: int,
-                                K: float,
-                                X: float,
-                                vol_guess: float) -> float:
+def garman_kohlhagen_solve_implied_vol(
+        S0: float,
+        tau: float,
+        r_d: float,
+        r_f: float,
+        cp: int,
+        K: float,
+        X: float,
+        vol_guess: float) -> float:
     """
     Solve for the implied volatility using the Garman-Kohlhagen model for a European Vanilla FX option.
 
@@ -417,37 +398,18 @@ def gk_solve_implied_volatility(S0: float,
     - If Newton's method fails, Brent's method is used for fallback, searching between 0.0001 and 2.
     - If neither method succeeds, the function returns np.inf to indicate failure.
     """
+    def error_function(vol_):
+        return garman_kohlhagen_price(S0=S0,tau=tau,r_d=r_d,r_f=r_f,cp=cp,K=K,vol=vol_)['price']  - X
+
     try:
         # Try Netwon's method first (it's faster but less robust)
-        return newton(lambda vol: (gk_price(S0=S0,tau=tau,r_d=r_d,r_f=r_f,cp=cp,K=K,vol=vol)['price']  - X), x0=vol_guess, tol=1e-4, maxiter=50).item()
+        return newton(lambda vol_: error_function(vol_), x0=vol_guess, tol=1e-4, maxiter=50).item()
     except RuntimeError:
         # Fallback to Brent's method
         try:
-            return root_scalar(lambda vol: (gk_price(S0=S0,tau=tau,r_d=r_d,r_f=r_f,cp=cp,K=K,vol=vol)['price']  - X), bracket=[0.0001, 2], method='brentq').root
+            return root_scalar(lambda vol_: error_function(vol_), bracket=[0.0001, 2], method='brentq').root
         except ValueError:
-            return np.inf        
-        
-        
-if __name__ == '__main__':
-    pass
-
-    S0=0.6438
-    vol=0 #0.0953686
-    r_d=0.05408
-    r_f=0.04189
-    tau=0.33403698
-    cp=-1
-    K=0.71000
-    F = 0.646478
-    p1 = gk_price(S0=S0,tau=tau,r_d=r_d,r_f=r_f,cp=cp,K=K,vol=vol,F=F)['price']
-    print('F specified:', p1)
-    p2 = gk_price(S0=S0,tau=tau,r_d=r_d,r_f=r_f,cp=cp,K=K,vol=vol)['price']
-    print('IR parity', p2)
-
-
-    # check if instrinisc value is returned. Use IR parity. 
-    p3 = gk_price(S0=S0,tau=tau,r_d=r_d,r_f=r_f,cp=cp,K=K,vol=vol)['price']
-    print('if tau=0 intrinisc?:', p3)    
+            return np.inf
 
 
 

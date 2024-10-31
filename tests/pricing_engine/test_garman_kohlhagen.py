@@ -4,9 +4,9 @@ if __name__ == "__main__":
     os.chdir(os.environ.get('PROJECT_DIR_FRM')) 
 
 import numpy as np
-from frm.pricing_engine.garman_kohlhagen import gk_price, gk_solve_strike, gk_solve_implied_volatility
+from frm.pricing_engine.garman_kohlhagen import garman_kohlhagen_price, garman_kohlhagen_solve_strike_from_delta, garman_kohlhagen_solve_implied_vol
 
-def test_gk_price_and_solve_implied_volatility():
+def test_garman_kohlhagen_price_and_solve_implied_vol():
 
     epsilon_px = 0.0006 # 0.06% of notional
     epsilon_σ = 0.0001 # 0.0001%    
@@ -21,9 +21,9 @@ def test_gk_price_and_solve_implied_volatility():
     tau = 1.0 # Time to expiry in years
     cp = 1
     K = 0.7882
-    px = gk_price(S0=S0,tau=tau,r_d=r_d,r_f=r_f,cp=cp,K=K,vol=vol)['option_value']
+    px = garman_kohlhagen_price(S0=S0,tau=tau,r_d=r_d,r_f=r_f,cp=cp,K=K,vol=vol)['price']
     assert abs(px_test - px) < epsilon_px
-    IV = gk_solve_implied_volatility(S0=S0, tau=tau, r_f=r_f, r_d=r_d, cp=cp, K=K, X=px, vol_guess=0.1)
+    IV = garman_kohlhagen_solve_implied_vol(S0=S0, tau=tau, r_f=r_f, r_d=r_d, cp=cp, K=K, X=px, vol_guess=0.1)
     assert 100* abs(vol - IV) < epsilon_σ
     
     # 1Y AUDUSD Put, 30 June 2023, London 8am
@@ -35,9 +35,9 @@ def test_gk_price_and_solve_implied_volatility():
     tau=1.0
     cp=-1
     K=0.7882
-    px = gk_price(S0=S0,tau=tau,r_f=r_f,r_d=r_d,cp=cp,K=K,vol=vol)['option_value']
+    px = garman_kohlhagen_price(S0=S0,tau=tau,r_f=r_f,r_d=r_d,cp=cp,K=K,vol=vol)['price']
     assert abs(px_test - px) < epsilon_px
-    IV = gk_solve_implied_volatility(S0=S0, tau=tau, r_d=r_d, r_f=r_f, cp=cp, K=K, X=px, vol_guess=0.1)
+    IV = garman_kohlhagen_solve_implied_vol(S0=S0, tau=tau, r_d=r_d, r_f=r_f, cp=cp, K=K, X=px, vol_guess=0.1)
     assert 100* abs(vol - IV) < epsilon_σ 
     
     # 1Y AUDUSD Call, 30 June 2023, London 8am
@@ -49,9 +49,9 @@ def test_gk_price_and_solve_implied_volatility():
     tau = 1.0 # Time to expiry in years
     cp = 1
     K = 0.5405
-    px = gk_price(S0=S0,tau=tau,r_d=r_d,r_f=r_f,cp=cp,K=K,vol=vol)['option_value']
+    px = garman_kohlhagen_price(S0=S0,tau=tau,r_d=r_d,r_f=r_f,cp=cp,K=K,vol=vol)['price']
     assert abs(px_test - px) < epsilon_px  
-    IV = gk_solve_implied_volatility(S0=S0, tau=tau, r_d=r_d, r_f=r_f, cp=cp, K=K, X=px, vol_guess=0.1)
+    IV = garman_kohlhagen_solve_implied_vol(S0=S0, tau=tau, r_d=r_d, r_f=r_f, cp=cp, K=K, X=px, vol_guess=0.1)
     assert 100* abs(vol - IV) < epsilon_σ
           
     # 1Y AUDUSD Put, 30 June 2023, London 8am
@@ -63,9 +63,9 @@ def test_gk_price_and_solve_implied_volatility():
     tau = 1.0 # Time to expiry in years
     cp = -1
     K = 0.5405
-    px = gk_price(S0=S0,tau=tau,r_d=r_d,r_f=r_f,cp=cp,K=K,vol=vol)['option_value']
+    px = garman_kohlhagen_price(S0=S0,tau=tau,r_d=r_d,r_f=r_f,cp=cp,K=K,vol=vol)['price']
     assert abs(px_test - px) < epsilon_px     
-    IV = gk_solve_implied_volatility(S0=S0, tau=tau, r_d=r_d, r_f=r_f, cp=cp, K=K, X=px, vol_guess=0.1)
+    IV = garman_kohlhagen_solve_implied_vol(S0=S0, tau=tau, r_d=r_d, r_f=r_f, cp=cp, K=K, X=px, vol_guess=0.1)
     assert 100* abs(vol - IV) < epsilon_σ    
     
     ##### AUDUSD Tests, function results in AUD per 1 USD ######
@@ -79,10 +79,10 @@ def test_gk_price_and_solve_implied_volatility():
     tau = 1.0 # Time to expiry in years
     cp = -1
     K = 1.0 / 0.7882
-    px = gk_price(S0=S0,tau=tau,r_d=r_d,r_f=r_f,cp=cp,K=K,vol=vol)['option_value']
+    px = garman_kohlhagen_price(S0=S0,tau=tau,r_d=r_d,r_f=r_f,cp=cp,K=K,vol=vol)['price']
     px_in_AUD_per_1_AUD = px / S0 / K
     assert abs(px_test - px_in_AUD_per_1_AUD) < epsilon_px
-    IV = gk_solve_implied_volatility(S0=S0, tau=tau, r_d=r_d, r_f=r_f, cp=cp, K=K, X=px, vol_guess=0.1)
+    IV = garman_kohlhagen_solve_implied_vol(S0=S0, tau=tau, r_d=r_d, r_f=r_f, cp=cp, K=K, X=px, vol_guess=0.1)
     assert 100* abs(vol - IV) < epsilon_σ    
     
     # 1Y USDAUD Call, 30 June 2023, London 8am
@@ -94,10 +94,10 @@ def test_gk_price_and_solve_implied_volatility():
     tau = 1.0
     cp = 1
     K = 1.0 / 0.7882
-    px = gk_price(S0=S0,tau=tau,r_d=r_d,r_f=r_f,cp=cp,K=K,vol=vol)['option_value']
+    px = garman_kohlhagen_price(S0=S0,tau=tau,r_d=r_d,r_f=r_f,cp=cp,K=K,vol=vol)['price']
     px_in_AUD_per_1_AUD = px / S0 / K
     assert abs(px_test - px_in_AUD_per_1_AUD) < epsilon_px
-    IV = gk_solve_implied_volatility(S0=S0, tau=tau, r_d=r_d, r_f=r_f, cp=cp, K=K, X=px, vol_guess=0.1)
+    IV = garman_kohlhagen_solve_implied_vol(S0=S0, tau=tau, r_d=r_d, r_f=r_f, cp=cp, K=K, X=px, vol_guess=0.1)
     assert 100* abs(vol - IV) < epsilon_σ   
 
     # 1Y USDAUD Put, 30 June 2023, London 8am
@@ -109,10 +109,10 @@ def test_gk_price_and_solve_implied_volatility():
     tau = 1.0
     cp = -1
     K = 1.0 / 0.5405
-    px = gk_price(S0=S0,tau=tau,r_d=r_d,r_f=r_f,cp=cp,K=K,vol=vol)['option_value']
+    px = garman_kohlhagen_price(S0=S0,tau=tau,r_d=r_d,r_f=r_f,cp=cp,K=K,vol=vol)['price']
     px_in_AUD_per_1_AUD = px / S0 / K
     assert abs(px_test - px_in_AUD_per_1_AUD) < epsilon_px 
-    IV = gk_solve_implied_volatility(S0=S0, tau=tau,r_d=r_d, r_f=r_f, cp=cp, K=K, X=px, vol_guess=0.1)
+    IV = garman_kohlhagen_solve_implied_vol(S0=S0, tau=tau,r_d=r_d, r_f=r_f, cp=cp, K=K, X=px, vol_guess=0.1)
     assert 100* abs(vol - IV) < epsilon_σ   
 
     # 1Y USDAUD Call, 30 June 2023, London 8am
@@ -124,14 +124,14 @@ def test_gk_price_and_solve_implied_volatility():
     tau = 1.0
     cp = 1
     K = 1.0 / 0.5405
-    px = gk_price(S0=S0,tau=tau,r_d=r_d,r_f=r_f,cp=cp,K=K,vol=vol)['option_value']
+    px = garman_kohlhagen_price(S0=S0,tau=tau,r_d=r_d,r_f=r_f,cp=cp,K=K,vol=vol)['price']
     px_in_AUD_per_1_AUD = px / S0 / K
     assert abs(px_test - px_in_AUD_per_1_AUD) < epsilon_px
-    IV = gk_solve_implied_volatility(S0=S0, tau=tau, r_d=r_d, r_f=r_f, cp=cp, K=K, X=px, vol_guess=0.1)
+    IV = garman_kohlhagen_solve_implied_vol(S0=S0, tau=tau, r_d=r_d, r_f=r_f, cp=cp, K=K, X=px, vol_guess=0.1)
     assert 100* abs(vol - IV) < epsilon_σ  
 
 
-def test_gk_solve_strike():
+def test_garman_kohlhagen_solve_strike_from_delta():
     
     epsilon_px = 0.001 # 0.1 % 
 
@@ -144,9 +144,9 @@ def test_gk_solve_strike():
     tau = 1.0
     signed_delta = -0.3
     delta_convention = 'regular_spot'
-    strike = gk_solve_strike(S0=S0,tau=tau,r_d=r_d,r_f=r_f,vol=vol,signed_delta=signed_delta,delta_convention=delta_convention)
+    strike = garman_kohlhagen_solve_strike_from_delta(S0=S0,tau=tau,r_d=r_d,r_f=r_f,vol=vol,signed_delta=signed_delta,delta_convention=delta_convention)
     assert abs(strike_test - strike) / strike_test < epsilon_px
-    result = gk_price(S0=S0, tau=tau, r_d=r_d, r_f=r_f, cp=np.sign(signed_delta), K=strike, vol=vol, analytical_greeks_flag=True)
+    result = garman_kohlhagen_price(S0=S0, tau=tau, r_d=r_d, r_f=r_f, cp=np.sign(signed_delta), K=strike, vol=vol, analytical_greeks=True)
     assert abs(result['analytical_greeks']['spot_delta'].iloc[0] - signed_delta) < 1e-8
 
     # AUDUSD 1Y 30 Δ Call, 30 June 2023 London 10pm 
@@ -158,9 +158,9 @@ def test_gk_solve_strike():
     tau = 1.0
     signed_delta = 0.3
     delta_convention = 'regular_spot'
-    strike = gk_solve_strike(S0=S0,tau=tau,r_d=r_d,r_f=r_f,vol=vol,signed_delta=signed_delta,delta_convention=delta_convention)
+    strike = garman_kohlhagen_solve_strike_from_delta(S0=S0,tau=tau,r_d=r_d,r_f=r_f,vol=vol,signed_delta=signed_delta,delta_convention=delta_convention)
     assert abs(strike_test - strike) / strike_test < epsilon_px
-    result = gk_price(S0=S0, tau=tau, r_d=r_d, r_f=r_f, cp=np.sign(signed_delta), K=strike, vol=vol, analytical_greeks_flag=True)
+    result = garman_kohlhagen_price(S0=S0, tau=tau, r_d=r_d, r_f=r_f, cp=np.sign(signed_delta), K=strike, vol=vol, analytical_greeks=True)
     assert abs(result['analytical_greeks']['spot_delta'].iloc[0] - signed_delta) < 1e-8
 
     # AUDUSD 1Y 5 Δ Put, 30 June 2023 London 10pm 
@@ -172,9 +172,9 @@ def test_gk_solve_strike():
     tau = 1.0
     signed_delta = -0.05
     delta_convention = 'regular_spot'
-    strike = gk_solve_strike(S0=S0,tau=tau,r_d=r_d,r_f=r_f,vol=vol,signed_delta=signed_delta,delta_convention=delta_convention)
+    strike = garman_kohlhagen_solve_strike_from_delta(S0=S0,tau=tau,r_d=r_d,r_f=r_f,vol=vol,signed_delta=signed_delta,delta_convention=delta_convention)
     assert abs(strike_test - strike) / strike_test < epsilon_px
-    result = gk_price(S0=S0, tau=tau, r_d=r_d, r_f=r_f, cp=np.sign(signed_delta), K=strike, vol=vol, analytical_greeks_flag=True)
+    result = garman_kohlhagen_price(S0=S0, tau=tau, r_d=r_d, r_f=r_f, cp=np.sign(signed_delta), K=strike, vol=vol, analytical_greeks=True)
     assert abs(result['analytical_greeks']['spot_delta'].iloc[0] - signed_delta) < 1e-8
 
     # AUDUSD 1Y 5 Δ Call, 30 June 2023 London 10pm 
@@ -187,9 +187,9 @@ def test_gk_solve_strike():
     tau = 1.0
     signed_delta = 0.05
     delta_convention = 'regular_spot'
-    strike = gk_solve_strike(S0=S0,tau=tau,r_d=r_d,r_f=r_f,vol=vol,signed_delta=signed_delta,delta_convention=delta_convention)
+    strike = garman_kohlhagen_solve_strike_from_delta(S0=S0,tau=tau,r_d=r_d,r_f=r_f,vol=vol,signed_delta=signed_delta,delta_convention=delta_convention)
     assert abs(strike_test - strike) / strike_test < epsilon_px
-    result = gk_price(S0=S0, tau=tau, r_d=r_d, r_f=r_f, cp=np.sign(signed_delta), K=strike, vol=vol, analytical_greeks_flag=True)
+    result = garman_kohlhagen_price(S0=S0, tau=tau, r_d=r_d, r_f=r_f, cp=np.sign(signed_delta), K=strike, vol=vol, analytical_greeks=True)
     assert abs(result['analytical_greeks']['spot_delta'].iloc[0] - signed_delta) < 1e-8
 
 
@@ -203,9 +203,9 @@ def test_gk_solve_strike():
     tau = 5.0
     signed_delta = -0.3
     delta_convention = 'regular_forward'
-    strike = gk_solve_strike(S0=S0,tau=tau,r_d=r_d,r_f=r_f,vol=vol,signed_delta=signed_delta,delta_convention=delta_convention)
+    strike = garman_kohlhagen_solve_strike_from_delta(S0=S0,tau=tau,r_d=r_d,r_f=r_f,vol=vol,signed_delta=signed_delta,delta_convention=delta_convention)
     assert abs(strike_test - strike) / strike_test < epsilon_px
-    result = gk_price(S0=S0, tau=tau, r_d=r_d, r_f=r_f, cp=np.sign(signed_delta), K=strike, vol=vol, analytical_greeks_flag=True)
+    result = garman_kohlhagen_price(S0=S0, tau=tau, r_d=r_d, r_f=r_f, cp=np.sign(signed_delta), K=strike, vol=vol, analytical_greeks=True)
     assert abs(result['analytical_greeks']['forward_delta'].iloc[0] - signed_delta) < 1e-8
 
 
@@ -219,9 +219,9 @@ def test_gk_solve_strike():
     tau = 5.0
     signed_delta = 0.3
     delta_convention = 'regular_forward'
-    strike = gk_solve_strike(S0=S0,tau=tau,r_d=r_d,r_f=r_f,vol=vol,signed_delta=signed_delta,delta_convention=delta_convention)
+    strike = garman_kohlhagen_solve_strike_from_delta(S0=S0,tau=tau,r_d=r_d,r_f=r_f,vol=vol,signed_delta=signed_delta,delta_convention=delta_convention)
     assert abs(strike_test - strike) / strike_test < epsilon_px
-    result = gk_price(S0=S0, tau=tau, r_d=r_d, r_f=r_f, cp=np.sign(signed_delta), K=strike, vol=vol, analytical_greeks_flag=True)
+    result = garman_kohlhagen_price(S0=S0, tau=tau, r_d=r_d, r_f=r_f, cp=np.sign(signed_delta), K=strike, vol=vol, analytical_greeks=True)
     assert abs(result['analytical_greeks']['forward_delta'].iloc[0] - signed_delta) < 1e-8
 
     epsilon_px = 0.001
@@ -236,7 +236,7 @@ def test_gk_solve_strike():
     F = 129.7958
     signed_delta = 0.2
     delta_convention = 'premium_adjusted_forward'
-    strike = gk_solve_strike(S0=S0,tau=tau,r_d=r_d,r_f=r_f,vol=vol,signed_delta=signed_delta,delta_convention=delta_convention)
+    strike = garman_kohlhagen_solve_strike_from_delta(S0=S0,tau=tau,r_d=r_d,r_f=r_f,vol=vol,signed_delta=signed_delta,delta_convention=delta_convention)
     assert abs(strike_test - strike) / strike_test < epsilon_px
 
 
@@ -250,7 +250,7 @@ def test_gk_solve_strike():
     F = 138.031
     delta = 0.2
     delta_convention = 'premium_adjusted_spot'
-    strike = gk_solve_strike(S0=S0,tau=tau,r_d=r_d,r_f=r_f,vol=vol,signed_delta=signed_delta,delta_convention=delta_convention, F=F)
+    strike = garman_kohlhagen_solve_strike_from_delta(S0=S0,tau=tau,r_d=r_d,r_f=r_f,vol=vol,signed_delta=signed_delta,delta_convention=delta_convention, F=F)
     assert abs(strike_test - strike) / strike_test < epsilon_px
         
         
@@ -266,7 +266,7 @@ def test_gk_price_greeks():
     # cp=1
     # K=0.7882
     # F=0.667962
-    # result = gk_price(S0=S0, tau=tau, r_d=r_d,r_f=r_f, cp=cp, K=K, vol=vol, F=F, analytical_greeks_flag=True, numerical_greeks_flag=True)
+    # result = garman_kohlhagen_price(S0=S0, tau=tau, r_d=r_d,r_f=r_f, cp=cp, K=K, vol=vol, F=F, analytical_greeks_flag=True, numerical_greeks_flag=True)
     #print('X:',X)
     #print('greeks_analytical:',greeks_analytical)   
     #print('greeks_numerical:',greeks_numerical)   
@@ -274,8 +274,8 @@ def test_gk_price_greeks():
 
 
 if __name__ == '__main__':
-    #test_gk_price_and_solve_implied_volatility()
-    #test_gk_solve_strike()
+    test_garman_kohlhagen_price_and_solve_implied_vol()
+    test_garman_kohlhagen_solve_strike_from_delta()
     
 
 
@@ -290,7 +290,7 @@ if __name__ == '__main__':
     tau = 1.0
     signed_delta = -0.3
     delta_convention = 'regular_spot'
-    strike = gk_solve_strike(S0=S0,tau=tau,r_d=r_d,r_f=r_f,vol=vol,signed_delta=signed_delta,delta_convention=delta_convention)
+    strike = garman_kohlhagen_solve_strike_from_delta(S0=S0,tau=tau,r_d=r_d,r_f=r_f,vol=vol,signed_delta=signed_delta,delta_convention=delta_convention)
 
 
 
@@ -304,11 +304,11 @@ if __name__ == '__main__':
     # cp=1
     # K=0.7882
     # F=0.667962
-    # result  = gk_price(S0=S0, tau=tau, r_d=r_d, r_f=r_f, cp=cp, K=K, vol=vol, F=F, analytical_greeks_flag=True, numerical_greeks_flag=True)
+    # result  = garman_kohlhagen_price(S0=S0, tau=tau, r_d=r_d, r_f=r_f, cp=cp, K=K, vol=vol, F=F, analytical_greeks_flag=True, numerical_greeks_flag=True)
     
     # X = result['option_value'].item()
     
-    # IV = gk_solve_implied_σ(S0=S0, tau=tau, r_d=r_d, r_f=r_f, cp=cp, K=K, X=X, vol_guess=0.1)
+    # IV = garman_kohlhagen_solve_implied_vol(S0=S0, tau=tau, r_d=r_d, r_f=r_f, cp=cp, K=K, X=X, vol_guess=0.1)
 
     
 

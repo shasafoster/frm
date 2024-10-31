@@ -93,7 +93,7 @@ def test_heston_pricing_methods():
     
     
     # Want to run if running in script, but not in pytest
-    if True: #__name__ == "__main__":
+    if __name__ == "__main__":
     
         # Plotting - these plot's match STF2hes03.m
         fig, axs = plt.subplots(2, 2, figsize=(12, 10))
@@ -180,5 +180,5 @@ def test_heston_pricing_methods():
         print("Heston 1993: ", round(t2-t1,3))
 
 
-# if __name__ == "_main_":
-test_heston_pricing_methods()
+if __name__ == "_main_":
+    test_heston_pricing_methods()

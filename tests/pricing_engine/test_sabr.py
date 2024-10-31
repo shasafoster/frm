@@ -6,8 +6,7 @@ if __name__ == "__main__":
 
 import numpy as np
 import pandas as pd
-from frm.pricing_engine.sabr import (solve_alpha_from_sln_vol, calc_sln_vol_for_strike_from_sabr_params,
-                                     fit_sabr_params_to_sln_smile, calc_sln_vol_for_strike_from_sabr_params)
+from frm.pricing_engine.sabr import (solve_alpha_from_sln_vol, fit_sabr_params_to_sln_smile, calc_sln_vol_for_strike_from_sabr_params)
 
 
 def test_solve_alpha_from_sln_vol():

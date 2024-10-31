@@ -8,8 +8,8 @@ if __name__ == "__main__":
 
 from frm.term_structures.zero_curve import ZeroCurve
 from frm.pricing_engine.monte_carlo_generic import generate_rand_nbs
-from frm.pricing_engine.heston import heston_calibrate_vanilla_smile, heston_price_vanilla_european, simulate_heston
-from frm.pricing_engine.garman_kohlhagen import gk_price, gk_solve_strike, gk_solve_implied_volatility
+from frm.pricing_engine.heston import heston_calibrate_vanilla_smile, heston_price_vanilla_european, heston_simulate
+from frm.pricing_engine.garman_kohlhagen import garman_kohlhagen_price, garman_kohlhagen_solve_strike_from_delta, garman_kohlhagen_solve_implied_vol
 from frm.pricing_engine.geometric_brownian_motion import simulate_gbm_path
 
 from frm.term_structures.fx_volatility_surface_helpers import (clean_vol_quotes_column_names,
@@ -107,9 +107,9 @@ class FXVolatilitySurface:
         df['fx_forward_rate'] = interp_fx_forward_curve_df(fx_forward_curve_df=self.fx_forward_curve_df,
                                                            dates=df['expiry_date'],
                                                            date_type='fixing_date')
-        df['domestic_zero_rate'] = self.domestic_zero_curve.get_zero_rate(dates=df['expiry_date'],
+        df['domestic_zero_rate'] = self.domestic_zero_curve.get_zero_rates(dates=df['expiry_date'],
                                                                           compounding_frequency=CompoundingFrequency.CONTINUOUS)
-        df['foreign_zero_rate'] = self.foreign_zero_curve.get_zero_rate(dates=df['expiry_date'],
+        df['foreign_zero_rate'] = self.foreign_zero_curve.get_zero_rates(dates=df['expiry_date'],
                                                                         compounding_frequency=CompoundingFrequency.CONTINUOUS)
         return df
 
@@ -133,6 +133,7 @@ class FXVolatilitySurface:
                               'foreign_zero_rate', 'delta_convention'] \
                            + list(self.quotes_column_names)
             return vol_smile_pillar_df[column_order]
+
 
     def _setup_vol_smile_daily_df(self):
         min_expiry = self.vol_smile_pillar_df['expiry_date'].min()
@@ -188,14 +189,15 @@ class FXVolatilitySurface:
         strike_pillar_df = self.vol_smile_pillar_df.copy()
         strike_pillar_df.loc[:, self.quotes_column_names] = np.nan
         for i, row in strike_pillar_df.iterrows():
-            strikes = gk_solve_strike(S0=self.fx_spot_rate,
-                                      tau=row['expiry_years'],
-                                      r_d=row['domestic_zero_rate'],
-                                      r_f=row['foreign_zero_rate'],
-                                      vol=self.vol_smile_pillar_df.loc[i, self.quotes_column_names].values,
-                                      signed_delta=self.quotes_signed_delta,
-                                      delta_convention=row['delta_convention'],
-                                      F=row['fx_forward_rate'])
+            strikes = garman_kohlhagen_solve_strike_from_delta(
+                S0=self.fx_spot_rate,
+                tau=row['expiry_years'],
+                r_d=row['domestic_zero_rate'],
+                r_f=row['foreign_zero_rate'],
+                vol=self.vol_smile_pillar_df.loc[i, self.quotes_column_names].values,
+                signed_delta=self.quotes_signed_delta,
+                delta_convention=row['delta_convention'],
+                F=row['fx_forward_rate'])
             strike_pillar_df.loc[i, self.quotes_column_names] = strikes
         return strike_pillar_df
 
@@ -244,7 +246,8 @@ class FXVolatilitySurface:
 
                 if self.smile_interpolation_method in [FXSmileInterpolationMethod.UNIVARIATE_SPLINE,
                                                        FXSmileInterpolationMethod.CUBIC_SPLINE]:
-                    K = gk_solve_strike(S0=S0, tau=tau, r_d=r_d, r_f=r_f, vol=vol, signed_delta=signed_delta, delta_convention=delta_convention, F=F)
+                    K = garman_kohlhagen_solve_strike_from_delta(
+                        S0=S0, tau=tau, r_d=r_d, r_f=r_f, vol=vol, signed_delta=signed_delta, delta_convention=delta_convention, F=F)
                     if self.smile_interpolation_method == FXSmileInterpolationMethod.UNIVARIATE_SPLINE:
                         if len(self.quotes_column_names) < 3:
                             raise ValueError('Cannot fit InterpolatedUnivariateSpline with less than 3 points, please provide more points.')
@@ -338,29 +341,13 @@ class FXVolatilitySurface:
                     q = r_f
 
                 X = heston_price_vanilla_european(
-                    S0=S0,
-                    tau=tau,
-                    r=r,
-                    q=q,
-                    cp=cp[i],
-                    K=K[i],
-                    var0=vol_smile_func['var0'],
-                    vv=vol_smile_func['vv'],
-                    kappa=vol_smile_func['kappa'],
-                    theta=vol_smile_func['theta'],
-                    rho=vol_smile_func['rho'],
-                    lambda_=vol_smile_func['lambda_'],
-                    pricing_method=self.smile_interpolation_method.value
-                )
+                    S0=S0, tau=tau, r=r, q=q, cp=cp[i], K=K[i], var0=vol_smile_func['var0'],
+                    vv=vol_smile_func['vv'], kappa=vol_smile_func['kappa'], theta=vol_smile_func['theta'],
+                    rho=vol_smile_func['rho'], lambda_=vol_smile_func['lambda_'],
+                    pricing_method=self.smile_interpolation_method.value)
 
-                interp_df.loc[i,'vol'] = gk_solve_implied_volatility(
-                    S0=self.fx_spot_rate,
-                    tau=tau,
-                    r_d=r,
-                    r_f=q,
-                    cp=cp[i],
-                    K=K[i],
-                    X=X,
+                interp_df.loc[i,'vol'] = garman_kohlhagen_solve_implied_vol(
+                    S0=S0, tau=tau, r_d=r, r_f=q, cp=cp[i], K=K[i], X=X,
                     vol_guess=np.sqrt(vol_smile_func['var0']))
 
         return interp_df
@@ -374,14 +361,13 @@ class FXVolatilitySurface:
                                numerical_greeks_flag: bool=False,
                                intrinsic_time_split_flag: bool=False) -> dict:
 
-        K = np.atleast_1d(K)
-        cp = np.atleast_1d(cp)
+        K, cp = map(np.atleast_1d, (K, cp))
         assert expiry_dates.shape == K.shape
         assert expiry_dates.shape == cp.shape
 
         interp_df = self.interp_vol_surface(expiry_dates=expiry_dates, K=K, cp=cp)
 
-        results = gk_price(
+        results = garman_kohlhagen_price(
             S0=self.fx_spot_rate,
             tau=interp_df['expiry_years'].values,
             r_d=interp_df['domestic_zero_rate'].values,
@@ -390,9 +376,9 @@ class FXVolatilitySurface:
             K=K,
             vol=interp_df['vol'].values,
             F=interp_df['fx_forward_rate'].values,
-            analytical_greeks_flag=analytical_greeks_flag,
-            numerical_greeks_flag=numerical_greeks_flag,
-            intrinsic_time_split_flag=intrinsic_time_split_flag
+            analytical_greeks=analytical_greeks_flag,
+            numerical_greeks=numerical_greeks_flag,
+            intrinsic_time_split=intrinsic_time_split_flag
         )
 
         results['market_data_inputs'] = pd.DataFrame({'vol': interp_df['vol'].values,
@@ -406,7 +392,7 @@ class FXVolatilitySurface:
     def simulate_gbm_fx_rate_path(self,
                                   delivery_date_grid: pd.DatetimeIndex,
                                   nb_simulations: Optional[int]=None,
-                                  flag_apply_antithetic_variates: bool=True):
+                                  apply_antithetic_variates: bool=True):
 
         delivery_date_grid = delivery_date_grid.unique().sort_values(ascending=True)
         delivery_date_grid = delivery_date_grid.union(self.spot_date)
@@ -448,7 +434,7 @@ class FXVolatilitySurface:
         rand_nbs = generate_rand_nbs(nb_steps=len(delivery_date_grid) - 1,
                                      nb_rand_vars=1,
                                      nb_simulations=nb_simulations,
-                                     flag_apply_antithetic_variates=flag_apply_antithetic_variates)
+                                     apply_antithetic_variates=apply_antithetic_variates)
 
         fx_rate_simulation_paths = simulate_gbm_path(initial_px=self.fx_spot_rate,
                                                      drift=schedule['drift'].values[1:],
@@ -501,9 +487,9 @@ class FXVolatilitySurface:
                 nb_steps=100,
                 nb_rand_vars=2,
                 nb_simulations=10 * 1000,
-                flag_apply_antithetic_variates=False)
+                apply_antithetic_variates=False)
 
-            sim_results = simulate_heston(
+            sim_results = heston_simulate(
                 S0=self.fx_spot_rate,
                 mu=mu,
                 var0=var0,
@@ -528,7 +514,7 @@ class FXVolatilitySurface:
         delta_convention = vol_daily_smile_df['delta_convention'].iloc[0]
         vol_pillar = vol_daily_smile_df[self.quotes_column_names].iloc[0]
 
-        pillar_strikes = gk_solve_strike(S0=self.fx_spot_rate,
+        pillar_strikes = garman_kohlhagen_solve_strike_from_delta(S0=self.fx_spot_rate,
                                   tau=vol_daily_smile_df['expiry_years'].iloc[0],
                                   r_d=vol_daily_smile_df['domestic_zero_rate'].iloc[0],
                                   r_f=vol_daily_smile_df['foreign_zero_rate'].iloc[0],

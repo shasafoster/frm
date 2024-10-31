@@ -1,12 +1,5 @@
 # -*- coding: utf-8 -*-
 import os
-if __name__ == "__main__":
-    os.chdir(os.environ.get('PROJECT_DIR_FRM'))
-
-from frm.pricing_engine.garman_kohlhagen import gk_solve_implied_volatility, gk_solve_strike
-from frm.pricing_engine.cosine_method_generic import get_cos_truncation_range
-from frm.pricing_engine.monte_carlo_generic import normal_corr
-
 import numpy as np
 import scipy.fft
 import scipy
@@ -14,6 +7,13 @@ from scipy.stats import norm
 from numba import njit
 from typing import Tuple
 import warnings
+
+from frm.pricing_engine.garman_kohlhagen import garman_kohlhagen_solve_implied_vol, garman_kohlhagen_solve_strike_from_delta
+from frm.pricing_engine.monte_carlo_generic import normal_corr
+from frm.pricing_engine.cosine_method_generic import get_cos_truncation_range
+
+if __name__ == "__main__":
+    os.chdir(os.environ.get('PROJECT_DIR_FRM'))
 
 VALID_HESTON_PRICING_METHODS = [
     'heston_1993',
@@ -149,7 +149,7 @@ def heston_calibrate_vanilla_smile(
             if P[i] < 0.0:
                 IV[i] = -1.0
             else:
-                IV[i] = gk_solve_implied_volatility(S0=S0, tau=tau, r_d=r, r_f=q, cp=cp[i], K=strikes[i], X=P[i], vol_guess=volatility_quotes[i])
+                IV[i] = garman_kohlhagen_solve_implied_vol(S0=S0, tau=tau, r_d=r, r_f=q, cp=cp[i], K=strikes[i], X=P[i], vol_guess=volatility_quotes[i])
 
         SSE = np.sum((volatility_quotes - IV)**2)
 
@@ -168,7 +168,7 @@ def heston_calibrate_vanilla_smile(
         raise ValueError(f"'pricing_method' is invalid: {pricing_method}")
 
     # Calculate strikes for market deltas
-    strikes = gk_solve_strike(S0=S0,tau=tau,r_d=r,r_f=q,vol=volatility_quotes,signed_delta=delta_of_quotes,delta_convention=delta_convention)
+    strikes = garman_kohlhagen_solve_strike_from_delta(S0=S0,tau=tau,r_d=r,r_f=q,vol=volatility_quotes,signed_delta=delta_of_quotes,delta_convention=delta_convention)
     nb_strikes = len(strikes)
 
     # Set the initial volatility, var0, to the implied ATM market volatility
@@ -716,16 +716,17 @@ def heston_lipton_vanilla_european_integral(v, S0, tau, r, q, K, var0, vv, kappa
     return payoff
 
 
-def simulate_heston_scalar(S0: float,
-                           mu: float,
-                           var0: float,
-                           vv: float,
-                           kappa: float,
-                           theta: float,
-                           rho: float,
-                           tau: float,
-                           rand_nbs: np.array,
-                           method: str = 'quadratic_exponential') -> np.ndarray:
+def heston_simulate_scalar(
+        S0: float,
+        mu: float,
+        var0: float,
+        vv: float,
+        kappa: float,
+        theta: float,
+        rho: float,
+        tau: float,
+        rand_nbs: np.array,
+        method: str = 'quadratic_exponential') -> np.ndarray:
     """
     Simulate scalar (non-vectorised) trajectories of the spot price and volatility processes using the Heston model.
 
@@ -820,16 +821,17 @@ def simulate_heston_scalar(S0: float,
     return x
 
 
-def simulate_heston(S0: float,
-                    mu: float,
-                    var0: float,
-                    vv: float,
-                    kappa: float,
-                    theta: float,
-                    rho: float,
-                    tau: float,
-                    rand_nbs: np.array,
-                    method: str = 'quadratic_exponential'):
+def heston_simulate(
+        S0: float,
+        mu: float,
+        var0: float,
+        vv: float,
+        kappa: float,
+        theta: float,
+        rho: float,
+        tau: float,
+        rand_nbs: np.array,
+        method: str = 'quadratic_exponential'):
     """
     Simulation trajectories of the spot price and volatility processes using the Heston model.
     Vectorised for multiple strikes.
@@ -934,10 +936,10 @@ def simulate_heston(S0: float,
             elif method == 'euler_with_reflection_of_volatility_process':
                 x[i - 1, 1, :] = np.abs(x[i - 1, 1, :])
 
-            x[i, 1, :] = x[i - 1, 1, :] + kappa * (theta - x[i - 1, 1, :]) * dt + vv * np.sqrt(x[i - 1, 1, :]) * u[
-                                                                                                                 i - 1,
-                                                                                                                 1, :]
-            x[i, 0, :] = x[i - 1, 0, :] + x[i - 1, 0, :] * (mu * dt + np.sqrt(x[i - 1, 1, :]) * u[i - 1, 0, :])
+            x[i, 1, :] = x[i - 1, 1, :] \
+                         + kappa * (theta - x[i - 1, 1, :]) * dt + vv * np.sqrt(x[i - 1, 1, :]) * u[i - 1, 1, :]
+            x[i, 0, :] = x[i - 1, 0, :] \
+                         + x[i - 1, 0, :] * (mu * dt + np.sqrt(x[i - 1, 1, :]) * u[i - 1, 0, :])
 
     return x
 

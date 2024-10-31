@@ -7,24 +7,24 @@ import calendar
 import datetime as dt
 import numpy as np
 import pandas as pd
-from frm.enums.utils import DayCountBasis
+from frm.enums import DayCountBasis
 
             
 def convert_to_same_shape_DatetimeIndex(start_date, end_date):
-    start_DatetimeIndex = to_datetimeindex(start_date)
-    end_DatetimeIndex = to_datetimeindex(end_date)
+    start_dti = to_datetimeindex(start_date)
+    end_dti = to_datetimeindex(end_date)
     
-    if len(start_DatetimeIndex) == 1 and len(end_DatetimeIndex) == 1:
+    if len(start_dti) == 1 and len(end_dti) == 1:
         scalar_output = True
     else:
         scalar_output = False
     
-    if len(start_DatetimeIndex) == 1 and len(end_DatetimeIndex) > 1:
-        start_DatetimeIndex = pd.DatetimeIndex([start_DatetimeIndex.values[0] for _ in range(len(end_DatetimeIndex))])
-    elif len(start_DatetimeIndex) > 1 and len(end_DatetimeIndex) == 1:
-        end_DatetimeIndex = pd.DatetimeIndex([end_DatetimeIndex.values[0] for _ in range(len(start_DatetimeIndex))])
+    if len(start_dti) == 1 and len(end_dti) > 1:
+        start_dti = pd.DatetimeIndex([start_dti.values[0] for _ in range(len(end_dti))])
+    elif len(start_dti) > 1 and len(end_dti) == 1:
+        end_dti = pd.DatetimeIndex([end_dti.values[0] for _ in range(len(start_dti))])
     
-    return start_DatetimeIndex, end_DatetimeIndex, scalar_output
+    return start_dti, end_dti, scalar_output
 
 
 def day_count(start_date,
@@ -38,28 +38,28 @@ def day_count(start_date,
     # [1] The excel file "30-360-2006ISDADefs" sourced from https://www.isda.org/2008/12/22/30-360-day-count-conventions/
     #     Saved to  WayBackMachine on 23 September 2024, https://web.archive.org/web/20240923055727/https://www.isda.org/2008/12/22/30-360-day-count-conventions/
         
-    start_DatetimeIndex, end_DatetimeIndex, scalar_output = convert_to_same_shape_DatetimeIndex(start_date, end_date)
+    start_dti, end_dti, scalar_output = convert_to_same_shape_DatetimeIndex(start_date, end_date)
     
-    assert (start_DatetimeIndex <= end_DatetimeIndex).all()
+    assert (start_dti <= end_dti).all()
     
     if day_count_basis in {DayCountBasis.ACT_360, DayCountBasis.ACT_365, DayCountBasis.ACT_ACT, DayCountBasis.ACT_366}:
         # Act = the actual number of days between the dates
-        result = (end_DatetimeIndex - start_DatetimeIndex).days.values
+        result = (end_dti - start_dti).days.values
     
     elif day_count_basis == DayCountBasis._30_360:
         # Logic for "30/360" / "360/360" / "Bond Basis" is defined in tab "30-360 Bond Basis" in reference [1]
         
         # If (DAY1=31), Set D1=30, Otherwise set D1=DAY1
-        DAY1 = start_DatetimeIndex.day
+        DAY1 = start_dti.day
         d1 = np.where(DAY1 == 31, 30, DAY1) 	
         
         # If (DAY2=31) and (DAY1=30 or 31), Then set D2=30, Otherwise set D2=DAY2	
-        DAY2 = end_DatetimeIndex.day
+        DAY2 = end_dti.day
         mask = np.logical_and(d1 == 30, DAY2 == 31)
         d2 = np.where(mask, 30, DAY2)
         
-        result = 360*(end_DatetimeIndex.year - start_DatetimeIndex.year) \
-               + 30*(end_DatetimeIndex.month - start_DatetimeIndex.month) \
+        result = 360*(end_dti.year - start_dti.year) \
+               + 30*(end_dti.month - start_dti.month) \
                + d2 - d1
         result = result.values
     
@@ -67,15 +67,15 @@ def day_count(start_date,
         # Logic for "30/360E" / "Eurobond Basis" is defined in tab "30E-360 Eurobond" in reference [1]
         
         # If (DAY1=31), Set D1=30, Otherwise set D1=DAY1
-        DAY1 = start_DatetimeIndex.day
+        DAY1 = start_dti.day
         d1 = np.where(DAY1 == 31, 30, DAY1) 	            
 
         # If (DAY2=31), Then set D2=30, Otherwise set D2=DAY2	
-        DAY2 = end_DatetimeIndex.day
+        DAY2 = end_dti.day
         d2 = np.where(DAY2 == 31, 30, DAY2) 	
         
-        result = 360 * (end_DatetimeIndex.year - start_DatetimeIndex.year) \
-               + 30 * (end_DatetimeIndex.month - start_DatetimeIndex.month) \
+        result = 360 * (end_dti.year - start_dti.year) \
+               + 30 * (end_dti.month - start_dti.month) \
                + d2 - d1
         result = result.values
                
@@ -109,12 +109,12 @@ def day_count(start_date,
             return result
         
         if is_end_date_on_termination is None:
-            N = len(end_DatetimeIndex)
+            N = len(end_dti)
             is_end_date_on_termination = [False if i < (N-1)  else True for i in range(N)]
         else:
             is_end_date_on_termination = np.atleast_1d(is_end_date_on_termination)
 
-        result = np.array([_apply_logic(start, end, flag) for start, end, flag in zip(start_DatetimeIndex, end_DatetimeIndex, is_end_date_on_termination)])               
+        result = np.array([_apply_logic(start, end, flag) for start, end, flag in zip(start_dti, end_dti, is_end_date_on_termination)])               
     else:
         raise ValueError
     
@@ -142,18 +142,18 @@ def year_fraction(start_date,
         return day_count(start_date, end_date, day_count_basis, is_end_date_on_termination) / 366.0 
     
     elif day_count_basis == DayCountBasis.ACT_ACT:
-        start_DatetimeIndex, end_DatetimeIndex, scalar_output  = convert_to_same_shape_DatetimeIndex(start_date, end_date)
-        assert (start_DatetimeIndex <= end_DatetimeIndex).all()
+        start_dti, end_dti, scalar_output  = convert_to_same_shape_DatetimeIndex(start_date, end_date)
+        assert (start_dti <= end_dti).all()
         
-        start_year = start_DatetimeIndex.year
-        end_year = end_DatetimeIndex.year
+        start_year = start_dti.year
+        end_year = end_dti.year
         year_1_diff = 365 + start_year.map(calendar.isleap)
         year_2_diff = 365 + end_year.map(calendar.isleap) 
         
         total_sum = end_year - start_year - 1
-        diff_first = pd.DatetimeIndex([dt.datetime(v + 1, 1, 1) for v in start_year]) - start_DatetimeIndex
+        diff_first = pd.DatetimeIndex([dt.datetime(v + 1, 1, 1) for v in start_year]) - start_dti
         total_sum += diff_first.days / year_1_diff
-        diff_second = end_DatetimeIndex - pd.DatetimeIndex([dt.datetime(v, 1, 1) for v in end_year]) 
+        diff_second = end_dti - pd.DatetimeIndex([dt.datetime(v, 1, 1) for v in end_year]) 
         total_sum += diff_second.days / year_2_diff
 
         if scalar_output:

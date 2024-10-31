@@ -1,10 +1,9 @@
 # -*- coding: utf-8 -*-
 import os
-os.chdir(os.environ.get('PROJECT_DIR_FRM'))
-  
-from frm.utils.schedule import get_schedule, generate_date_schedule, PeriodFrequency, StubType, RollConvention, DayRoll, TimingConvention
+from frm.utils import get_schedule, generate_date_schedule, PeriodFrequency, StubType, RollConvention, DayRoll, TimingConvention
 import pandas as pd
 import pytest    
+os.chdir(os.environ.get('PROJECT_DIR_FRM'))
 
 def test_schedule():
     # Step 1: Read in the test cases defined in the excel spreadsheet

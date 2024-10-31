@@ -32,19 +32,20 @@ def clewlow_strickland_1_factor_simulate(forward_curve, nb_simulations, segments
     (https://www.mathworks.com/matlabcentral/fileexchange/26969-clewlow-and-strickland-commodity-one-factor-spot-model), 
     MATLAB Central File Exchange. Retrieved April 28, 2024.        
     
-    ##### To do #####
-    Currently the code assumes the forward curve step has a constant increment.
-    Want it to support a generic structure where the increment may change and may be denomintated in days, months or years. 
-    The code simply discretises it generally. Need to figure out if it should discretise evenly from t=0 to T=T or discretize based on the forward curve granularity (which may change)
-    
-    Probably easiest to simulate the entire forward curve, and not include the T input that Atmos did. 
-    The user can process the simulation results after.
-    
-    Likely the easiest way is to add extra granuarity between the timesteps provided by the user. 
-    That gives the user more power as well - they can apply interpolation if they want rather than us assuming they want it. 
-    
-    May not be relevant for this function but days is likely the best data structure for functions to expect your data. 
-    Easiest to convert to anything else given a year frac function 1st calls a day count function. 
+    TODO
+     Currently the code assumes the forward curve step has a constant increment.
+     Want it to support a generic structure where the increment may change and may be denominated in days, months or years.
+     The code simply discretizes it generally.
+     Need to figure out if it should discretize evenly from t=0 to T=T or discretize based on the forward curve granularity (which may change)
+     ...
+     Probably easiest to simulate the entire forward curve, and not include the T input that Atmos did.
+     The user can process the simulation results after.
+     ...
+     Likely the easiest way is to add extra granularity between the time-steps provided by the user.
+     That gives the user more power as well - they can apply interpolation if they want rather than us assuming they want it.
+     ...
+     May not be relevant for this function but days is likely the best data structure for functions to expect your data.
+     Easiest to convert to anything else given a year frac function 1st calls a day count function.
     """
 
     nb_simulations = int(nb_simulations)
@@ -56,7 +57,7 @@ def clewlow_strickland_1_factor_simulate(forward_curve, nb_simulations, segments
     # this would need to be adjusted to the time between t and t+1 based on the forward curve
     dt = 1.0 / segments_per_day 
 
-    nb_steps = int(T * segments_per_day) # The Clewlow Strickland 1 Factor model requires granular discretisation in order to converge
+    nb_steps = int(T * segments_per_day) # The Clewlow Strickland 1 Factor model requires a granular discretization in order to converge
     tau = (np.arange(nb_steps+1) * dt)
     
     f = interp1d(forward_curve[:,0], forward_curve[:,1], kind='linear') # Interpolate the forward curve based on the steps 

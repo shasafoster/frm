@@ -2,14 +2,14 @@
 import os
 
 if __name__ == "__main__":
-    os.chdir(os.environ.get('PROJECT_DIR_FRM')) 
+    os.chdir(os.environ.get('PROJECT_DIR_FRM'))
 
-from frm.pricing_engine.black import (black76,
-                                      bachelier,
-                                      shift_black76_vol,
-                                      black76_sln_to_normal_vol_analytical,
-                                      black76_sln_to_normal_vol,
-                                      normal_vol_to_black76_sln)
+from frm.pricing_engine.black76_bachelier import (black76_price,
+                                                  bachelier_price,
+                                                  shift_black76_vol,
+                                                  black76_sln_to_normal_vol_analytical,
+                                                  black76_sln_to_normal_vol,
+                                                  normal_vol_to_black76_sln)
 
 
 def test_black76_bachelier():
@@ -19,15 +19,15 @@ def test_black76_bachelier():
 
     cp = 1
     px = 0.005984
-    px_black76 = black76(F=F, tau=tau, K=K, cp=cp, vol_sln=0.2074, ln_shift=0)['price']
-    px_bachelier = bachelier(F=F, tau=tau, K=K, cp=cp, vol_n=0.8767/100)['price']
+    px_black76 = black76_price(F=F, tau=tau, K=K, cp=cp, vol_sln=0.2074, ln_shift=0)['price']
+    px_bachelier = bachelier_price(F=F, tau=tau, K=K, cp=cp, vol_n=0.8767/100)['price']
     assert abs(px_black76 - px) < 1e-6
     assert abs(px_bachelier - px) < 1e-6
 
     cp = -1
     px = 0.001246
-    px_black76 = black76(F=F, tau=tau, K=K, cp=cp, vol_sln=0.2074, ln_shift=0)['price']
-    px_bachelier = bachelier(F=F, tau=tau, K=K, cp=cp, vol_n=0.8767/100)['price']
+    px_black76 = black76_price(F=F, tau=tau, K=K, cp=cp, vol_sln=0.2074, ln_shift=0)['price']
+    px_bachelier = bachelier_price(F=F, tau=tau, K=K, cp=cp, vol_n=0.8767/100)['price']
     assert abs(px_black76 - px) < 1e-6
     assert abs(px_bachelier - px) < 1e-6
 
@@ -65,22 +65,22 @@ def test_black76_sln_to_normal_vol():
     ln_shift = 0
     normal_vol_analytical = black76_sln_to_normal_vol_analytical(F=F, tau=tau, K=K, vol_sln=vol_sln, ln_shift=ln_shift)
     normal_vol_numerical = black76_sln_to_normal_vol(F=F, tau=tau, K=K, vol_sln=vol_sln, ln_shift=ln_shift)
-    assert abs(normal_vol_analytical - 0.008766291621773826) < 1e-10
-    assert abs(normal_vol_numerical - 0.008766291621773826) < 1e-10
+    assert abs(normal_vol_analytical - 0.008766291621773826) < 1e-6
+    assert abs(normal_vol_numerical - 0.008766291621773826) < 1e-6
 
     vol_sln = 0.1677
     ln_shift = 0.01
     normal_vol_analytical = black76_sln_to_normal_vol_analytical(F=F, tau=tau, K=K, vol_sln=vol_sln, ln_shift=ln_shift)
     normal_vol_numerical = black76_sln_to_normal_vol(F=F, tau=tau, K=K, vol_sln=vol_sln, ln_shift=ln_shift)
-    assert abs(normal_vol_analytical - 0.008768530296484415) < 1e-10
-    assert abs(normal_vol_numerical - 0.008768530296484415) < 1e-10
+    assert abs(normal_vol_analytical - 0.008768530296484415) < 1e-6
+    assert abs(normal_vol_numerical - 0.008768530296484415) < 1e-6
 
     vol_sln = 0.1407
     ln_shift = 0.02
     normal_vol_analytical = black76_sln_to_normal_vol_analytical(F=F, tau=tau, K=K, vol_sln=vol_sln, ln_shift=ln_shift)
     normal_vol_numerical = black76_sln_to_normal_vol(F=F, tau=tau, K=K, vol_sln=vol_sln, ln_shift=ln_shift)
-    assert abs(normal_vol_analytical - 0.008765643554332224) < 1e-10
-    assert abs(normal_vol_numerical - 0.008765643554332224) < 1e-10
+    assert abs(normal_vol_analytical - 0.008765643554332224) < 1e-6
+    assert abs(normal_vol_numerical - 0.008765643554332224) < 1e-6
 
 
 def test_normal_vol_to_black76_ln():

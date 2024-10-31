@@ -6,12 +6,11 @@ import scipy
 from scipy.stats import norm
 
 from frm.term_structures.zero_curve import ZeroCurve
-from frm.pricing_engine.monte_carlo_generic import generate_rand_nbs
-from frm.utils.daycount import DayCountBasis
+from frm.pricing_engine import generate_rand_nbs
 
-from dataclasses import dataclass, field, InitVar
+from dataclasses import dataclass, field
 from typing import Optional
-from frm.enums.utils import CompoundingFrequency
+from frm.enums import CompoundingFrequency
 from prettytable import PrettyTable
 
 # Notes on calibration
@@ -24,7 +23,7 @@ from prettytable import PrettyTable
 
 
 @dataclass
-class HullWhite1Factor():
+class HullWhite1Factor:
     zero_curve: ZeroCurve
     mean_rev_lvl: float # Mean reversion level of the short rate
     vol: float # Volatility of the short rate. As mean_rev_lvl → 0, short rate vol → bachelier vol x T.
@@ -32,7 +31,7 @@ class HullWhite1Factor():
     num: Optional[int]=1000 # Granularity of the theta grid between pillar points. Smaller is not always better.
 
     # Attributes set in __post_init__
-    r0: str=field(init=False)
+    r0: float=field(init=False)
     theta_spline: tuple=field(init=False) # tuple (t,c,k) used by scipy.interpolate.splev
 
     def __post_init__(self):
@@ -40,9 +39,9 @@ class HullWhite1Factor():
 
         # Set to t=0 datapoint if available, otherwise extrapolate cubic spline to t=0.
         if self.zero_curve.data['years'].min() == 0:
-            self.r0 = self.zero_curve.data['nacc'].iloc[0]
+            self.r0 = float(self.zero_curve.data['nacc'].iloc[0])
         else:
-            self.r0 = self.zero_curve.get_zero_rates(years=0, compounding_frequency=CompoundingFrequency.CONTINUOUS)[0]
+            self.r0 = float(self.zero_curve.get_zero_rates(years=0, compounding_frequency=CompoundingFrequency.CONTINUOUS)[0])
 
     def fit_theta(self,
                   dts=(1e-3,1e-4,1e-5,1e-6),
@@ -80,7 +79,8 @@ class HullWhite1Factor():
         years_pillars = self.zero_curve.data['years'].values
         cczr_pillars = self.zero_curve.data['nacc'].values
 
-        cczr_recalcs = np.array([self.get_zero_rate(0, yr) for yr in years_pillars])
+        cczr_recalcs = np.array([-1*np.log(self.calc_discount_factor_by_solving_ode_1(0, yr))/yr for yr in years_pillars])
+        #cczr_recalcs = np.array([self.get_zero_rate(0, yr) for yr in years_pillars])
         diff_bps = 1e4 * (cczr_pillars - cczr_recalcs)
         average_error_bps = np.sqrt(np.mean(diff_bps ** 2))
 
@@ -130,13 +130,13 @@ class HullWhite1Factor():
         σ = self.vol
 
         # Calculate the derivative of the instantaneous forward rate  by numerical differentiation
-        f = self.get_instantaneous_forward_rate(years=years)
-        f_plus_dt = self.get_instantaneous_forward_rate(years=years+self.dt)
-        f_minus_dt = self.get_instantaneous_forward_rate(years=years-self.dt)
-        df_dt = (f_plus_dt - f_minus_dt) / (2 * self.dt)
+        f_t = self.get_instantaneous_forward_rate(years=years)
+        f_t_plus_dt = self.get_instantaneous_forward_rate(years=years+self.dt)
+        f_t_minus_dt = self.get_instantaneous_forward_rate(years=years-self.dt)
+        df_dt = (f_t_plus_dt - f_t_minus_dt) / (2 * self.dt)
 
         return df_dt \
-               + α * f \
+               + α * f_t \
                + (σ**2 / (2*α)) * (1 - np.exp(-2 * α * years))
 
 
@@ -144,70 +144,8 @@ class HullWhite1Factor():
         return self.zero_curve.get_instantaneous_forward_rate(years=years)
 
 
-    def calc_B(self, t, T):
-        """
-        Calculate the ordinary differential equation (ODE) B(t,T) for the Hull-White 1-factor model.
-
-        References:
-        [1] MAFS525 – Computational Methods for Pricing Structured Products, Slide 3/41
-        [2] Damiano Brigo, Fabio Mercurio - Interest Rate Models Theory and Practice (2001, Springer)
-             In section 3.3.2 'Bond and Option Pricing', page 75 (page 123/1007 of the pdf)
-        """
-        α = self.mean_rev_lvl
-        return (1/α) *(1-np.exp(-α*(T- t)))
-
-
-    def calc_A(self, t, T):
-        """
-        Calculate the ordinary differential equation (ODE) A(t,T) for the Hull-White 1-factor model.
-
-        References:
-        [1] MAFS525 – Computational Methods for Pricing Structured Products, Slide 3/41
-        [2] Damiano Brigo, Fabio Mercurio - Interest Rate Models Theory and Practice (2001, Springer)
-            In section 3.3.2 'Bond and Option Pricing', page 75 (page 123/1007 of the pdf)
-        """
-        def integrand_1(t):
-            return self.calc_B(t, T)**2
-        def integrand_2(t):
-            theta_values = scipy.interpolate.splev(t, self.theta_spline)
-            return theta_values * self.calc_B(t, T)
-
-        integrand_1_res = scipy.integrate.quad(func=integrand_1, a=t, b=T)[0]
-        # The 2nd integral is trickier. Increase limit to 100 (from default of 50) for better accuracy.
-        integrand_2_res = scipy.integrate.quad(func=integrand_2, a=t, b=T, limit=100)[0]
-
-        return 0.5 * self.vol**2 * integrand_1_res - integrand_2_res
-        
-
-    def get_discount_factor(self, t, T):
-        """
-        Calculates the discount factor (i.e. the zero coupon bond price).
-
-        Reference:
-        [1] MAFS525 – Computational Methods for Pricing Structured Products, Slide 3/41
-        """
-        B = self.calc_B(t=t, T=T)
-        A = self.calc_A(t=t, T=T)
-        return np.exp(A - self.r0*B)
-
-    def get_zero_rate(self, t, T):
-        return -np.log(self.get_discount_factor(t=t, T=T)) / (T-t)
-
-
-    def get_forward_rate(self, t, T):
-        df_t = self.get_discount_factor(0, t)
-        df_T = self.get_discount_factor(0, T)
-        return (df_t / df_T - 1) / (T - t)
-
-
-    def get_yield(self, t, T, rate):
-        α = self.mean_rev_lvl
-        tau = T - t
-        return -self.calc_A(t, T) / tau + rate * (1 - np.exp(-2*α*tau)) / (α * tau)
-
-
     def get_forward_rate_by_integration(self,t, T):
-        # Useful to validate the instantaneous forward rate is valid, otherwise no identifiable use case.
+        # Only useful for validating the instantaneous forward rate per the cubic spline is valid.
         return scipy.integrate.quad(func=self.zero_curve.get_instantaneous_forward_rate, a=t, b=T)[0]
 
 
@@ -237,7 +175,7 @@ class HullWhite1Factor():
         References:
         [1] MAFS525 – Computational Methods for Pricing Structured Products, Slide 7/41
         """
-        # TODO, helper function to
+        # TODO, helper function to wrap euler simulation to support 1m+ simulations (which would caused memory issues if done in one go)
 
         rand_nbs = generate_rand_nbs(nb_steps=nb_steps,
                                      nb_rand_vars=1,
@@ -324,11 +262,12 @@ class HullWhite1Factor():
         S = maturity_years # Per notation in [1]
 
         assert S > T
-        P_t_T = self.get_discount_factor(t, T)  # DF(t,T)
-        P_t_S = self.get_discount_factor(t, S)  # DF(t,S)
+        # TODO - test if we need to use the HW1F DF/ZC bond price function - why not just call on the ZeroCurve object.
+        P_t_T = self.zero_curve.get_discount_factors(T)  # DF(t,T).
+        P_t_S = self.zero_curve.get_discount_factors(S)  # DF(t,S).
 
         # Calculate bond price volatility between T and S
-        σP = σ * np.sqrt((1 - np.exp(-2 * α * (T-t))) / (2 * α)) * self.calc_B(T, S)
+        σP = σ * np.sqrt((1 - np.exp(-2 * α * (T-t))) / (2 * α)) * self.calc_b(T, S)
         h = (1/σP) * np.log(P_t_S / (K * P_t_T)) + 0.5 * σP
 
         price = cp * (P_t_S * norm.cdf(cp*h) - K * P_t_T * norm.cdf(cp*(h - σP)))
@@ -394,3 +333,87 @@ class HullWhite1Factor():
         # TODO after defining the leg, swap, optionlet and cap/floor classes.
 
         pass
+
+
+    #####################################################################################
+    # Validation functions to demonstrate the mathematical correctness of the HW1F model.
+    # These are not used in the pricing / simulation functions.
+    #####################################################################################
+
+    def calc_b(self, t, T):
+        """
+        Calculate b(t,T) used in the ODE's for the ZC bond price (i.e the discount factor).
+
+        References:
+        [1] MAFS525 – Computational Methods for Pricing Structured Products, Slide 3/41
+        [2] Damiano Brigo, Fabio Mercurio - Interest Rate Models Theory and Practice (2001, Springer)
+             In section 3.3.2 'Bond and Option Pricing', page 75 (page 123/1007 of the pdf)
+        """
+        α = self.mean_rev_lvl
+        return (1/α) *(1-np.exp(-α*(T- t)))
+
+
+    def calc_discount_factor_by_solving_ode_1(self, t, T):
+        """
+        Calculates the discount factor (i.e. the zero coupon bond price), for the ODE:
+        DF(t,T) = exp(a(t,T)-b(t,T) * r(t))
+
+        This is not used in pricings / simulations, only for validation.
+        (We call the ZeroCurve object to get discount factors / zero rates)
+
+        Reference:
+        [1] MAFS525 – Computational Methods for Pricing Structured Products, Slide 3/41
+        """
+        def calc_a():
+            def integrand_1(t_): return self.calc_b(t_, T) ** 2
+            def integrand_2(t_): return scipy.interpolate.splev(t_, self.theta_spline) * self.calc_b(t_, T)
+
+            integrand_1_res = scipy.integrate.quad(func=integrand_1, a=t, b=T)[0]
+            # The 2nd integral is trickier. Increase limit to 100 (from default of 50) for better accuracy.
+            integrand_2_res = scipy.integrate.quad(func=integrand_2, a=t, b=T, limit=100)[0]
+
+            return 0.5 * self.vol ** 2 * integrand_1_res - integrand_2_res
+
+        b = self.calc_b(t=t, T=T)
+        a = calc_a()
+
+        if t == 0:
+            r = self.r0
+        else:
+            pass
+            # TODO
+
+        return np.exp(a - r*b)
+
+
+    def calc_discount_factor_by_solving_ode_2(self, t, T):
+        """
+        Calculates the discount factor (i.e. the zero coupon bond price), for another ODE:
+        DF(t,T) = exp(a(t,T)-b(t,T) * r(t))
+
+        Reference:
+        [1] MAFS525 – Computational Methods for Pricing Structured Products, Slide 7/41
+        """
+
+        def calc_a():
+            df_t = self.zero_curve.get_discount_factors(years=t)[0]
+            df_T = self.zero_curve.get_discount_factors(years=T)[0]
+            f_t = self.zero_curve.get_instantaneous_forward_rate(years=t)
+            B_t_T = self.calc_b(t, T)
+            α = self.mean_rev_lvl
+            σ = self.vol
+
+            return (df_T / df_t) \
+                * np.exp(
+                    B_t_T * f_t - (σ ** 2 / (4 * α)) * (1 - np.exp(-2 * α * t)) * B_t_T ** 2
+                )
+
+        if t == 0:
+            r = self.r0
+        else:
+            pass
+            # TODO
+
+        b = self.calc_b(t=t, T=T)
+        a2 = calc_a(t=t, T=T)
+        return a2 * np.exp(- b * r)

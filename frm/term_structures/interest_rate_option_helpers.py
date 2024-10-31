@@ -161,6 +161,12 @@ def standardise_relative_quote_col_names(col_names: list[str]):
     bps_quote = r'[+-]?\s?\d+\s?(bps|bp)'
     percentage_quote = r'[+-]?\s?\d+(\.\d+)?\s?%'
 
+    # ATMF quote
+    col_name_update_atmf = standardise_atmf_quote_col_names(col_names=col_names)
+    col_name_update.update(col_name_update_atmf)
+    col_name_adj_to_forward.update({'atmf': 0})
+
+    # Relative Quotes
     for col_name in col_names:
         if re.search(bps_quote, col_name, re.IGNORECASE):
             v = round(float(col_name.replace('bps', '').replace('bp', '').replace(' ', '')) / 10000,8)

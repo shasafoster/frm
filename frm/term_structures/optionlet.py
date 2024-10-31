@@ -2,24 +2,19 @@
 import os
 if __name__ == "__main__":
     os.chdir(os.environ.get('PROJECT_DIR_FRM'))
-from dataclasses import dataclass, field, InitVar
-import datetime as dt
+from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 import scipy
-from frm.pricing_engine.black import black76, bachelier, normal_vol_to_black76_sln, black76_sln_to_normal_vol, black76_sln_to_normal_vol_analytical, normal_vol_atm_to_black76_sln_atm, VOL_SLN_BOUNDS, VOL_N_BOUNDS
+from frm.pricing_engine.black76_bachelier import black76_price, bachelier_price, black76_solve_implied_vol, bachelier_solve_implied_vol, normal_vol_to_black76_sln, black76_sln_to_normal_vol, black76_sln_to_normal_vol_analytical, normal_vol_atm_to_black76_sln_atm, VOL_SLN_BOUNDS, VOL_N_BOUNDS
 from frm.pricing_engine.sabr import solve_alpha_from_sln_vol, calc_sln_vol_for_strike_from_sabr_params
-from frm.utils.daycount import year_fraction, day_count
-from frm.enums.utils import DayCountBasis, PeriodFrequency, RollConvention, StubType, DayRoll, TimingConvention
-from frm.enums.term_structures import TermRate
-from frm.utils.tenor import clean_tenor, tenor_to_date_offset
-from frm.utils.utilities import convert_column_to_consistent_data_type
-from frm.utils.schedule import Schedule, get_schedule, add_period_length_to_schedule
+from frm.utils import year_fraction, clean_tenor, tenor_to_date_offset, convert_column_to_consistent_data_type, Schedule, get_schedule, add_period_length_to_schedule
+from frm.enums import DayCountBasis, PeriodFrequency, TermRate
 from frm.term_structures.zero_curve import ZeroCurve
 from typing import Optional, Union, List
 import time
 import numbers
-from frm.term_structures.interest_rate_option_helpers import standardise_relative_quote_col_names
+from frm.term_structures.interest_rate_option_helpers import standardise_relative_quote_col_names, standardise_atmf_quote_col_names
 
 
 
@@ -163,14 +158,18 @@ class Optionlet:
             ln_shift = self.ln_shift
 
             for i, row in self.term_structure[mask].iterrows():
-                optionlet_pxs[i, :] = black76(
+                optionlet_pxs[i, :] = black76_price(
                     F=row['F'],
                     tau=row['expiry_years'],
                     cp=cp,
                     K=K,
                     vol_sln=vol_sln,
                     ln_shift=ln_shift)['price'] * row['annuity_factor']
-            self.quote_pxs.loc[quote_nb, self.quote_cols] = optionlet_pxs.sum(axis=0)
+            try:
+                self.quote_pxs.loc[quote_nb, self.quote_cols] = optionlet_pxs.sum(axis=0)
+            except:
+                print(quote_nb, self.quote_cols, optionlet_pxs)
+                raise
 
         t1 = time.time()
 
@@ -181,7 +180,7 @@ class Optionlet:
 
         def obj_func_relative_px_error(vol_n):
             """Helper function for solving the equivalent normal (bachelier) volatility for a cap/floor quote"""
-            bachelier_optionlet_pxs = bachelier(F=F, tau=tau, cp=cp, K=K, vol_n=vol_n.item())['price'] * annuity_factor
+            bachelier_optionlet_pxs = bachelier_price(F=F, tau=tau, cp=cp, K=K, vol_n=vol_n.item(), annuity_factor=annuity_factor)['price']
             # Return the square of the relative error (to the price, as we want invariance to the price) to be minimised.
             # Squared error ensures differentiability which is critical for gradient-based optimisation methods.
             return ((target - bachelier_optionlet_pxs.sum(axis=0)) / target) ** 2
@@ -296,14 +295,14 @@ class Optionlet:
                     beta=optionlets['beta'].values,
                     rho=optionlets['rho'].values,
                     volvol=optionlets['volvol'].values,
-                    K=self.quote_strikes.loc[quote_nb, 'atmf'], # TODO why is K not set to F
+                    K=self.quote_strikes.loc[quote_nb, 'atmf'],
                     ln_shift=self.ln_shift)
 
-            optionlet_px = black76(
+            optionlet_px = black76_price(
                 F=optionlets['F'].values,
                 tau=optionlets['expiry_years'].values,
                 cp=self.quote_cp.loc[quote_nb, 'atmf'],
-                K=self.quote_strikes.loc[quote_nb, 'atmf'], # TODO why is K not set to F
+                K=self.quote_strikes.loc[quote_nb, 'atmf'],
                 vol_sln=vol_sln,
                 ln_shift=self.ln_shift)['price'] * optionlets['annuity_factor'].values
 
@@ -311,7 +310,7 @@ class Optionlet:
             normal_vol_prior_pillar = black76_sln_to_normal_vol(
                 F=optionlets.loc[N,'F'],
                 tau=optionlets.loc[N,'expiry_years'],
-                K=self.quote_strikes.loc[quote_nb, 'atmf'], # TODO why is K not set to F
+                K=self.quote_strikes.loc[quote_nb, 'atmf'],
                 vol_sln=vol_sln[-1],
                 ln_shift=self.ln_shift)
 
@@ -330,9 +329,13 @@ class Optionlet:
 
             def vol_n_atm_obj_func(param):
                 """"Error function for the optimisation of the normal at-the-money volatility for pillar optionlet."""
-                Y = [normal_vol_prior_pillar, param.item()]
-                vol_n = np.interp(x, X, Y)
-                optionlet_pxs = bachelier(F=F, tau=tau, cp=cp, K=K, vol_n=vol_n)['price'] * annuity_factor
+                try:
+                    Y = [normal_vol_prior_pillar, param.item()]
+                    vol_n = np.interp(x, X, Y)
+                except ValueError:
+                    print(f'X: {X}, Y: {Y}, x: {x}')
+                    raise
+                optionlet_pxs = bachelier_price(F=F, tau=tau, cp=cp, K=K, vol_n=vol_n)['price'] * annuity_factor
                 # Return the square of the relative error (to the price, as we want invariance to the price) to be minimised.
                 # Squared error ensures differentiability which is critical for gradient-based optimisation methods.
                 return ((target - optionlet_pxs.sum(axis=0)) / target)**2
@@ -346,7 +349,7 @@ class Optionlet:
             res = scipy.optimize.minimize(
                 fun=vol_n_atm_obj_func,
                 x0=np.atleast_1d(normal_vol_prior_pillar),
-                bounds=VOL_N_BOUNDS,
+                bounds=[VOL_N_BOUNDS],
                 method='L-BFGS-B',
                 options=options)
 
@@ -418,7 +421,7 @@ class Optionlet:
                 alpha = solve_alpha_from_sln_vol(tau=row['expiry_years'], F=row['F'], beta=beta[idx], rho=rho[idx], volvol=volvol[idx], vol_sln_atm=row['vol_sln_atm'],ln_shift=self.ln_shift)
                 vols_sln = calc_sln_vol_for_strike_from_sabr_params(tau=row['expiry_years'], F=row['F'], alpha=alpha, beta=beta[idx], rho=rho[idx], volvol=volvol[idx], K=K, ln_shift=self.ln_shift)
 
-                optionlet_pxs[idx, :] = black76(
+                optionlet_pxs[idx, :] = black76_price(
                     F=row['F'],
                     tau=row['expiry_years'],
                     cp=self.quote_cp.loc[quote_nb, self.quote_cols].astype('float64').values,
@@ -460,7 +463,7 @@ class Optionlet:
                     K=self.quote_strikes.loc[quote_nb, self.quote_cols].astype('float64').values,
                     ln_shift=self.ln_shift)
 
-                prior_optionlet_pxs[i, :] = black76(
+                prior_optionlet_pxs[i, :] = black76_price(
                     F=row['F'],
                     tau=row['expiry_years'],
                     cp=self.quote_cp.loc[quote_nb, self.quote_cols].astype('float64').values,
@@ -634,7 +637,7 @@ class Optionlet:
         # Choose the appropriate pricing model
         if vol_n_override is not None:
             # Use Bachelier model
-            optionlet_pricing = bachelier(
+            optionlet_pricing = bachelier_price(
                 F=detail_df['F'].values,
                 tau=detail_df['expiry_years'].values,
                 cp=detail_df['cp'].values,
@@ -645,7 +648,7 @@ class Optionlet:
                 analytical_greeks=True)
         else:
             # Use Black76 model
-            optionlet_pricing = black76(
+            optionlet_pricing = black76_price(
                 F=detail_df['F'].values,
                 tau=detail_df['expiry_years'].values,
                 cp=detail_df['cp'].values,
@@ -667,75 +670,28 @@ class Optionlet:
         if use_term_structure and solve_equivalent_flat_vol:
             target = detail_df['price'].sum()
 
-            # Numerically solve the equivalent flat volatility to the volatility term structure for the pricing of the optionlets.
-            # Want prices to be within 0.001% - i.e. if price is 100,000, acceptable range is (99999, 100001)
-            # Hence set obj function tol 'ftol' to (0.001%)**2 = 1e-10 (due to the squaring of the relative error in the obj function)
-            # We set gtol to zero, so that the optimisation is terminated based on ftol.
-            obj_func_tol = 1e-5 ** 2  # 0.001%^2
-            options = {'ftol': obj_func_tol, 'gtol': 0}
-
-            # Solve equivalent flat lognormal volatility
-            def solve_flat_vol_sln_obj_func(vol):
-                """"Error function for the optimisation for equivalent flat lognormal volatility to the volatility term structure"""
-                price = black76(
-                    F=detail_df['F'].values,
-                    tau=detail_df['expiry_years'].values,
-                    cp=detail_df['cp'].values,
-                    K=detail_df['K'].values,
-                    vol_sln=vol,
-                    ln_shift=self.ln_shift,
-                    annuity_factor=detail_df['annuity_factor'].values)['price'].sum()
-                # Return the square of the relative error (to the price, as we want invariance to the price) to be minimised.
-                # Squared error ensures differentiability which is critical for gradient-based optimisation methods.
-                return ((price - target) / target) ** 2
-
-            res = scipy.optimize.minimize(
-                fun=solve_flat_vol_sln_obj_func,
-                x0=np.atleast_1d(detail_df['vol_sln'].mean()),
-                bounds=VOL_SLN_BOUNDS,
-                method='L-BFGS-B',
-                options=options)
-
-            # 2nd condition required as we have overridden options to terminate based on ftol
-            if res.success or abs(res.fun) < obj_func_tol:
-                vol_sln_flat = res.x[0]
-            else:
-                print(res)
-                raise ValueError(f"Optimisation failed to solve equivalent flat lognormal volatility")
-
-            if K == -0.005:
-                pass
-
-            # Solve equivalent flat normal volatility
             # TODO for extremely out the money strikes, with short tenors, this solve does not work.
             # TODO for detailed output, include the optionlet specific vol_n that matches the vol_sln.
             #  This also allows for including the normal vega at the optionlet detail.
-            def solve_flat_vol_n_obj_func(vol):
-                """"Error function for the optimisation for equivalent flat normal volatility to the volatility term structure"""
-                price = bachelier(
-                    F=detail_df['F'].values,
-                    tau=detail_df['expiry_years'].values,
-                    cp=detail_df['cp'].values,
-                    K=detail_df['K'].values,
-                    vol_n=vol,
-                    annuity_factor=detail_df['annuity_factor'].values)['price'].sum()
-                # Return the square of the relative error (to the price, as we want invariance to the price) to be minimised.
-                # Squared error ensures differentiability which is critical for gradient-based optimisation methods.
-                return ((price - target) / target) ** 2
 
-            res = scipy.optimize.minimize(
-                fun=solve_flat_vol_n_obj_func,
-                x0=np.atleast_1d(detail_df['vol_n_atm'].mean()),
-                bounds=VOL_N_BOUNDS,
-                method='L-BFGS-B',
-                options=options)
+            vol_sln_flat = black76_solve_implied_vol(
+                F=detail_df['F'].values,
+                tau=detail_df['expiry_years'].values,
+                cp=detail_df['cp'].values,
+                K=detail_df['K'].values,
+                ln_shift=self.ln_shift,
+                X=target,
+                vol_sln_guess=detail_df['vol_sln'].mean(),
+                annuity_factor=detail_df['annuity_factor'].values)
 
-            # 2nd condition required as we have overridden options to terminate based on ftol
-            if res.success or abs(res.fun) < obj_func_tol:
-                vol_n_flat = res.x[0]
-            else:
-                print(res)
-                raise ValueError(f"Optimisation failed to solve equivalent flat normal volatility")
+            vol_n_flat = bachelier_solve_implied_vol(
+                F=detail_df['F'].values,
+                tau=detail_df['expiry_years'].values,
+                cp=detail_df['cp'].values,
+                K=detail_df['K'].values,
+                X=target,
+                vol_n_guess=detail_df['vol_n_atm'].mean(),
+                annuity_factor=detail_df['annuity_factor'].values)
 
             return detail_df, vol_sln_flat, vol_n_flat
         else:

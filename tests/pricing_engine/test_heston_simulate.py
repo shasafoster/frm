@@ -8,7 +8,7 @@ import time
 import matplotlib.pyplot as plt
 
 from frm.pricing_engine.monte_carlo_generic import generate_rand_nbs
-from frm.pricing_engine.heston import simulate_heston, simulate_heston_scalar
+from frm.pricing_engine.heston import heston_simulate, heston_simulate_scalar
 from frm.pricing_engine.in_progress.gbm_speed_exploration import simulate_gbm
 
 
@@ -33,13 +33,13 @@ def test_alignment_between_heston_scalar_and_vectorised_simulation_functions():
         nb_steps=nb_timesteps,
         nb_rand_vars=2, 
         nb_simulations=nb_simulations,
-        flag_apply_antithetic_variates=False
+        apply_antithetic_variates=False
     )
    
     t1 = time.time()
     
     # Vectorised Heston Simulation
-    result_vectorised = simulate_heston(
+    result_vectorised = heston_simulate(
         S0=S0,
         mu=mu,
         var0=var0,
@@ -61,7 +61,7 @@ def test_alignment_between_heston_scalar_and_vectorised_simulation_functions():
             
         rand_nbs_single = rand_nbs[:,:,i]
 
-        sim = simulate_heston_scalar(S0=S0,
+        sim = heston_simulate_scalar(S0=S0,
             mu=mu,
             var0=var0,
             vv=vv,
@@ -217,8 +217,8 @@ def test_heston_simulation_to_3rd_party_code():
     
     gbm_result = simulate_gbm(x0=S0, mu=mu, σ=np.sqrt(theta), T=tau, dt=1/days, rand_nbs=rand_nbs[:, 0], method=0)
     
-    heston_result_scalar = simulate_heston_scalar(S0, mu, var0, vv, kappa, theta, rho, tau, rand_nbs, 'quadratic_exponential')
-    heston_result_vectorised = simulate_heston(S0, mu, var0, vv, kappa, theta, rho, tau, rand_nbs.reshape(rand_nbs.shape[0], rand_nbs.shape[1], 1), 'quadratic_exponential')
+    heston_result_scalar = heston_simulate_scalar(S0, mu, var0, vv, kappa, theta, rho, tau, rand_nbs, 'quadratic_exponential')
+    heston_result_vectorised = heston_simulate(S0, mu, var0, vv, kappa, theta, rho, tau, rand_nbs.reshape(rand_nbs.shape[0], rand_nbs.shape[1], 1), 'quadratic_exponential')
     assert (np.abs(heston_result_vectorised[:,:,0] - heston_result_scalar) < 1e-10).all()
     
     # Want to run if running in script, but not in pytest

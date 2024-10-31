@@ -167,9 +167,8 @@ def solve_alpha_from_sln_vol(
     """
 
     F = F + ln_shift
-    β = beta; del beta
-    ρ = rho; del rho
-    v = volvol; del volvol
+    β, ρ, v = beta, rho, volvol
+    del beta, rho, volvol
 
     # Rearrange equation 2.18 from Hagan 2002 into cubic form: Aα^3 + Bα^2 + Cα + K = 0
     A = (1/24) * ((1-β)**2) * tau / (F**(2-2*β))

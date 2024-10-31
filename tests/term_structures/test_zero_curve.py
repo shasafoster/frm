@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
 import os
+
+from frm.enums import TermRate
+
 if __name__ == "__main__":
     os.chdir(os.environ.get('PROJECT_DIR_FRM'))
 
@@ -9,7 +12,7 @@ if __name__ == "__main__":
 
 import pandas as pd
 from frm.term_structures.zero_curve import ZeroCurve
-from frm.enums.utils import CompoundingFrequency, ForwardRate
+from frm.enums import CompoundingFrequency, TermRate
 
 
 def test_construction_from_discount_factors():
@@ -42,7 +45,7 @@ def test_construction_from_discount_factors():
     
     zc = ZeroCurve(curve_date=pd.Timestamp(2021,9,30),data=df)
     for i,row in df.iterrows():
-        assert abs(row['discount_factor'] - zc.discount_factor(row['date'])[0]) < epsilon  
+        assert abs(row['discount_factor'] - zc.get_discount_factors(row['date'])[0]) < epsilon
   
 
 def test_construction_from_zero_rates():
@@ -57,13 +60,13 @@ def test_construction_from_zero_rates():
 
     # Test zero rate
     date = pd.Timestamp(2022, 12, 31)
-    simple      = zc.zero_rate(CompoundingFrequency.SIMPLE, dates=date)
-    continuous  = zc.zero_rate(CompoundingFrequency.CONTINUOUS, dates=date)
-    daily       = zc.zero_rate(CompoundingFrequency.DAILY, dates=date)
-    monthly     = zc.zero_rate(CompoundingFrequency.MONTHLY, dates=date)
-    quarterly   = zc.zero_rate(CompoundingFrequency.QUARTERLY, dates=date)
-    semi_annual = zc.zero_rate(CompoundingFrequency.SEMIANNUAL, dates=date)
-    annual      = zc.zero_rate(CompoundingFrequency.ANNUAL, dates=date)
+    simple      = zc.get_zero_rates(CompoundingFrequency.SIMPLE, dates=date)
+    continuous  = zc.get_zero_rates(CompoundingFrequency.CONTINUOUS, dates=date)
+    daily       = zc.get_zero_rates(CompoundingFrequency.DAILY, dates=date)
+    monthly     = zc.get_zero_rates(CompoundingFrequency.MONTHLY, dates=date)
+    quarterly   = zc.get_zero_rates(CompoundingFrequency.QUARTERLY, dates=date)
+    semi_annual = zc.get_zero_rates(CompoundingFrequency.SEMIANNUAL, dates=date)
+    annual      = zc.get_zero_rates(CompoundingFrequency.ANNUAL, dates=date)
 
     assert abs(simple[0]      - 0.05127109637602412) < epsilon
     assert abs(continuous[0]  - 0.05) < epsilon
@@ -78,12 +81,12 @@ def test_construction_from_zero_rates():
 
     d1 = pd.Series([pd.Timestamp(2022,1,15)])
     d2 = pd.Series([pd.Timestamp(2023,1,15)])
-    fwd_rate = zc.forward_rate(d1,d2, ForwardRate.SIMPLE)
+    fwd_rate = zc.get_forward_rates(d1,d2, TermRate.SIMPLE)
     assert abs(fwd_rate[0] - simple[0]) < epsilon
 
     d1 = pd.Series([pd.Timestamp(2022,1,15),pd.Timestamp(2022,1,15)])
     d2 = pd.Series([pd.Timestamp(2022,1,15),pd.Timestamp(2023,1,15)])
-    fwd_rate = zc.forward_rate(d1,d2, ForwardRate.SIMPLE)
+    fwd_rate = zc.get_forward_rates(d1,d2, TermRate.SIMPLE)
     assert abs(fwd_rate[1] - simple[0]) < epsilon
 
 
@@ -95,7 +98,7 @@ def test_construction_from_zero_rates():
     zc = ZeroCurve(curve_date=pd.Timestamp(2021,12,31),data=df, compounding_frequency=CompoundingFrequency.ANNUAL)
 
     for i,row in df.iterrows():
-        assert abs(row['zero_rate'] - zc.zero_rate(CompoundingFrequency.ANNUAL, row['date'])[0]) < epsilon
+        assert abs(row['zero_rate'] - zc.get_zero_rates(CompoundingFrequency.ANNUAL, row['date'])[0]) < epsilon
 
 
 if __name__ == "__main__":

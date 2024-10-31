@@ -6,7 +6,7 @@ if __name__ == "__main__":
 from frm.utils.daycount import day_count, year_fraction
 from frm.utils.tenor import clean_tenor, tenor_to_date_offset
 from frm.utils.utilities import convert_column_to_consistent_data_type
-from frm.enums.utils import DayCountBasis, CompoundingFrequency, PeriodFrequency
+from frm.enums.utils import DayCountBasis, CompoundingFrequency
 from frm.enums.term_structures import OISCouponCalcMethod, TermRate
 from frm.term_structures.zero_curve_helpers import zero_rate_from_discount_factor, discount_factor_from_zero_rate
 
