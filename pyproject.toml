@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "frm"
-version = "0.0.6"
+version = "0.0.7"
 authors = [
   { name="Shasa Foster", email="shasa.foster@gmail.com" },
 ]
@@ -38,5 +38,5 @@ packages = ["frm"]
 
 [tool.hatch.build]
 include = ["frm/**", "README.md"]
-exclude = ["tests/**", "examples/**", "references/**", "excel_models/**", "excel_models_private/**"]
+exclude = ["tests/**", "examples/**", "references/**", "excel_models/**"]
 

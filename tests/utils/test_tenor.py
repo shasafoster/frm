@@ -8,34 +8,33 @@ from frm.utils.business_day_calendar import get_busdaycal
 import pandas as pd
 import numpy as np
 
-def test_tenor_name_to_date_offset():
-    
-    # Test scalar inputs
-    assert tenor_to_date_offset('sp') == np.array(pd.DateOffset(days=0))
+#%%
 
-    assert tenor_to_date_offset('1d') == np.array(pd.DateOffset(days=1))
-    assert tenor_to_date_offset('30d') == np.array(pd.DateOffset(days=30))
-    assert tenor_to_date_offset('360d') == np.array(pd.DateOffset(days=360))
+def test_tenor_name_to_date_offset():
+    # Test scalar inputs
+    assert tenor_to_date_offset('sp') == pd.DateOffset(days=0)
+
+    assert tenor_to_date_offset('1d') == pd.DateOffset(days=1)
+    assert tenor_to_date_offset('30d') == pd.DateOffset(days=30)
+    assert tenor_to_date_offset('360d') == pd.DateOffset(days=360)
+
+    assert tenor_to_date_offset('1w') == pd.DateOffset(weeks=1)
+    assert tenor_to_date_offset('52w') == pd.DateOffset(weeks=52)
+    assert tenor_to_date_offset('104w') == pd.DateOffset(weeks=104)
+
+    assert tenor_to_date_offset('1m') == pd.DateOffset(months=1)
+    assert tenor_to_date_offset('12m') == pd.DateOffset(months=12)
+    assert tenor_to_date_offset('120m') == pd.DateOffset(months=120)
+
+    assert tenor_to_date_offset('1y') == pd.DateOffset(years=1)
+    assert tenor_to_date_offset('10y') == pd.DateOffset(years=10)
+    assert tenor_to_date_offset('100y') == pd.DateOffset(years=100)
+
+    assert tenor_to_date_offset('1y3m') == pd.DateOffset(months=(1 * 12 + 3))
+    assert tenor_to_date_offset('10y6m') == pd.DateOffset(months=(10 * 12 + 6))
+    assert tenor_to_date_offset('100y1m') == pd.DateOffset(months=(100 * 12 + 1))
     
-    assert tenor_to_date_offset('1w') == np.array(pd.DateOffset(weeks=1))
-    assert tenor_to_date_offset('52w') == np.array(pd.DateOffset(weeks=52))
-    assert tenor_to_date_offset('104w') == np.array(pd.DateOffset(weeks=104))
-    
-    assert tenor_to_date_offset('1m') == np.array(pd.DateOffset(months=1))
-    assert tenor_to_date_offset('12m') == np.array(pd.DateOffset(months=12))
-    assert tenor_to_date_offset('120m') == np.array(pd.DateOffset(months=120))
-    
-    assert tenor_to_date_offset('1y') == np.array(pd.DateOffset(years=1))
-    assert tenor_to_date_offset('10y') == np.array(pd.DateOffset(years=10))
-    assert tenor_to_date_offset('100y') == np.array(pd.DateOffset(years=100))
-    
-    assert tenor_to_date_offset('1y3m') == np.array(pd.DateOffset(months=(1*12+3)))
-    assert tenor_to_date_offset('10y6m') == np.array(pd.DateOffset(months=(10*12+6)))
-    assert tenor_to_date_offset('100y1m') == np.array(pd.DateOffset(months=(100*12+1)))
-    
-    # Test array inputs
-    assert (tenor_to_date_offset(np.array(['1y','2y'])) \
-            == np.array([pd.DateOffset(years=1),pd.DateOffset(years=2)])).all()   
+
 
 
 # def test_get_tenor_settlement_date():

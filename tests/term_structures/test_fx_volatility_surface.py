@@ -189,7 +189,8 @@ def test_fx_volatility_surface():
                 assert (np.abs(result['analytical_greeks'][delta_str][mask] - signed_delta[mask]) < tol).all()
                 assert (np.abs(result['analytical_greeks']['forward_delta'][~mask] - signed_delta[~mask]) < tol).all()
 
-                surf.plot_smile(expiry_date)
+                if __name__ == "__main__":
+                    surf.plot_smile(expiry_date)
 
 
 if __name__ == "__main__":
