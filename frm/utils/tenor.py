@@ -6,44 +6,10 @@ if __name__ == "__main__":
 import re 
 import unicodedata
 import logging
+import numpy as np
 import pandas as pd
 from pandas import DateOffset
-  
-
-# def get_spot_offset(curve_ccy: str=None) -> int:
-#
-#     if curve_ccy is None:
-#         return 2
-#
-#     if not isinstance(curve_ccy, str):
-#         logging.error("function input 'curve_ccy' must be a string")
-#         raise TypeError("function input 'curve_ccy' must be a string")
-#
-#     if len(curve_ccy) == 6:
-#         # http://www.londonfx.co.uk/valdates.html
-#         if curve_ccy in {'usdcad','cadusd',
-#                          'usdphp','phpusd',
-#                          'usdrub','rubusd',
-#                          'usdtry','tryusd'}:
-#             return 1
-#         else:
-#             return 2
-#
-#     # Spot offset for interest rate products
-#     elif len(curve_ccy) == 3:
-#         if curve_ccy in {'aud','cad'}:
-#             return 1
-#         elif curve_ccy in {'nzd','jpy','usd','eur'}:
-#             return 2
-#         elif curve_ccy in {'gbp'}:
-#             return 0
-#         else:
-#             return 2
-#
-#     else:
-#         return 2
-#         #logging.error("invalid 'curve_ccy' value: " + curve_ccy)
-#         #raise ValueError("invalid 'curve_ccy' value: " + curve_ccy)
+from typing import Optional, Union
 
 
 def clean_tenor(tenor: str) -> str:
@@ -110,61 +76,95 @@ def tenor_to_date_offset(tenor: str) -> pd.DateOffset:
     return offset
 
 
-# @np.vectorize
-# def offset_market_data_date(
-#         curve_date: np.datetime64,
-#         spot_date: np.datetime64,
-#         tenor: str) -> np.datetime64:
-#     # offset from
-#     # (i) the curve_date for the ON and TN tenors and from;
-#     # (ii) the spot date for all other tenors
-#
-#     date_offset = tenor_to_date_offset(tenor)
-#
-#     if tenor in {'on', 'tn'}: # This is not true for IRS with 1 day settlement delay
-#         return curve_date + date_offset.item()
-#     else:
-#         return spot_date + date_offset.item()
-#
-#
-# @np.vectorize
-# def get_tenor_effective_date(tenor, curve_date, spot_date):
-#     if tenor in {'on'}:
-#         return curve_date
-#     else:
-#         return spot_date
-#
-#
-#
-#
-#
-# # FX vol quote to expiry, which is the difference between the tenor and the curve date
-#
-# def get_tenor_settlement_date(
-#         curve_date: pd.Timestamp,
-#         tenor: Union[str, np.ndarray],
-#         busdaycal: np.busdaycalendar=np.busdaycalendar(),
-#         ):
-#
-#     if isinstance(curve_date, dt.date):
-#         curve_date = np.datetime64(curve_date)
-#     else:
-#         curve_date = np.datetime64(curve_date.date())
-#
-#     cleaned_tenor = clean_tenor(tenor)
-#     if cleaned_tenor.size == 1:
-#         cleaned_tenor = cleaned_tenor.item()
-#
-#     offset_date = offset_market_data_date(curve_date, spot_date, cleaned_tenor)
-#
-#     holiday_rolled_offset_date =
-#
-#     if holiday_rolled_offset_date.shape == ():
-#         holiday_rolled_offset_date = pd.Timestamp(holiday_rolled_offset_date.item()) # For scalar
-#     else:
-#         holiday_rolled_offset_date = pd.DatetimeIndex(holiday_rolled_offset_date) # For array
-#
-#
-#
-#     return holiday_rolled_offset_date, cleaned_tenor, pd.Timestamp(spot_date)
 
+# TODO
+# Identical for Cap/Floor and IRS bootstrapping
+if self.settlement_date is None and self.settlement_delay is None:
+    raise ValueError('Either settlement_date or settlement_delay must be provided.')
+elif self.settlement_date is None and self.settlement_delay is not None:
+    self.settlement_date = np.busday_offset(self.curve_date.to_numpy().astype('datetime64[D]'),
+                                            offsets=self.settlement_delay,
+                                            roll='following',
+                                            busdaycal=self.busdaycal)
+
+
+def check_day_offset_consistency(
+        date: pd.Timestamp,
+        offset_date: pd.Timestamp,
+        day_offset: int,
+        busdaycal: np.busdaycalendar):
+
+    implied_offset = calc_implied_business_day_offset(date, offset_date, busdaycal)
+    if implied_offset != day_offset:
+        raise ValueError(f"The implied offset is {implied_offset} "
+                         f"which is inconsistent with the provided day offset of {day_offset}.")
+
+
+def calc_implied_business_day_offset(
+        date: pd.Timestamp,
+        offset_date: pd.Timestamp,
+        busdaycal: np.busdaycalendar) -> int:
+    assert date >= offset_date, "date must be greater than or equal to offset_date"
+
+    offset = 0
+    while date < offset_date:
+        offset += 1
+        date += pd.DateOffset(days=1)
+        date_np = date.to_numpy().astype('datetime64[D]')
+        date = np.busday_offset(date_np, offsets=0, roll='following', busdaycal=busdaycal)
+    return offset
+
+
+def resolve_fx_curve_dates(
+        ccy_pair: str,
+        busdaycal: np.busdaycalendar,
+        curve_date: Optional[pd.Timestamp] = None,
+        spot_offset: Optional[int] = None,
+        spot_date: Optional[pd.Timestamp] = None):
+
+    if curve_date is not None and spot_date is not None and spot_offset is not None:
+        # All three dates are specified, check for consistency
+        check_day_offset_consistency(date=curve_date, offset_date=spot_date, offset=spot_offset, busdaycal=busdaycal)
+    elif spot_offset is None and curve_date is not None and spot_date is not None:
+        # Spot offset is not specified, calculate it based on curve date and spot date
+        spot_offset = calc_implied_business_day_offset(curve_date, spot_date, busdaycal)
+    else:
+        # Only one of {curve_date, spot_date} are specified, get spot_offset per market convention from ccy_pair
+        spot_offset = get_fx_spot_day_offset(ccy_pair)
+
+    if spot_date is None:
+        curve_date_np = curve_date.to_numpy().astype('datetime64[D]')
+        spot_date = pd.Timestamp(
+            np.busday_offset(curve_date_np, offsets=spot_offset, roll='following', busdaycal=busdaycal))
+    elif curve_date is None:
+        spot_date_np = spot_date.to_numpy().astype('datetime64[D]')
+        curve_date = pd.Timestamp(
+            np.busday_offset(spot_date_np, offsets=-spot_offset, roll='preceding', busdaycal=busdaycal))
+
+    return curve_date, spot_offset, spot_date
+
+
+def get_fx_spot_day_offset(validated_ccy_pair: str) -> int:
+
+    if len(validated_ccy_pair) == 6:
+        # http://www.londonfx.co.uk/valdates.html
+        # https://web.archive.org/web/20240213223033/http://www.londonfx.co.uk/valdates.html
+
+        if validated_ccy_pair in {'usdcad','cadusd',
+                                  'usdphp','phpusd',
+                                  'usdrub','rubusd',
+                                  'usdtry','tryusd'}:
+            return 1
+        else:
+            return 2
+
+
+def get_ir_settlement_offset(ccy: str) -> int:
+    if ccy in {'usd', 'cad'}:
+        return 2
+    elif ccy in {'aud', 'nzd', 'jpy', 'eur'}:
+        return 2
+    elif ccy in {'gbp'}:
+        return 0
+    else:
+        return 2

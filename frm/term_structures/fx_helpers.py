@@ -17,19 +17,6 @@ from frm.utils.tenor import clean_tenor, tenor_to_date_offset
 VALID_DELTA_CONVENTIONS = ['regular_spot','regular_forward','premium_adjusted_spot','premium_adjusted_forward']
 
 
-def get_fx_spot_day_offset(validated_ccy_pair: str) -> int:
-
-    if len(validated_ccy_pair) == 6:
-        # http://www.londonfx.co.uk/valdates.html
-        # https://web.archive.org/web/20240213223033/http://www.londonfx.co.uk/valdates.html
-
-        if validated_ccy_pair in {'usdcad','cadusd',
-                                  'usdphp','phpusd',
-                                  'usdrub','rubusd',
-                                  'usdtry','tryusd'}:
-            return 1
-        else:
-            return 2
 
 
 def fx_term_structure_helper(df: pd.DataFrame,
@@ -116,59 +103,7 @@ def validate_ccy_pair(ccy_pair):
     return ccy_pair, domestic_ccy, foreign_ccy
 
 
-def check_curve_date_spot_date_spot_offset_consistency(curve_date: pd.Timestamp,
-                                                       spot_date: pd.Timestamp,
-                                                       spot_offset: int,
-                                                       busdaycal: np.busdaycalendar):
 
-
-    implied_spot_offset = calc_implied_spot_offset(curve_date, spot_date, busdaycal)
-    if implied_spot_offset != spot_offset:
-        raise ValueError(f"The implied spot offset (from 'curve_date', 'spot_date' and 'busdaycal') is {implied_spot_offset} "
-                         f"which is inconsistent with the provided spot_offset of {spot_offset}. \n"
-                         f"Please ensure that the 'spot_offset' is consistent with the 'curve_date', 'spot_date' and 'busdaycal'.")
-
-
-def calc_implied_spot_offset(curve_date: pd.Timestamp,
-                             spot_date: pd.Timestamp,
-                             busdaycal: np.busdaycalendar) -> int:
-    spot_offset = 0
-    date = curve_date
-    while date < spot_date:
-        spot_offset += 1
-        date += pd.DateOffset(days=1)
-        date_np = date.to_numpy().astype('datetime64[D]')
-        date = np.busday_offset(date_np, offsets=0, roll='following', busdaycal=busdaycal)
-    return spot_offset
-
-
-def resolve_fx_curve_dates(
-        ccy_pair: str,
-        busdaycal: np.busdaycalendar,
-        curve_date: Optional[pd.Timestamp] = None,
-        spot_offset: Optional[int] = None,
-        spot_date: Optional[pd.Timestamp] = None):
-
-    if curve_date is not None and spot_date is not None and spot_offset is not None:
-        # All three dates are specified, check for consistency
-        check_curve_date_spot_date_spot_offset_consistency(curve_date, spot_date, spot_offset, busdaycal)
-    elif spot_offset is None and curve_date is not None and spot_date is not None:
-        # Spot offset is not specified, calculate it based on curve date and spot date
-        spot_offset = calc_implied_spot_offset(curve_date, spot_date, busdaycal)
-    else:
-        # Only one of {curve_date, spot_date} are specified, get spot_offset per market convention from ccy_pair
-        spot_offset = get_fx_spot_day_offset(ccy_pair)
-
-    if spot_date is None:
-        curve_date_np = curve_date.to_numpy().astype('datetime64[D]')
-        spot_date = pd.Timestamp(
-            np.busday_offset(curve_date_np, offsets=spot_offset, roll='following', busdaycal=busdaycal))
-    elif curve_date is None:
-        spot_date_np = spot_date.to_numpy().astype('datetime64[D]')
-        curve_date = pd.Timestamp(
-            np.busday_offset(spot_date_np, offsets=-spot_offset, roll='preceding', busdaycal=busdaycal))
-
-    return curve_date, spot_offset, spot_date
 
 
 def check_delta_convention(df: pd.DataFrame, ccy_pair: str) -> pd.DataFrame:
