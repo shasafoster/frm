@@ -17,9 +17,7 @@ from frm.utils.tenor import clean_tenor, tenor_to_date_offset
 VALID_DELTA_CONVENTIONS = ['regular_spot','regular_forward','premium_adjusted_spot','premium_adjusted_forward']
 
 
-
-
-def get_fx_spot_spot_offset(validated_ccy_pair: str) -> int:
+def get_fx_spot_day_offset(validated_ccy_pair: str) -> int:
 
     if len(validated_ccy_pair) == 6:
         # http://www.londonfx.co.uk/valdates.html
@@ -32,8 +30,6 @@ def get_fx_spot_spot_offset(validated_ccy_pair: str) -> int:
             return 1
         else:
             return 2
-
-
 
 
 def fx_term_structure_helper(df: pd.DataFrame,
@@ -53,9 +49,11 @@ def fx_term_structure_helper(df: pd.DataFrame,
             df[column] = np.nan
         df[column] = df[column].astype('datetime64[ns]')
 
-    # Hierarchy is to use the delivery date if it is available, otherwise use the fixing date, otherwise use the tenor.
+    # Input hierarchy is:
+    # 1. Use the delivery date if it is available.
+    # 2. Otherwise, calculate the delivery date from the rate-set date ('fixing_date' for forwards, 'expiry_date' for options
+    # 3. Otherwise, calculate the rate-set date and delivery date from the tenor
     for i, row in df.iterrows():
-
         if pd.notna(row['delivery_date']):
             pass
         elif pd.notna(row[rate_set_date_str]):
@@ -70,7 +68,6 @@ def fx_term_structure_helper(df: pd.DataFrame,
         else:
             raise ValueError("'delivery_date', '{rate_set_date_str}' and 'tenor' are all missing")
 
-
     if 'tenor' in df.columns:
         time_column_order = ['tenor'] + [rate_set_date_str,'delivery_date']
     else:
@@ -81,8 +78,6 @@ def fx_term_structure_helper(df: pd.DataFrame,
     df = df.sort_values('delivery_date').reset_index(drop=True)
 
     return df
-
-
 
 
 def fx_forward_curve_helper(fx_forward_curve_df: pd.DataFrame,
@@ -162,7 +157,7 @@ def resolve_fx_curve_dates(
         spot_offset = calc_implied_spot_offset(curve_date, spot_date, busdaycal)
     else:
         # Only one of {curve_date, spot_date} are specified, get spot_offset per market convention from ccy_pair
-        spot_offset = get_fx_spot_spot_offset(ccy_pair)
+        spot_offset = get_fx_spot_day_offset(ccy_pair)
 
     if spot_date is None:
         curve_date_np = curve_date.to_numpy().astype('datetime64[D]')
@@ -248,6 +243,7 @@ def solve_call_put_quotes_from_strategy_quotes(vol_quotes_df):
 
     return vol_quotes_df
 
+
 def get_delta_smile_quote_details(df: pd.DataFrame,
                                   call_put_pattern: str = r'^(0?[1-9]|[1-4]\d)[_ ]?(delta|Δ)[_ ]?(call|c|put|p)$',
                                   atm_delta_neutral_column_pattern: str = r'^(a|at)[_ ]?(t|the)[_ ]?(m|money)[_ ]?(delta|Δ)[_ ]?neutral$') -> pd.DataFrame:
@@ -277,6 +273,7 @@ def interp_fx_forward_curve_df(
         dates: Union[pd.Series, pd.DatetimeIndex] = None,
         date_type: str = None,
         flat_extrapolation: bool = True) -> pd.Series:
+
     assert date_type in ['fixing_date', 'delivery_date']
 
     if isinstance(dates, pd.Series):
@@ -308,268 +305,5 @@ def interp_fx_forward_curve_df(
         result = result.interpolate(method='time', limit_area='inside')
 
     return result.reindex(dates).values
-
-
-def forward_volatility(t1: Union[float, np.array],
-                       vol_t1: Union[float, np.array],
-                       t2: Union[float, np.array],
-                       vol_t2: Union[float, np.array]) -> Union[float, np.array]:
-    """
-    Calculate the forward volatility from time t1 to t2.
-    The forward volatility is based on the consistency condition:
-    vol_t1**2 * t1 + vol_t1_t2**2 * (t2- t1) = vol_t1**2 * t2
-
-
-    Parameters:
-    - t1 (float): Time to first maturity (in years). Must be less than t2.
-    - vol_t1 (float): (Annualised) Volatility to expiry 1 for a given delta
-    - t2 (float): Time to second maturity (in years). Must be greater than t1.
-    - vol_t2 (float): (Annualised) Volatility to expiry 2 for the same given delta
-
-    Returns:
-    - np.array: Forward volatility from time t1 to t2
-    """
-
-    tau = t2 - t1
-    if np.any(tau == 0):
-        mask = tau == 0
-        warnings.warn(f"t2 and t1 are equal. NaN will be returned for these values: t1 {t1[mask]}, t2 {t2[mask]}")
-    elif np.any(tau < 0):
-        raise ValueError("t2 is less than t1.")
-
-    var_t1_t2 = (vol_t2 ** 2 * t2 - vol_t1 ** 2 * t1) / tau
-    if np.any(var_t1_t2 < 0):
-        raise ValueError("Negative value encountered under square root.")
-
-    return np.sqrt(var_t1_t2)
-
-
-def flat_forward_interp(t1: Union[float, np.array],
-                        vol_t1: Union[float, np.array],
-                        t2: Union[float, np.array],
-                        vol_t2: Union[float, np.array],
-                        t: Union[float, np.array]) -> Union[float, np.array]:
-    """
-    Interpolate volatility at a given time 't' using flat forward interpolation.
-
-    Parameters:
-    - t1 (Union[float, array]): Time to first expiry in years. Must be less than t2.
-    - vol_t1 (float): (Annualised) Volatility to expiry 1 for a given delta
-    - t2 (Union[float, array]): Time to second expiry in years. Must be greater than t1.
-    - vol_t2 (float): (Annualised) Volatility to expiry 2 for the same given delta
-    - t (Union[float, array]): Time at which to interpolate the volatility. Must be between t1 and t2.
-
-    Returns:
-    - array: Interpolated volatility at time 't'
-    """
-    vol_t12 = np.zeros(shape=vol_t1.shape)
-    mask_not_equal_t = (t1 != t2).flatten()
-    vol_t12[mask_not_equal_t,:] = forward_volatility(t1[mask_not_equal_t], vol_t1[mask_not_equal_t,:],
-                                                     t2[mask_not_equal_t], vol_t2[mask_not_equal_t,:])
-
-    return np.sqrt((vol_t1 ** 2 * t1 + vol_t12 ** 2 * (t - t1)) / t)
-
-
-# Old validation function for reading in vol surface from excel
-# def fx_σ_input_helper(df):
-#     for i, column_name in enumerate(['errors', 'warnings', 'internal_id']):
-#         if column_name not in df.columns:
-#             df.insert(loc=i, column=column_name, value='')
-#
-#     # % mandatory columns validation
-#     mandatory_columns = [
-#         'errors',
-#         'warnings',
-#         'internal_id',
-#         'curve_date',
-#         'curve_ccy',
-#         'Δ_convention',
-#     ]
-#     df = df.dropna(axis=0, subset=mandatory_columns)  # drop rows with blanks in mandatory columns
-#     missing_mandatory_columns = [col for col in mandatory_columns if col not in df.columns.to_list()]
-#     if len(missing_mandatory_columns) > 0:
-#         df['errors'] += f'missing mandatory columns: {missing_mandatory_columns}\n'
-#         return df
-#
-#     # Validate  column data
-#     valid_field_values = {'delta_convention': VALID_DELTA_CONVENTIONS,
-#                           'day_count_basis': VALID_DAY_COUNT_BASIS + [np.nan, '']}
-#
-#     # Enforce to list of valid values
-#     for column_name in mandatory_columns:
-#         if column_name in valid_field_values.keys():
-#             bool_cond = df[column_name].isin(valid_field_values[column_name])
-#             df.loc[np.logical_not(bool_cond), 'errors'] = 'invalid value for ' + column_name
-#
-#     # fx option specific curve_ccy and delta_convention validation
-#     field = 'curve_ccy'
-#     bool_cond = df[field].isin(['usdaud', 'usdeur', 'usdgbp', 'usdnzd'])
-#     df.loc[bool_cond, 'warnings'] += field + ' value is not per common market convention\n'
-#
-#     bool_cond = np.logical_and(df['curve_ccy'].isin(['audusd', 'nzdeur', 'gbpusd', 'nzdusd']),
-#                                df['Δ_convention'].str.contains('premium_adjusted'))
-#     df.loc[bool_cond, 'warnings'] += 'the regular delta is the market delta_convention for this currency pair\n'
-#
-#     bool_cond = np.logical_and.reduce([
-#         np.logical_not(
-#             df['curve_ccy'].isin(['audusd', 'nzdeur', 'gbpusd', 'nzdusd', 'usdaud', 'usdeur', 'usdgbp', 'usdnzd'])),
-#         df['curve_ccy'].str.contains('usd'),
-#         df['Δ_convention'].str.contains('regular')])
-#     df.loc[bool_cond, 'warnings'] += 'premium adjusted delta is the market delta_convention for this currency pair\n'
-#
-#     date_columns = ['tenor_name', 'tenor_date']
-#     optional_columns = ['day_count_basis', 'tenor_years', 'base_ccy', 'quote_ccy']
-#
-#     for column_name in optional_columns:
-#         if column_name not in df.columns:
-#             df[column_name] = np.nan
-#         else:
-#             # Enforce to list of valid values
-#             if column_name in valid_field_values.keys():
-#                 bool_cond = df[column_name].isin(valid_field_values[column_name])
-#                 df.loc[np.logical_not(bool_cond), 'errors'] = 'invalid value for ' + column_name
-#
-#     user_input_columns = [v for v in df.columns if v not in mandatory_columns + date_columns + optional_columns]
-#
-#     # drop user input columns if they are all nan
-#     mask = df[user_input_columns].isna().all()
-#     cols_to_drop = mask[mask].index.tolist()
-#     df = df.drop(columns=cols_to_drop)
-#
-#     # Validate volatility input columns
-#     not_nan_user_input_columns = [v for v in df.columns if v not in mandatory_columns + date_columns + optional_columns]
-#
-#     invalid_columns = []
-#     valid_volatility_input_columns = []
-#     for i, v in enumerate(not_nan_user_input_columns):
-#         pattern1 = r'^σ_(\d{1,2})Δ(call|put)$'
-#         pattern2 = r'^σ_(\d{1,2})Δ(bf|rr)$'
-#         atm_column_names = ['σ_atmΔneutral', 'σ_atmf']
-#         if (re.match(pattern1, v) and 1 <= int(re.match(pattern1, v).group(1)) <= 99) \
-#                 or (re.match(pattern2, v) and 1 <= int(re.match(pattern2, v).group(1)) <= 99) \
-#                 or v in atm_column_names:
-#             valid_volatility_input_columns.append(v)
-#         else:
-#             invalid_columns.append(v)
-#
-#     df = df.drop(columns=invalid_columns)
-#
-#     for col in invalid_columns:
-#         msg = 'user added column' + "'" + col + "'" + ' does not ' \
-#               + 'match regex pattern ' + "'" + pattern1 + "', or pattern " + "'" + pattern2 + "'," \
-#               + ' and is not in the allowed list (' + ', '.join(atm_column_names) + ')\n'
-#
-#         bool_cond = df[col].isnotna()
-#         df.loc[bool_cond, 'errors'] += msg
-#
-#     # Enforce only one type of σ quote input
-#     pattern_call_put = r'^σ_(\d{1,2})Δ(call|put)$'
-#     pattern_strategy = r'^σ_(\d{1,2})Δ(bf|rr)$'
-#     cols_call_put = df.filter(regex=pattern_call_put).columns
-#     cols_strategy = df.filter(regex=pattern_strategy).columns
-#     mask_call_put = df[cols_call_put].apply(lambda x: x.notna().any(), axis=1)
-#     mask_strategy = df[cols_strategy].apply(lambda x: x.notna().any(), axis=1)
-#     if 'σ_atmf' in df.columns:
-#         mask_atmf = df['σ_atmf'].apply(lambda x: x.notna().any(), axis=1)
-#
-#         mask = np.logical_and.reduce([mask_call_put, mask_strategy, np.logical_not(mask_atmf)])
-#         df.loc[
-#             mask, 'errors'] = 'row has non-nan values for i) Δ-σ quotes and ii) σ-strategy quotes; specify only one volatility input type per row\n'
-#
-#         mask = np.logical_and.reduce([mask_call_put, mask_atmf, np.logical_not(mask_strategy)])
-#         df.loc[
-#             mask, 'errors'] = 'row has non-nan values for i) Δ-σ quotes and ii) σ-atmf quotes; specify only one volatility input type per row\n'
-#
-#         mask = np.logical_and.reduce([mask_strategy, mask_atmf, np.logical_not(mask_call_put)])
-#         df.loc[
-#             mask, 'errors'] = 'row has non-nan values for i) σ-strategy quotes and ii) σ-atmf quotes; specify only one volatility input type per row\n'
-#
-#         mask = np.logical_and.reduce([mask_strategy, mask_atmf, mask_call_put])
-#         df.loc[
-#             mask, 'errors'] = 'row has non-nan values for i) σ-strategy quotes and ii) σ-atmf quotes; specify only one volatility input type per row\n'
-#
-#         mask = mask_call_put & mask_strategy & mask_atmf
-#         df.loc[
-#             mask, 'errors'] = 'row has non-nan values for across i) Δ-σ quotes, ii) σ-strategy quotes and iii) σ-atmf quotes; input only one volatility input type per row\n'
-#     else:
-#         mask = np.logical_and.reduce([mask_call_put, mask_strategy])
-#         df.loc[
-#             mask, 'errors'] = 'row has non-nan values for i) Δ-σ quotes and ii) σ-strategy quotes; input only one volatility input type per row\n'
-#
-#     # Enforce numeric types for strategy quotes
-#     for col in valid_volatility_input_columns:
-#         bool_cond = df[col].apply(lambda x: not isinstance(x, (float, int)) and not pd.isna(x))
-#         df.loc[bool_cond, 'errors'] += col + ' has an invalid type\n'
-#
-#         # Call and put quotes validation
-#     for col in (cols_call_put.to_list() + atm_column_names):
-#         if col in df.columns:
-#             bool_cond = df[col].apply(lambda x: isinstance(x, (float, int)) and x <= 0.0)
-#             df.loc[bool_cond, 'errors'] += col + ' must have a positive value\n'
-#
-#             bool_cond = df[col].apply(
-#                 lambda x: isinstance(x, (float, int)) and x > 2)  # unlikely for volatility quote to be > 200%
-#             df.loc[bool_cond, 'warnings'] += col + ' value is unusually large'
-#
-#     for col in cols_strategy.to_list():
-#         bool_cond = df[col].apply(
-#             lambda x: isinstance(x, (float, int)) and abs(x) > 0.25)  # unlikely for strategy spread to be > 25%
-#         df.loc[bool_cond, 'warnings'] += col + ' value is unusually large'
-#
-#     def extract_numbers(df, suffix):
-#         pattern = rf'^σ_(\d{{1,2}})Δ{suffix}$'
-#         cols = df.filter(regex=pattern).columns
-#         return [col.split('_')[1].split('Δ')[0] for col in cols]
-#
-#     Δ_list = list(set(extract_numbers(df, 'rr') + extract_numbers(df, 'bf')))
-#
-#     for Δ in Δ_list:
-#         atm = 'σ_atmΔneutral'
-#         bf = 'σ_' + Δ + 'Δbf'
-#         rr = 'σ_' + Δ + 'Δrr'
-#
-#         for v in ['call', 'put']:
-#             column_name = 'σ_' + Δ + 'Δ' + v
-#             if column_name not in df.columns:
-#                 df[column_name] = np.nan
-#
-#         for i, row in df.iterrows():
-#
-#             if bf and rr in row.index:
-#                 if atm in row.index:
-#                     if pd.notna(row[bf]) and pd.notna(row[rr]) and pd.notna(row[atm]):
-#                         if isinstance(row[bf], (float, int)) and isinstance(row[rr], (float, int)) \
-#                                 and isinstance(row[atm], (float, int)) and row[atm] > 0:
-#                             df.at[i, 'σ_' + Δ + 'Δcall'] = row[bf] + row[atm] + 0.5 * row[rr]
-#                             df.at[i, 'σ_' + Δ + 'Δput'] = row[bf] + row[atm] - 0.5 * row[rr]
-#
-#                 if pd.isna(row[bf]) and pd.notna(row[rr]):
-#                     df.loc[i, 'errors'] += bf + ' value is absent\n'  # add comment if butterfly is n/a
-#                 elif pd.isna(row[rr]) and pd.notna(row[bf]):
-#                     df.loc[i, 'errors'] += rr + ' value is absent\n'  # add comment if risk reversal is n/a
-#                 elif (pd.notna(row[bf]) or pd.notna(row[rr])) and pd.isna(row[atm]):
-#                     df.loc[i, 'errors'] += atm + ' value is absent\n'  # add comment if at-the-money is n/a
-#
-#             elif bf in row.index and rr not in row.index:
-#                 if rr not in row.index and pd.notna(row[bf]):
-#                     df.loc[i, 'errors'] += bf + ' value is present but column ' + rr + ' is absent\n'
-#                 if atm not in row.index and pd.notna(row[bf]):
-#                     df.loc[i, 'errors'] += bf + ' value is present but column ' + atm + ' is absent\n'
-#
-#             elif rr in row.index and bf not in row.index:
-#                 if bf not in row.index and pd.notna(row[rr]):
-#                     df.loc[i, 'errors'] += rr + ' value is present but column ' + bf + ' is absent\n'
-#                 if atm not in row.index and pd.notna(row[rr]):
-#                     df.loc[i, 'errors'] += rr + ' value is present but column ' + atm + ' is absent\n'
-#
-#                     # Drop σ-strategy quote columns
-#     pattern2 = r'^σ_(\d{1,2})Δ(bf|rr)$'
-#     cols_to_drop = df.filter(regex=pattern2).columns
-#     df = df.drop(columns=cols_to_drop)
-#
-#     # Drop all nan columns
-#     df = df.dropna(axis=1, how='all')
-#
-#     return df
 
 

@@ -191,7 +191,7 @@ def fit_sabr_params_to_sln_smile(tau: float,
                                  K: NDArray[float],
                                  vols_sln: NDArray[float],
                                  ln_shift: float=None,
-                                 beta: Optional[float]=None)-> tuple:
+                                 beta_overide: Optional[float]=None)-> tuple:
     """
     Calibrates SABR parameters to a volatility smile of European option prices using the Hagan 2002 (lognormal) SABR model and the Black76 formula.
     This method is not suitable for caps/floors or swaptions.
@@ -222,37 +222,39 @@ def fit_sabr_params_to_sln_smile(tau: float,
         SABR parameters (alpha, beta, rho, volvol), scipy.optimize.OptimizeResult
     """
 
-    def vol_sse(param, tau, F, ln_shift, K, vols_sln, vol_sln_atm, beta=None):
-        if beta is None:
-            beta, rho, volvol = param
+    def vol_sse(param):
+        if beta_overide is None:
+            beta_, rho_, volvol_ = param
         else:
-            rho, volvol = param
-        alpha = solve_alpha_from_sln_vol(tau=tau, F=F, beta=beta, rho=rho, volvol=volvol, vol_sln_atm=vol_sln_atm, ln_shift=ln_shift)
-        sabr_vols = calc_sln_vol_for_strike_from_sabr_params(tau=tau,F=F,alpha=alpha,beta=beta,rho=rho,volvol=volvol,K=K, ln_shift=ln_shift)
+            rho_, volvol_ = param
+            beta_ = beta_overide
+
+        alpha_ = solve_alpha_from_sln_vol(tau=tau, F=F, beta=beta_, rho=rho_, volvol=volvol_, vol_sln_atm=vol_sln_atm, ln_shift=ln_shift)
+        sabr_vols = calc_sln_vol_for_strike_from_sabr_params(tau=tau, F=F, alpha=alpha_, beta=beta_, rho=rho_, volvol=volvol_ ,K=K, ln_shift=ln_shift)
         return sum((vols_sln - sabr_vols) ** 2)
 
-    # Index the at-the-money (ATM) volatility
-    mask_atm = K == F
-    if mask_atm.sum() != 1:
-        raise ValueError('ATM strike must be unique and present.')
-    vol_sln_atm = vols_sln[mask_atm].item()
+    # ATM volatility check
+    vol_sln_atm = vols_sln[np.isclose(K, F)]
+    if vol_sln_atm.size != 1:
+        raise ValueError('A unique ATM strike must be present.')
+    vol_sln_atm = np.atleast_1d(vol_sln_atm).item()
+
 
     # params = (beta), rho, volvol
     # beta has a valid range of 0≤β≤1
     # rho has a valid range of -1≤ρ≤1
     # volvol has a valid range of 0<v≤∞
-    x0 = np.array([0.00, 0.10]) if beta is not None else np.array([0.0, 0.0, 0.1])
-    bounds = [(-1.0, 1.0), (0.0001, None)] if beta is not None else [(-1.0, 1.0), (-1.0, 1.0), (0.0001, None)]
+    x0 = np.array([0.00, 0.10]) if beta_overide is not None else np.array([0.0, 0.0, 0.1])
+    bounds = [(-1.0, 1.0), (0.0001, None)] if beta_overide is not None else [(-1.0, 1.0), (-1.0, 1.0), (0.0001, None)]
+    res = scipy.optimize.minimize(fun=lambda param: vol_sse(param), x0=x0, bounds=bounds)
 
-    res = scipy.optimize.minimize(
-        fun=lambda param: vol_sse(param, tau=tau, F=F, ln_shift=ln_shift, K=K, vols_sln=vols_sln, vol_sln_atm=vol_sln_atm, beta=beta),
-        x0=x0,
-        bounds=bounds)
-
-    beta, rho, volvol = (beta, *res.x) if beta is not None else res.x
-    alpha = solve_alpha_from_sln_vol(tau=tau, F=F, beta=beta, rho=rho, volvol=volvol, vol_sln_atm=vol_sln_atm, ln_shift=ln_shift)
-
-    return (alpha, beta, rho, volvol), res
+    if res.success:
+        beta, rho, volvol = (beta_overide, *res.x) if beta_overide is not None else res.x
+        alpha = solve_alpha_from_sln_vol(tau=tau, F=F, beta=beta, rho=rho, volvol=volvol, vol_sln_atm=vol_sln_atm, ln_shift=ln_shift)
+        return (alpha, beta, rho, volvol), res
+    else:
+        print(res)
+        raise ValueError(f'Optimization of SABR parameters failed.')
 
 
 

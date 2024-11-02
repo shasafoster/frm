@@ -93,7 +93,7 @@ def test_fit_sabr_params_to_sln_smile():
     ln_shift = 0.03
     beta = 0.5
 
-    params, res = fit_sabr_params_to_sln_smile(tau=tau, F=F, ln_shift=ln_shift, K=K, vols_sln=vols_target, beta=0.5)
+    params, res = fit_sabr_params_to_sln_smile(tau=tau, F=F, ln_shift=ln_shift, K=K, vols_sln=vols_target, beta_overide=0.5)
 
     check = np.abs(1 - params / np.array([0.0253, 0.5, -0.2463, 0.2908]))
     assert (check < 1e-3).all() # 0.1% tolerance
@@ -108,7 +108,7 @@ def test_fit_sabr_params_to_sln_smile():
 
     K = F + np.array([-2.0, -1.5, -1.0, -0.5, 0.0, 0.5, 1.0, 1.5, 2.0]) / 100
     vol_sln = np.array([18.71, 17.38, 16.33, 15.54, 15.03, 14.75, 14.67, 14.74, 14.91]) / 100
-    params, res = fit_sabr_params_to_sln_smile(tau=tau, F=F, ln_shift=ln_shift, K=K, vols_sln=vol_sln, beta=0.5)
+    params, res = fit_sabr_params_to_sln_smile(tau=tau, F=F, ln_shift=ln_shift, K=K, vols_sln=vol_sln, beta_overide=0.5)
 
     check = np.abs(1 - params / np.array([alpha, beta, rho, volvol]))
     assert (check < 5e-3).all() # 0.1% tolerance
