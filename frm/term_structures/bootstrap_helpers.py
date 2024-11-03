@@ -119,35 +119,45 @@ def futures_helper_asx_90day(
     # https://www.asx.com.au/content/dam/asx/participants/derivatives-market/90-Day-bank-bill-futures-factsheet.pdf
 
     # From the contract code, index the effective period of the BBSW 3M fixing of the contract.
-    if 'ticker' in df.columns and ('months' not in df.columns or 'years' not in df.columns):
 
-        df['ticker'] = df['ticker'].str.upper().str.strip()
-        contract_code = df['ticker'].str[:2]
-        assert (contract_code == 'IR').all() # 'IR' for 90-day bank bill futures
+    if 'months' not in df.columns or 'years' not in df.columns:
 
-        futures_month_code = df['ticker'].str[2]
-        assert futures_month_code.isin(['H', 'M', 'U', 'Z']).all() # 'H', 'M', 'U', 'Z' for Mar, Jun, Sep, Dec
-        df['months'] = futures_month_code.map({'H': 3, 'M': 6, 'U': 9, 'Z': 12})
+        if 'ticker' in df.columns:
 
-        assert df['ticker'].str.len().isin([1, 2, 4]).all()
-        futures_year_code = df['ticker'].str[3:].astype(int)  # 1-4-digit year code
+            df['ticker'] = df['ticker'].str.upper().str.strip()
+            contract_code = df['ticker'].str[:2]
+            assert (contract_code == 'IR').all() # 'IR' for 90-day bank bill futures
 
-        def resolve_year(year_code):
-            year_code_str = str(year_code)
-            if len(year_code_str) == 1:
-                # Map single-digit year codes to 2020-2029
-                # TODO: does not support cases where the futures schedule spans multiple decades. i.e from 2028-2031.
-                return 2020 + int(year_code_str)
-            elif len(year_code_str) == 2:
-                # Map two-digit year codes to current century
-                return 2000 + int(year_code_str)
-            elif len(year_code_str) == 4:
-                # Use four-digit year codes as is
-                return int(year_code_str)
-            else:
-                raise ValueError(f'Unexpected year code length: {year_code_str}')
+            futures_month_code = df['ticker'].str[2]
+            assert futures_month_code.isin(['H', 'M', 'U', 'Z']).all() # 'H', 'M', 'U', 'Z' for Mar, Jun, Sep, Dec
+            df['months'] = futures_month_code.map({'H': 3, 'M': 6, 'U': 9, 'Z': 12})
 
-        df['years'] = futures_year_code.apply(resolve_year)
+            assert df['ticker'].str.len().isin([1, 2, 4]).all()
+            futures_year_code = df['ticker'].str[3:].astype(int)  # 1-4-digit year code
+
+            def resolve_year(year_code):
+                year_code_str = str(year_code)
+                if len(year_code_str) == 1:
+                    # Map single-digit year codes to 2020-2029
+                    # TODO: does not support cases where the futures schedule spans multiple decades. i.e from 2028-2031.
+                    return 2020 + int(year_code_str)
+                elif len(year_code_str) == 2:
+                    # Map two-digit year codes to current century
+                    return 2000 + int(year_code_str)
+                elif len(year_code_str) == 4:
+                    # Use four-digit year codes as is
+                    return int(year_code_str)
+                else:
+                    raise ValueError(f'Unexpected year code length: {year_code_str}')
+
+            df['years'] = futures_year_code.apply(resolve_year)
+
+        elif 'month_year' in df.columns:
+            # SEP23, DEC23, MAR24, JUN24...
+            # SEP2024, DEC2024, MAR2025, JUN2025...
+            pass
+
+
 
     expiry_dates, settlement_dates = [], []
     for years in range(df['years'].min(), df['years'].max()+1):
