@@ -160,17 +160,42 @@ class HullWhite1Factor:
         For a small Δt, we assume R follows the same dynamics os r, i.e. dR = (θ(t) - αR)dt + σdW.
         From the rates R, we integrate to get the discount factors and zero rates for each simulation.
 
-        Results: dict with keys:
-            R: np.array
-                Simulated rates for each simulation and each time step.
-            years_grid: np.array
-                The time steps in years.
-            sim_dsc_factors: np.array
-                Simulated discount factors for each simulation and year grid.
-            sim_cczrs: np.array
-                Simulated continuously compounded zero rates for each simulation and year grid
-            averages_df: pd.DataFrame
-                Averages of the discount factors and zero rates across all simulations. Should align to the term structure.
+       Parameters:
+        ----------
+        tau : float
+            Total time horizon for the simulation in years.
+        nb_steps : int
+            Number of time steps to discretize the simulation.
+        nb_simulations : int
+            Number of simulation paths to generate.
+        flag_apply_antithetic_variates : bool, optional
+            If True, applies antithetic variates to reduce variance in the simulation. Default is True.
+        random_seed : int, optional
+            Seed for random number generation to ensure reproducibility. Default is None.
+
+
+        Returns:
+        -------
+        dict
+            Contains the following keys:
+            - 'R': np.array
+                Simulated rates for each simulation across time steps.
+            - 'years_grid': np.array
+                Time steps in years, from 0 to tau.
+            - 'sim_dsc_factors': np.array
+                Simulated discount factors for each simulation along the time grid.
+            - 'sim_cczrs': np.array
+                Simulated continuously compounded zero rates for each simulation along the time grid.
+            - 'averages_df': pd.DataFrame
+                DataFrame with average discount factors and zero rates across simulations,
+                aligned to the term structure.
+
+       Notes:
+        ------
+        * Uses Simpson's rule for numerical integration to compute cumulative integrals of R,
+          which are then used to calculate discount factors and zero rates.
+        * The average discount factors are computed across simulations and converted to zero rates
+          to approximate the term structure.
 
         References:
         [1] MAFS525 – Computational Methods for Pricing Structured Products, Slide 7/41
@@ -220,7 +245,7 @@ class HullWhite1Factor:
         sim_cczrs = -1 * np.log(sim_dsc_factors) / years_grid[:, np.newaxis]
 
         # Averages - these should align to the discount factor / zero rates term structure if our discretization is effective.
-        # Note the average must be done over the average discount factors (vs averaging the zero rates in each simulation).  
+        # Note the average must be done over the average discount factors (vs averaging the zero rates in each simulation).
         avg_sim_dsc_factors = np.mean(sim_dsc_factors, axis=1)
         avg_cczrs = -1 * np.log(avg_sim_dsc_factors) / years_grid
         averages_df = pd.DataFrame({'years': years_grid, 'discount_factor': avg_sim_dsc_factors, 'cczr': avg_cczrs})
