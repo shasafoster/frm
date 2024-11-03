@@ -6,7 +6,7 @@ import scipy
 from scipy.stats import norm
 
 from frm.term_structures.zero_curve import ZeroCurve
-from frm.pricing_engine import generate_rand_nbs
+from frm.pricing_engine.monte_carlo_generic import generate_rand_nbs
 
 from dataclasses import dataclass, field
 from typing import Optional
