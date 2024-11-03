@@ -9,7 +9,7 @@ import numpy as np
 import math
 
 from frm.enums import DayCountBasis
-from frm.utils import day_count, year_fraction, to_datetimeindex
+from frm.utils import day_count, year_frac, to_datetimeindex
 
 
 def isclose_custom(a, b, abs_tol=1e-10):
@@ -47,9 +47,9 @@ def test_multiple_type():
     days3 = day_count(pd.Timestamp('2020-12-31'),pd.Timestamp('2021-12-31'), day_count_basis)
     assert days1 == days2 and days1 == days3   
     
-    years1 = year_fraction(dt.date(2020,12,31),dt.date(2021,12,31), day_count_basis)
-    years2 = year_fraction(np.datetime64('2020-12-31'),np.datetime64('2021-12-31'), day_count_basis)
-    years3 = year_fraction(pd.Timestamp('2020-12-31'),pd.Timestamp('2021-12-31'), day_count_basis)
+    years1 = year_frac(dt.date(2020,12,31),dt.date(2021,12,31), day_count_basis)
+    years2 = year_frac(np.datetime64('2020-12-31'),np.datetime64('2021-12-31'), day_count_basis)
+    years3 = year_frac(pd.Timestamp('2020-12-31'),pd.Timestamp('2021-12-31'), day_count_basis)
     assert years1 == years2 and years1 == years3  
 
 
@@ -92,8 +92,8 @@ def test_30360_Bond_Basis():
     end_date = dt.date(2012, 1, 13)
     assert isclose_custom(day_count(start_date, start_date, day_count_basis), 0.0)
     assert isclose_custom(day_count(start_date, end_date, day_count_basis), 720)
-    assert isclose_custom(year_fraction(start_date, start_date, day_count_basis), 0.0)
-    assert isclose_custom(year_fraction(start_date, end_date, day_count_basis), 2.0)
+    assert isclose_custom(year_frac(start_date, start_date, day_count_basis), 0.0)
+    assert isclose_custom(year_frac(start_date, end_date, day_count_basis), 2.0)
 
 
 def test_30360E_Euro_Bond_Basis():
@@ -140,8 +140,8 @@ def test_30360E_Euro_Bond_Basis():
     end_date = dt.date(2011, 2, 28)
     assert isclose_custom(day_count(start_date, start_date, day_count_basis), 0.0)
     assert isclose_custom(day_count(start_date, end_date, day_count_basis), 178.0)
-    assert isclose_custom(year_fraction(start_date, start_date, day_count_basis), 0.0)
-    assert isclose_custom(year_fraction(start_date, end_date, day_count_basis), 178/360.)
+    assert isclose_custom(year_frac(start_date, start_date, day_count_basis), 0.0)
+    assert isclose_custom(year_frac(start_date, end_date, day_count_basis), 178/360.)
 
 
 def test_30360E_ISDA():
@@ -188,8 +188,8 @@ def test_30360E_ISDA():
     assert isclose_custom(day_count(start_date, start_date, day_count_basis), 0.0)
     assert isclose_custom(day_count(start_date, end_date, day_count_basis, False), 180)
     assert isclose_custom(day_count(start_date, end_date, day_count_basis), 179)
-    assert isclose_custom(year_fraction(start_date, start_date, day_count_basis), 0.0)
-    assert isclose_custom(year_fraction(start_date, end_date, day_count_basis), 179/360.)
+    assert isclose_custom(year_frac(start_date, start_date, day_count_basis), 0.0)
+    assert isclose_custom(year_frac(start_date, end_date, day_count_basis), 179/360.)
 
 
 def test_act360():
@@ -200,8 +200,8 @@ def test_act360():
     # Copied from https://github.com/miradulo/isda_daycounters
     assert isclose_custom(day_count(start_date, start_date, day_count_basis), 0.0)
     assert isclose_custom(day_count(start_date, end_date, day_count_basis), 720)
-    assert isclose_custom(year_fraction(start_date, start_date, day_count_basis), 0.0)
-    assert isclose_custom(year_fraction(start_date, end_date, day_count_basis), 720 / 360)
+    assert isclose_custom(year_frac(start_date, start_date, day_count_basis), 0.0)
+    assert isclose_custom(year_frac(start_date, end_date, day_count_basis), 720 / 360)
 
 def test_act365():
     start_date = dt.date(2010, 1, 13)
@@ -211,8 +211,8 @@ def test_act365():
     # Copied from https://github.com/miradulo/isda_daycounters
     assert isclose_custom(day_count(start_date, start_date, day_count_basis), 0.0)
     assert isclose_custom(day_count(start_date, end_date, day_count_basis), 730)
-    assert isclose_custom(year_fraction(start_date, start_date, day_count_basis), 0.0)
-    assert isclose_custom(year_fraction(start_date, end_date, day_count_basis), 730 / 365 )
+    assert isclose_custom(year_frac(start_date, start_date, day_count_basis), 0.0)
+    assert isclose_custom(year_frac(start_date, end_date, day_count_basis), 730 / 365 )
 
 
 def test_actact():
@@ -222,8 +222,8 @@ def test_actact():
 
     assert isclose_custom(day_count(start_date, start_date, day_count_basis), 0.0)
     assert isclose_custom(day_count(start_date, end_date, day_count_basis), 1461)
-    assert isclose_custom(year_fraction(start_date, start_date, day_count_basis), 0.0)
-    assert isclose_custom(year_fraction(start_date, end_date, day_count_basis), 1461 / ((365*3 + 366) / 4))
+    assert isclose_custom(year_frac(start_date, start_date, day_count_basis), 0.0)
+    assert isclose_custom(year_frac(start_date, end_date, day_count_basis), 1461 / ((365*3 + 366) / 4))
 
 
 if __name__ == "__main__":

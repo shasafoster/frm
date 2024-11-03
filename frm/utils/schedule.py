@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 from typing import List, Tuple, Union
 from frm.enums.utils import RollConvention, TimingConvention, StubType, PeriodFrequency, DayRoll, DayCountBasis
-from frm.utils.daycount import year_fraction, day_count
+from frm.utils.daycount import year_frac, day_count
 
 
 def set_default(value, default):
@@ -194,7 +194,7 @@ def add_period_length_to_schedule(schedule_df: pd.DataFrame, day_count_basis: Da
     schedule_df.insert(loc=col_index + 1, column='period_days',
                        value=day_count(schedule_df['period_start'], schedule_df['period_end'], day_count_basis))
     schedule_df.insert(loc=col_index + 2, column='period_years',
-                       value=year_fraction(schedule_df['period_start'], schedule_df['period_end'], day_count_basis))
+                       value=year_frac(schedule_df['period_start'], schedule_df['period_end'], day_count_basis))
 
     return schedule_df
 

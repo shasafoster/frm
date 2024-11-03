@@ -75,17 +75,21 @@ def tenor_to_date_offset(tenor: str) -> pd.DateOffset:
         
     return offset
 
+#
+# np.busday_offset(
+#     dates=(df['effective_date'] + tenor_date_offset).to_numpy().astype('datetime64[D]'), offsets=0,
+#     roll='following', busdaycal=busdaycal))
+
+def workday(dates: [pd.Timestamp, pd.DatetimeIndex],
+            offset: int,
+            busdaycal: np.busdaycalendar) -> pd.Timestamp:
+
+    # Convert to datetime64[D] to use in np.busday_offset
+    dates = dates.to_numpy().astype('datetime64[D]')
+
+    return np.busday_offset(dates=dates, offsets=offset, roll='following', busdaycal=busdaycal)
 
 
-# TODO
-# Identical for Cap/Floor and IRS bootstrapping
-if self.settlement_date is None and self.settlement_delay is None:
-    raise ValueError('Either settlement_date or settlement_delay must be provided.')
-elif self.settlement_date is None and self.settlement_delay is not None:
-    self.settlement_date = np.busday_offset(self.curve_date.to_numpy().astype('datetime64[D]'),
-                                            offsets=self.settlement_delay,
-                                            roll='following',
-                                            busdaycal=self.busdaycal)
 
 
 def check_day_offset_consistency(

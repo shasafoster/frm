@@ -124,10 +124,10 @@ def day_count(start_date,
         return result
 
 
-def year_fraction(start_date,
-                  end_date,
-                  day_count_basis: DayCountBasis,
-                  is_end_date_on_termination: bool=None)->np.array:
+def year_frac(start_date,
+              end_date,
+              day_count_basis: DayCountBasis,
+              is_end_date_on_termination: bool=None)->np.array:
     
     # If the start_date and end_date are scalars assumption is end_date is the termination date
     # If end_date is a vector, the final value of the vector is assumed to be the termination date
@@ -207,7 +207,7 @@ if __name__ == "__main__":
     
     day_count_basis = DayCountBasis.from_value('act/365')
     days = day_count(start_date, end_date, day_count_basis)
-    years = year_fraction(start_date, end_date, day_count_basis)
+    years = year_frac(start_date, end_date, day_count_basis)
     
     for d1, d2, day_count, year_frac in zip(start_date, end_date, days, years):
         print(d1.date(), d2.date(), day_count.item(), round(year_frac.item(),6))
