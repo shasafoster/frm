@@ -2,9 +2,10 @@
 import numpy as np
 
 # Global settings
-value_date = np.nan
+value_date = None
 include_payments_on_value_date_in_npv = False
 include_months_non_business_days_accrued_interest_if_value_date_is_last_business_day_of_month = False
+limit_accrued_interest_to_unsettled_cashflow = False
 roll_user_specified_dates = False
 
 # Interpolation methods

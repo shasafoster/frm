@@ -3,7 +3,7 @@ import os
 import numpy as np
 import pandas as pd
 from frm.enums import TermRate, PeriodFrequency, DayCountBasis
-from frm.utils import tenor_to_date_offset, clean_tenor, get_busdaycal, year_fraction, Schedule
+from frm.utils import tenor_to_date_offset, clean_tenor, get_busdaycal, year_frac, Schedule
 from frm.term_structures.zero_curve import ZeroCurve
 from frm.pricing_engine.sabr import fit_sabr_params_to_sln_smile
 from frm.term_structures.interest_rate_option_helpers import standardise_relative_quote_col_names, standardise_atmf_quote_col_names

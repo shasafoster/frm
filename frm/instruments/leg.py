@@ -6,10 +6,9 @@ import numpy as np
 import os
 import pandas as pd
 from typing import Optional, Union
-
-from frm.enums import DayCountBasis, CompoundingFrequency, TermRate, RFRFixingCalcMethod, PeriodFrequency
+import warnings
 from frm.utils import Schedule, get_schedule, day_count, year_frac, get_busdaycal
-from frm.enums import CompoundingFrequency, TermRate, RFRFixingCalcMethod, PeriodFrequency
+from frm.enums import CompoundingFrequency, TermRate, RFRFixingCalcMethod, PeriodFrequency, DayCountBasis
 from frm.term_structures.zero_curve import ZeroCurve
 
 if __name__ == "__main__":
@@ -123,6 +122,7 @@ class Leg(ABC):
     schedule: Schedule
     discount_curve: Optional[ZeroCurve]
     pay_rec: Optional[PayRcv]=PayRcv.PAY
+    day_count_basis: DayCountBasis=DayCountBasis
 
     # Notional details, optional
     notional: Union[float, np.ndarray] = 100e6
@@ -131,14 +131,16 @@ class Leg(ABC):
     # If schedule has a payment delay, interest on a period starts accruing before prior period's payment.
     cap_accrued_interest_to_unsettled_period: bool=True
 
+
     @abstractmethod
     def calc_payment_schedule(self):
         pass
 
+
     def calc_notional_schedule(self):
         if np.atleast_1d(self.notional).shape == (1,):
             self.schedule.df['notional'] = self.notional
-            self.schedule.df['notional_payment'] = 0
+            self.schedule.df['notional_payment'] = 0 # TODO do row diff and set row 0 to 0 .
 
             column_order = self.schedule.df.columns
 
@@ -146,6 +148,7 @@ class Leg(ABC):
                 # Prepend a row for the initial notional payment
                 row_data = {'period_years': 0,
                             'payment_date': self.schedule.df['period_start'].iloc[0],
+                            'notional': self.schedule.df['notional'].iloc[0],
                             'notional_payment': -1 * self.pay_rec.multiplier * self.notional}
                 self.schedule.df = pd.concat([pd.DataFrame(row_data, index=[0]), self.schedule.df], ignore_index=True)
 
@@ -153,6 +156,7 @@ class Leg(ABC):
                 # Append a row for the terminal notional payment
                 row_data = {'period_years': 0,
                             'payment_date': self.schedule.df['period_end'].iloc[-1],
+                            'notional': self.schedule.df['notional'].iloc[-1],
                             'notional_payment': self.pay_rec.multiplier * self.notional}
                 self.schedule.df = pd.concat([self.schedule.df, pd.DataFrame(row_data, index=[len(self.schedule.df)])], ignore_index=True)
 
@@ -163,6 +167,7 @@ class Leg(ABC):
         self.schedule.df['discount_factor'] = self.discount_curve.get_discount_factors(self.schedule.df['payment_date'])
         self.schedule.df['payment_present_value'] = self.schedule.df['payment'] * self.schedule.df['discount_factor']
 
+
     def par_solve(self, target_value):
         # Shared parameter solver
         # Solve adjustment to to the rate.
@@ -170,24 +175,29 @@ class Leg(ABC):
 
         pass
 
+
     def target_solve(self, target_price, target_value):
         # Shared parameter solver
         pass
+
 
     def calc_accrued_interest(self):
         # Need to check how is done for ZC - as expected.
         pass
 
+
     def calc_dirty_pv(self):
         self.update_discounted_cashflows()
         return self.schedule.df['payment_present_value'].sum()
+
 
     def calc_dv01(self):
         # Shared DV01 calculation with +/- 100 bps shift
         pass
 
-    def __post_init__(self):
 
+    def __post_init__(self):
+        self.schedule.add_period_length_to_schedule(day_count_basis=self.day_count_basis)
         self.calc_notional_schedule()
         #self.calc_cashflow_schedule()
         #self.schedule.df['total_payment'] = np.nan
@@ -207,18 +217,35 @@ class FixedLeg(Leg):
         self.schedule.df['cashflow'] = self.schedule.df['notional'] * self.schedule.df['fixed_rate'] * self.schedule.df['period_years']
         self.schedule.df['total_payment'] = self.schedule.df['notional_payment'] + self.schedule.df['cashflow']
 
-    def calc_accrued_interest(self, value_date=None, include_payments_on_value_date=False):
-        if value_date is None:
-            value_date = self.discount_curve.curve_date
+    def calc_accrued_interest(self):
 
-        if include_payments_on_value_date:
+        value_date = frm.utils.value_date
+
+        # Calculate the unsettled cashflows
+        if frm.utils.include_payments_on_value_date_in_npv:
             mask = (self.schedule.df['payment_date'] >= value_date) & (self.schedule.df['period_end'] <= value_date)
         else:
             mask = (self.schedule.df['payment_date'] > value_date) & (self.schedule.df['period_end'] <= value_date)
-
+        if mask.sum() > 1:
+            warnings.warn('Multiple periods found for unsettled cashflow calculation.')
         unsettled_cashflows = self.schedule.df['cashflow'].sum()
 
+        # Calculate the accrued interest
+        current_period_idxs = (self.schedule.df['period_start'] <= value_date) & (self.schedule.df['period_end'] > value_date)
+        if current_period_idxs.sum() > 1:
+            warnings.warn('Multiple periods found for accrual interest calculation.')
+        accrued_period_years = year_frac(self.schedule.df['period_start'][current_period_idxs].iloc[0], value_date, day_count_basis=self.day_count_basis)
+        accrued_interest = (self.schedule.df['notional'][current_period_idxs]
+                            * self.schedule.df['fixed_rate'][current_period_idxs]
+                            * accrued_period_years).sum()
 
+        if frm.utils.limit_accrued_interest_to_unsettled_cashflow:
+            if unsettled_cashflows > 0:
+                return unsettled_cashflows
+            else:
+                return accrued_interest
+        else:
+            return accrued_interest + unsettled_cashflows
 
 
 class ZerocouponLeg(Leg):
@@ -294,6 +321,7 @@ class InflationYoYLeg(Leg):
         # Specific implementation for InflationYoY leg
         pass
 
+
 #%%
 
 
@@ -301,15 +329,16 @@ class InflationYoYLeg(Leg):
 fp = 'C:/Users/shasa/Documents/frm_private/tests_private/test_optionlet_support_20240628.xlsm'
 curve_date = pd.Timestamp('2024-06-28')
 busdaycal = get_busdaycal('AUD')
+day_count_basis = DayCountBasis.ACT_365
 
 zero_curve = ZeroCurve(curve_date=curve_date,
                        data=pd.read_excel(io=fp, sheet_name='DF_3M'),
-                       day_count_basis=DayCountBasis.ACT_365,
+                       day_count_basis=day_count_basis,
                        busdaycal=busdaycal,
                        interpolation_method='cubic_spline_on_zero_rates')
 
 # Schedule parameters
 schedule = Schedule(start_date=pd.Timestamp('2024-07-01'), end_date=pd.Timestamp('2025-07-01'), frequency=PeriodFrequency.QUARTERLY)
 
-fixed_leg = FixedLeg(schedule=schedule, discount_curve=zero_curve, fixed_rate=0.05)
+fixed_leg = FixedLeg(schedule=schedule, discount_curve=zero_curve, fixed_rate=0.05, day_count_basis=day_count_basis)
                
