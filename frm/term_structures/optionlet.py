@@ -55,6 +55,7 @@ class Optionlet:
                                                     roll='following',
                                                     busdaycal=self.busdaycal)
 
+        # TODO This should be a setting - settlement_date + freq (as below) or effective at the settlement date.
         effective_date_np = (self.settlement_date + self.optionlet_frequency.date_offset).to_numpy().astype('datetime64[D]')
         effective_date = np.busday_offset(effective_date_np, offsets=0, roll='following', busdaycal=self.busdaycal)
         self.quote_vol_sln['tenor'] = self.quote_vol_sln['tenor'].apply(clean_tenor)

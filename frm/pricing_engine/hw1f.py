@@ -189,16 +189,17 @@ class HullWhite1Factor:
         years_grid = np.linspace(start=0, stop=tau, num=nb_steps + 1)
         thetas = self.get_thetas(years_grid)
 
-        # Simulate the Δt rate, R
+        # Simulate the Δt rate, R through the Euler discretization of the HW1F SDE.
+        # Note, R is not technically the short rate, r, but should be similar for small Δt.
         R[0, :] = self.r0
         for i in range(nb_steps):
             R[i + 1, :] = R[i, :] \
                           + (thetas[i] - self.mean_rev_lvl * R[i, :]) * Δt \
                           + self.vol * np.sqrt(Δt) * rand_nbs[i, :, :]
 
-        # Integration R to get simulation discount factors.
-        # Integration optimised by being is vectorised and cumulative.
-        # Cumulative by using prior period integration, so only the current step is integrated in each iteration.
+        # We integrate R over each simulation path, and calculate the cumulative path discount factor from t=0 to t=t.
+        # The integration is optimised by being is vectorised and 'cumulative'.
+        # By cumulative, we only calculate a periods integration once, and store it for future uses.
         sim_dsc_factors = np.full(R.shape, np.nan)
         sim_dsc_factors[0, :] = 1.0
         cumulative_integrated_R = np.full(R.shape, np.nan)
@@ -218,7 +219,8 @@ class HullWhite1Factor:
         # Transform the simulated discount factors to continuously compounded zero rates
         sim_cczrs = -1 * np.log(sim_dsc_factors) / years_grid[:, np.newaxis]
 
-        # Averages - these should align to the discount factor / zero rates term structure
+        # Averages - these should align to the discount factor / zero rates term structure if our discretization is effective.
+        # Note the average must be done over the average discount factors (vs averaging the zero rates in each simulation).  
         avg_sim_dsc_factors = np.mean(sim_dsc_factors, axis=1)
         avg_cczrs = -1 * np.log(avg_sim_dsc_factors) / years_grid
         averages_df = pd.DataFrame({'years': years_grid, 'discount_factor': avg_sim_dsc_factors, 'cczr': avg_cczrs})

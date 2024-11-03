@@ -132,13 +132,13 @@ def generic_market_data_input_cleanup_and_validation(df : pd.DataFrame,
     if 'day_count_basis' not in df.columns:
         day_count_basis = DayCountBasis.default()
         df['day_count_basis'] = day_count_basis.value
-        df['tenor_years'] = year_fraction(df['curve_date'], df['tenor_date'], day_count_basis)
+        df['tenor_years'] = year_frac(df['curve_date'], df['tenor_date'], day_count_basis)
     else:
         df['tenor_years'] = np.nan
         for i,row in df.iterrows():
             day_count_basis = DayCountBasis.from_value(row['day_count_basis'])
             df.at[i,'day_count_basis'] = day_count_basis.value
-            df.at[i,'tenor_years'] = year_fraction(df.at[i,'curve_date'], df.at[i,'tenor_date'], day_count_basis)
+            df.at[i,'tenor_years'] = year_frac(df.at[i,'curve_date'], df.at[i,'tenor_date'], day_count_basis)
         
     df = move_col_after(df, 'day_count_basis', 'tenor_date')
     df = move_col_after(df, 'tenor_years', 'day_count_basis')

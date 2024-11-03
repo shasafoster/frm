@@ -6,6 +6,9 @@
 frm is an in-development python package for quantitative financial pricing and modelling.
 frm uses common 3rd party python packages for scientific computing (numpy, scipy, pandas, numba, matplotlib) and the holidays package.
 
+At this stage, the package is in development and is not yet ready for production use, with the API subject to change.
+We welcome any feedback, suggestions, and contributions.
+
 This package will have a similar function set to Quantlib however we want to make it more *accessible*, *documented*, and *productive* through:
 1. The python (core + 3rd party libaries) implementation
 2. In line academic and industry references to support users own validation and testing
@@ -21,6 +24,7 @@ pip install --upgrade frm
 - Clewlow-Strickland 1-factor simulation
 - Heston parameter calibration to European FX option volatility smile
 - Heston simulation
+- Hull White 1 factor simulation
 
 ## Tests/examples in progress
 - Interest rate swaps pricing

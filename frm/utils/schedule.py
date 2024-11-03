@@ -18,93 +18,6 @@ def set_default(value, default):
     return value
 
 
-# def get_payment_dates(
-#         schedule: pd.DataFrame,
-#         payment_delay: int=0,
-#         roll_convention: RollConvention=RollConvention.MODIFIED_FOLLOWING,
-#         payment_timing: TimingConvention=TimingConvention.IN_ARREARS,
-#         busdaycal: np.busdaycalendar=np.busdaycalendar()
-#     ) -> pd.DatetimeIndex:
-#     """
-#     Calculates payment dates based on a schedule.
-#
-#     Parameters
-#     ----------
-#     schedule : pandas.DataFrame
-#         Pandas DataFrame with date columns 'period_start' and 'period_end'
-#     payment_delay : int, optional
-#         Specifies how many days after period start_date/end_date (if payments are in_advance/in_arrears), the payment is made. The default is 0.
-#     roll_convention: RollConvention, optional
-#         The default is RollConvention.MODIFIED_FOLLOWING.
-#     payment_timing : TimingConvention, optional
-#         Specifies when payments are made. The default is PaymentType.IN_ARREARS.
-#     busdaycal : numpy.busdaycalendar, optional
-#         The default is numpy.busdaycalendar().
-#
-#     Returns
-#     -------
-#     pandas.DatetimeIndex
-#
-#
-#     """
-#
-#     # Add the payment dates
-#     match payment_timing:
-#         case TimingConvention.IN_ARREARS:
-#             dates = schedule['period_end'].to_numpy(dtype='datetime64[D]')
-#         case TimingConvention.IN_ADVANCE:
-#             dates = schedule['period_start'].to_numpy(dtype='datetime64[D]')
-#
-#     dates_np = np.busday_offset(dates, offsets=payment_delay, roll=roll_convention.value, busdaycal=busdaycal)
-#     return pd.DatetimeIndex(dates_np).astype('datetime64[ns]')
-#
-# # include_payment_dates, payment_delay, payment_type, payment_roll_convention
-# # - inherit from schedule: busdaycal
-# # include_fixing_dates, fixing_days_ahead, fixing_type, fixing_roll_convention
-# # - inherit from schedule: busdaycal
-#
-# def get_fixing_dates(
-#         schedule: pd.DataFrame,
-#         fixing_days_ahead: int = 0,
-#         roll_convention: RollConvention = RollConvention.PRECEDING,
-#         fixing_timing: TimingConvention = TimingConvention.IN_ADVANCE,
-#         busdaycal: np.busdaycalendar = np.busdaycalendar()
-# ) -> pd.DatetimeIndex:
-#     """
-#     Calculates fixing dates based on a schedule.
-#
-#     Parameters
-#     ----------
-#     schedule : pandas.DataFrame
-#         Pandas DataFrame with date columns 'period_start' and 'period_end'
-#     fixing_days_ahead : int, optional
-#         Specifies how many days prior to period start_date/end_date (if payments are in_advance/in_arrears), the fixing is made. The default is 0.
-#     roll_convention: RollConvention, optional
-#         The default is RollConvention.MODIFIED_FOLLOWING.
-#     fixing_timing : TimingConvention, optional
-#         Specifies when fixings occur. The default is TimingConvention.IN_ADVANCE.
-#     busdaycal : numpy.busdaycalendar, optional
-#         The default is numpy.busdaycalendar().
-#
-#     Returns
-#     -------
-#     pandas.DatetimeIndex
-#
-#     """
-#
-#     # Add the payment dates
-#     match fixing_timing:
-#         case TimingConvention.IN_ARREARS:
-#             dates = schedule['period_end'].to_numpy(dtype='datetime64[D]')
-#         case TimingConvention.IN_ADVANCE:
-#             dates = schedule['period_start'].to_numpy(dtype='datetime64[D]')
-#
-#     dates_np = np.busday_offset(dates, offsets=-1*fixing_days_ahead, roll=roll_convention.value, busdaycal=busdaycal)
-#     return pd.DatetimeIndex(dates_np).astype('datetime64[ns]')
-
-
-
-
 @dataclass
 class Schedule:
     # Schedule parameters
@@ -303,7 +216,13 @@ def get_schedule(
     if last_cpn_start_date is not None:
         assert start_date <= last_cpn_start_date < end_date
 
-    if first_cpn_end_date == end_date or last_cpn_start_date == start_date or frequency.value == PeriodFrequency.ZERO_COUPON.value:
+
+    if frequency == PeriodFrequency.CDS:
+        pass
+    elif frequency == PeriodFrequency.IMM:
+        pass
+
+    if frequency == PeriodFrequency.ZERO_COUPON or first_cpn_end_date == end_date or last_cpn_start_date == start_date:
         # Function inputs explicitly specify 1 period
         d1, d2 = [start_date], [end_date]
     elif first_cpn_end_date == last_cpn_start_date and first_cpn_end_date is not None and last_cpn_start_date is not None:
@@ -413,7 +332,7 @@ def get_schedule(
                 d1 = [start_date] + d1 + [last_cpn_start_date]
                 d2 = [first_cpn_end_date] + d2 + [end_date]
             elif first_stub_type == StubType.DEFINED_PER_FIRST_CPN_END_DATE and last_stub_type != StubType.DEFINED_PER_LAST_CPN_START_DATE:
-                # Forward generation from from first_cpn_end_date and if long last stub, combine last two periods
+                # Forward generation from first_cpn_end_date and if long last stub, combine last two periods
                 d1, d2 = generate_date_schedule(first_cpn_end_date, end_date, frequency, 'forward', roll_convention, day_roll, roll_user_specified_dates, busdaycal)
                 d1 = [start_date] + d1
                 d2 = [first_cpn_end_date] + d2

@@ -116,6 +116,8 @@ class PeriodFrequency(Enum):
     SEMIANNUAL = 'semiannual'
     ANNUAL = 'annual'
     ZERO_COUPON = 'zerocoupon'
+    CDS = 'cds' # 20th of Mar/Jun/Sep/Dec
+    IMM = 'imm' # 3rd Wednesday of Mar/Jun/Sep/Dec
 
     def __init__(self, value):        
         date_offset_map = {
@@ -126,7 +128,9 @@ class PeriodFrequency(Enum):
             'quarterly': pd.DateOffset(months=3),
             'semiannual': pd.DateOffset(months=6),
             'annual': pd.DateOffset(years=1),
-            'zerocoupon': None
+            'zerocoupon': None, # No date offset for zero coupon
+            'cds': None, # Custom logic
+            'imm': None, # Custom logic
             }
         self.date_offset = date_offset_map[self.value]
 
@@ -228,7 +232,7 @@ class DayRoll(Enum):
         
     
 class RollConvention(Enum):
-    NO_ROLL = 'no_roll'
+    UNADJUSTED = 'unadjusted '
     FOLLOWING = 'following'
     PRECEDING = 'preceding'
     MODIFIED_FOLLOWING = 'modifiedfollowing' # 

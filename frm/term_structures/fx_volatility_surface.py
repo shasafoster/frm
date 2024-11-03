@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 import os
 
+from frm.utils import workday
+
 if __name__ == "__main__":
     os.chdir(os.environ.get('PROJECT_DIR_FRM')) 
 
@@ -17,14 +19,12 @@ from frm.term_structures.fx_helpers import (clean_vol_quotes_column_names,
                                             fx_term_structure_helper,
                                             fx_forward_curve_helper,
                                             interp_fx_forward_curve_df,
-                                            resolve_fx_curve_dates,
                                             validate_ccy_pair,
                                             solve_call_put_quotes_from_strategy_quotes)
 
 from scipy.interpolate import CubicSpline, InterpolatedUnivariateSpline
-from frm.utils.daycount import year_fraction
-from frm.utils.business_day_calendar import get_busdaycal
-from frm.enums.utils import DayCountBasis, CompoundingFrequency
+from frm.utils import year_frac, get_busdaycal, resolve_fx_curve_dates
+from frm.enums import DayCountBasis, CompoundingFrequency
 
 import numpy as np
 import pandas as pd
@@ -122,9 +122,7 @@ class FXVolatilitySurface:
                                                            spot_offset=self.spot_offset,
                                                            busdaycal=self.busdaycal,
                                                            rate_set_date_str='expiry_date')
-            vol_smile_pillar_df['expiry_years'] = year_fraction(start_date=self.curve_date,
-                                                                end_date=vol_smile_pillar_df['expiry_date'],
-                                                                day_count_basis=self.day_count_basis)
+            vol_smile_pillar_df['expiry_years'] = year_frac(self.curve_date, vol_smile_pillar_df['expiry_date'], self.day_count_basis)
             vol_smile_pillar_df = self._add_fx_ir_to_df(vol_smile_pillar_df)
             column_order = ['warnings'] \
                            + (['tenor'] if 'tenor' in vol_smile_pillar_df.columns else []) \
@@ -138,19 +136,16 @@ class FXVolatilitySurface:
         min_expiry = self.vol_smile_pillar_df['expiry_date'].min()
         max_expiry = self.vol_smile_pillar_df['expiry_date'].max()
         expiry_dates = pd.date_range(min_expiry, max_expiry, freq='d')
-        expiry_dates_np = expiry_dates.to_numpy(dtype='datetime64[D]')
-        delivery_dates = np.busday_offset(dates=expiry_dates_np, offsets=self.spot_offset, roll='following', busdaycal=self.busdaycal)
+        delivery_dates = workday(expiry_dates, offset=self.spot_offset, busdaycal=self.busdaycal)
 
-        expiry_years = year_fraction(self.curve_date, expiry_dates, self.day_count_basis)
+        expiry_years = year_frac(self.curve_date, expiry_dates, self.day_count_basis)
 
         vol_smile_daily_df = pd.DataFrame({'expiry_date_daily': expiry_dates,
                                            'delivery_date_daily': delivery_dates,
                                            'expiry_years_daily': expiry_years})
 
         vol_smile_pillar_df = self.vol_smile_pillar_df.copy()
-        vol_smile_pillar_df['expiry_years'] = year_fraction(start_date=self.curve_date,
-                                                            end_date=vol_smile_pillar_df['expiry_date'],
-                                                            day_count_basis=self.day_count_basis)
+        vol_smile_pillar_df['expiry_years'] = year_frac(self.curve_date, vol_smile_pillar_df['expiry_date'],self.day_count_basis)
 
         # Merge to find closest smaller and larger tenors for each target tenor
         lower_pillar = pd.merge_asof(vol_smile_daily_df, vol_smile_pillar_df, left_on='expiry_date_daily',
@@ -402,7 +397,7 @@ class FXVolatilitySurface:
         schedule = pd.DataFrame({
             'fixing_date': fixing_date_grid,
             'delivery_date': delivery_date_grid,
-            'fixing_years': year_fraction(self.curve_date, delivery_date_grid, self.day_count_basis).values,
+            'fixing_years': year_frac(self.curve_date, delivery_date_grid, self.day_count_basis).values,
             'domestic_zero_rates': vol_smile_daily_df['domestic_zero_rate'].values,
             'foreign_zero_rates': vol_smile_daily_df['foreign_zero_rate'].values,
             'fx_forward_rates:': vol_smile_daily_df['fx_forward_rate'].values,
@@ -467,7 +462,7 @@ class FXVolatilitySurface:
         for i, (fixing_date, delivery_date) in enumerate(zip(fixing_date_grid,delivery_date_grid)):
             print(i, fixing_date, delivery_date)
 
-            expiry_years = year_fraction(self.curve_date, fixing_date, self.day_count_basis)
+            expiry_years = year_frac(self.curve_date, fixing_date, self.day_count_basis)
             fx_forward_rate = interp_fx_forward_curve_df(self.fx_forward_curve_df,
                                                          dates=fixing_date,
                                                          date_type='fixing_date').values

@@ -6,11 +6,10 @@ if __name__ == "__main__":
 from enum import Enum
 
 
-class OISCouponCalcMethod(Enum):
+class RFRFixingCalcMethod(Enum):
     DAILY_COMPOUNDED = 'dailycompounded'
     WEIGHTED_AVERAGE = 'weightedaverage'
     SIMPLE_AVERAGE = 'simpleaverage'
-
 
 class TermRate(Enum):
     SIMPLE = 'simple'
