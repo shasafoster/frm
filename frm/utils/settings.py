@@ -1,15 +1,21 @@
 # -*- coding: utf-8 -*-
 import numpy as np
 
+from frm.enums import DayCountBasis
+
 # Global settings
-value_date = None
-include_payments_on_value_date_in_npv = False
-include_months_non_business_days_accrued_interest_if_value_date_is_last_business_day_of_month = False
-limit_accrued_interest_to_unsettled_cashflow = False
-roll_user_specified_dates = False
+VALUE_DATE = None
+INCLUDE_PAYMENTS_ON_VALUE_DATE_IN_NPV  = False
+INCLUDE_MONTHS_NON_BUSINESS_DAYS_ACCRUED_INTEREST_IF_VALUE_DATE_IS_LAST_BUSINESS_DAY_OF_MONTH = False
+LIMIT_ACCRUED_INTEREST_TO_UNSETTLED_CASHFLOW = False
+ROLL_USER_SPECIFIED_DATES  = False
+
+# Day count basis
+REPORTING_DAY_COUNT_BASIS = DayCountBasis._30_360 # For current/non-current splits and cashflow bucketing
+DATE2YEARFRAC_DAY_COUNT_BASIS = DayCountBasis.ACT_ACT #
 
 # Interpolation methods
-zero_curve_interpolation_method = 'linear_on_log_of_discount_factors'
+ZERO_CURVE_INTERPOLATION_METHOD  = 'linear_on_log_of_discount_factors'
 # add a few more methods
 # - cubic / smoothed spline on ln of discount factors
 # - cubic / smoothed  spline on zero rates
@@ -24,11 +30,11 @@ zero_curve_interpolation_method = 'linear_on_log_of_discount_factors'
 # Method of calculating greeks. (analycal, bump and reprice)
 
 
-inflation_forward_interpolation_method = 'linear' # 'exponential'
+INFLATION_FORWARD_INTERPOLATION_METHOD  = 'linear' # 'exponential'
 
 
 # Lyashenko, A., & Mercurio, F. (2019). Looking Forward to Backward-Looking Rates: A Modeling Framework for Term Rates Replacing LIBOR. SSRN Electronic Journal. doi:10.2139/ssrn.3330240
-rfr_optionlet_expiry_method = ['date_of_last_fixing','3rd_way_through_period']
+RFR_OPTIONLET_EXPIRY_METHOD = ['date_of_last_fixing','3rd_way_through_period']
 
 # Swaption
 # Cash settlement method - 'market default annuity' or 'swap curve annuity'.
@@ -38,8 +44,8 @@ vega_normalisation = +0.01 # +1%
 dv01_adjustment = +0.0001 # +0.01%
 
 # Excel formats
-excel_date_format = '%d-%b-%Y'
-excel_amt_format = '#,##0_-;(#,##0)_-;-_-'
+EXCEL_DATE_FORMAT = '%d-%b-%Y'
+EXCEL_AMT_FORMAT = '#,##0_-;(#,##0)_-;-_-'
 
 
 # Default number of monte carlo paths

@@ -7,15 +7,21 @@ import os
 import pandas as pd
 from typing import Optional, Union
 import warnings
+
+import frm.utils
 from frm.utils import Schedule, get_schedule, day_count, year_frac, get_busdaycal
-from frm.enums import CompoundingFrequency, TermRate, RFRFixingCalcMethod, PeriodFrequency, DayCountBasis
+from frm.enums import CompoundingFrequency, TermRate, RFRFixingCalcMethod, PeriodFrequency, DayCountBasis, ExchangeNotionals
 from frm.term_structures.zero_curve import ZeroCurve
+from frm.term_structures.zero_curve_helpers import discount_factor_from_zero_rate
+from scipy.optimize import root_scalar
+
+
+
 
 if __name__ == "__main__":
     os.chdir(os.environ.get('PROJECT_DIR_FRM'))
 
-
-# I am writing a (python) class to support the valution of generic swap legs and bonds.
+# I am writing a (python) class to support the valuation of generic swap legs and bonds.
 
 # THe key methods for a 'leg' are
 # (i) coupon date schedule → schedule with forward coupon cashflow amount (will be different for each leg type)
@@ -28,9 +34,6 @@ if __name__ == "__main__":
 # Fixed, Zerocoupon
 # FloatTerm, FloatRFR, InflationZC, InflationYoY
 # Each leg type will have a different method for calculating the forward coupon cashflow amount.
-
-# I am not sure whether to have a separate class for each leg type or to have a single class with a leg type attribute.
-# If I have a leg type attribute I will have an if statement in the calculate method to determine the correct calculation.
 
 
 # Swap class
@@ -75,16 +78,12 @@ if __name__ == "__main__":
 # Choice (a) OIS DC Stripping? Requires to have fixed rates for OIS curve if doing a iterative bootstrap solve.
 # For each instrument defining a solve user needs to define
 # (i) if the curve is a forward curve only solve
-# (ii) or fwd and discount curve solve (i.e AONIA, or BBSW 3M under pure IBOR curve)
+# (ii) or fwd and discount curve solve (i.e. AONIA, or BBSW 3M under pure IBOR curve)
 # (iii) or discount curve only solve (for FCB)
 # If it is a forward curve solve, the user needs to the discount curve.
 
 
-class ExchangeNotionals(Enum):
-    START = 'start'
-    END = 'end'
-    BOTH = 'both'
-    NEITHER = 'neither'
+
 
 class PayRcv(Enum):
     PAY = 'pay'
@@ -95,25 +94,6 @@ class PayRcv(Enum):
         return -1 if self == PayRcv.PAY else 1
 
 
-# class LegType(Enum):
-#     FIXED = 'fixed'
-#     ZEROCOUPON = 'zerocoupon'
-#     FLOAT_TERM = 'float'
-#     FLOAT_RFR = 'ois'
-#     INFLATION_ZEROCOUPON = 'zerocoupon_inflation'
-#     INFLATION_YOY = 'zerocoupon_yoy'
-#
-#     def __init__(self, value):
-#         rate_names = {
-#             'fixed': 'fixed_rate',
-#             'float': 'spread',
-#             'ois': 'spread',
-#             'zerocoupon': 'zero_rate',
-#             }
-#         self.rate_name = rate_names[self.value]
-#
-
-
 @dataclass
 class Leg(ABC):
     "Generic class to cover pricing of all types of swap legs and bonds"
@@ -121,88 +101,177 @@ class Leg(ABC):
     # Required parameters
     schedule: Schedule
     discount_curve: Optional[ZeroCurve]
-    pay_rec: Optional[PayRcv]=PayRcv.PAY
+    pay_rcv: Optional[PayRcv]=PayRcv.PAY
     day_count_basis: DayCountBasis=DayCountBasis
 
-    # Notional details, optional
-    notional: Union[float, np.ndarray] = 100e6
-    exchange_notionals: ExchangeNotionals=ExchangeNotionals.BOTH
-
-    # If schedule has a payment delay, interest on a period starts accruing before prior period's payment.
-    cap_accrued_interest_to_unsettled_period: bool=True
+    # Optional parameters
+    notional_ccy: str=None
+    settlement_ccy: str=None
 
 
     @abstractmethod
-    def calc_payment_schedule(self):
+    def calc_coupon_payment(self, coupon_override=None):
         pass
 
-
-    def calc_notional_schedule(self):
-        if np.atleast_1d(self.notional).shape == (1,):
-            self.schedule.df['notional'] = self.notional
-            self.schedule.df['notional_payment'] = 0 # TODO do row diff and set row 0 to 0 .
-
-            column_order = self.schedule.df.columns
-
-            if self.exchange_notionals == ExchangeNotionals.START or self.exchange_notionals == ExchangeNotionals.BOTH:
-                # Prepend a row for the initial notional payment
-                row_data = {'period_years': 0,
-                            'payment_date': self.schedule.df['period_start'].iloc[0],
-                            'notional': self.schedule.df['notional'].iloc[0],
-                            'notional_payment': -1 * self.pay_rec.multiplier * self.notional}
-                self.schedule.df = pd.concat([pd.DataFrame(row_data, index=[0]), self.schedule.df], ignore_index=True)
-
-            if self.exchange_notionals == ExchangeNotionals.END or self.exchange_notionals == ExchangeNotionals.BOTH:
-                # Append a row for the terminal notional payment
-                row_data = {'period_years': 0,
-                            'payment_date': self.schedule.df['period_end'].iloc[-1],
-                            'notional': self.schedule.df['notional'].iloc[-1],
-                            'notional_payment': self.pay_rec.multiplier * self.notional}
-                self.schedule.df = pd.concat([self.schedule.df, pd.DataFrame(row_data, index=[len(self.schedule.df)])], ignore_index=True)
-
-            self.schedule.df = self.schedule.df[column_order]
-            self.schedule.df.reset_index(drop=True, inplace=True)
-
-    def update_discounted_cashflows(self):
-        self.schedule.df['discount_factor'] = self.discount_curve.get_discount_factors(self.schedule.df['payment_date'])
-        self.schedule.df['payment_present_value'] = self.schedule.df['payment'] * self.schedule.df['discount_factor']
-
-
-    def par_solve(self, target_value):
-        # Shared parameter solver
-        # Solve adjustment to to the rate.
-        # Add this adj, to the fixed rate or spread.
-
+    @abstractmethod
+    def _calc_accrued_interest(self):
         pass
 
-
-    def target_solve(self, target_price, target_value):
-        # Shared parameter solver
+    @abstractmethod
+    def _get_solved_field_name(self):
         pass
 
+    def target_solve(self, target_value):
+        solved_value = self._solver_helper(solved_fieldname=self._get_solved_field_name(), target_value=target_value)
+        return solved_value
+
+    def par_solve(self):
+
+        if 'notional_payment_date' not in self.schedule.df.columns:
+            par_value = 0
+        else:
+            if frm.utils.INCLUDE_PAYMENTS_ON_VALUE_DATE_IN_NPV:
+                mask = self.schedule.df['notional_payment_date'] >= frm.utils.VALUE_DATE
+            else:
+                mask = self.schedule.df['notional_payment_date'] > frm.utils.VALUE_DATE
+            # Par value is the outstanding notional payments.
+            par_value = self.schedule.df['notional_payment'][mask].sum()
+
+        solved_value = self._solver_helper(solved_fieldname=self._get_solved_field_name(), target_value=par_value)
+        return solved_value
+
+    def _solver_helper(self, solved_fieldname, target_value):
+        field_original_value = self.schedule.df[solved_fieldname].values.copy()
+
+        def objective_function(overide):
+            return self.calc_dirty_pv(coupon_override=overide) - target_value
+
+        solved_value = np.nan
+        try:
+            bracket = [-0.1, 3] # -10% to 300%
+            solution = root_scalar(objective_function, bracket=bracket, method='brentq')
+            if solution.converged:
+                solved_value = solution.root
+        finally:
+            # Ensure reset, even if the solver fails
+            self.schedule.df[solved_fieldname] = field_original_value
+
+            return solved_value
 
     def calc_accrued_interest(self):
-        # Need to check how is done for ZC - as expected.
-        pass
+        # Leg specific accrued interest calculation
+        accrued_interest = self._calc_accrued_interest()
 
+        # Calculate the unsettled cashflows
+        if frm.utils.INCLUDE_PAYMENTS_ON_VALUE_DATE_IN_NPV:
+            mask = (self.schedule.df['coupon_payment_date'] >= frm.utils.VALUE_DATE) & (self.schedule.df['period_end'] <= frm.utils.VALUE_DATE)
+        else:
+            mask = (self.schedule.df['coupon_payment_date'] > frm.utils.VALUE_DATE) & (self.schedule.df['period_end'] <= frm.utils.VALUE_DATE)
+        if mask.sum() > 1:
+            warnings.warn('Multiple periods found for unsettled cashflow calculation.')
+        unsettled_cashflows = self.schedule.df['coupon_payment'].sum()
 
-    def calc_dirty_pv(self):
-        self.update_discounted_cashflows()
-        return self.schedule.df['payment_present_value'].sum()
+        if frm.utils.LIMIT_ACCRUED_INTEREST_TO_UNSETTLED_CASHFLOW:
+            if unsettled_cashflows > 0:
+                return unsettled_cashflows
+            else:
+                return accrued_interest
+        else:
+            return accrued_interest + unsettled_cashflows
+
+    def _discount_payments(self, prefix=''):
+        payment_date_col = prefix + 'payment_date'
+        discount_factor_col = prefix + 'discount_factor'
+
+        if payment_date_col in self.schedule.df.columns:
+            dates = self.schedule.df[payment_date_col]
+            self.schedule.df[discount_factor_col] = self.discount_curve.get_discount_factors(self.schedule.df[payment_date_col])
+            self.schedule.df.loc[pd.isna(dates),discount_factor_col] = 0.0
+
+        if frm.utils.INCLUDE_PAYMENTS_ON_VALUE_DATE_IN_NPV:
+            mask = self.schedule.df[payment_date_col] < frm.utils.VALUE_DATE
+        else:
+            mask = self.schedule.df[payment_date_col] <= frm.utils.VALUE_DATE
+        self.schedule.df.loc[mask, discount_factor_col] = 0.0
+
+    def calc_dirty_pv(self, coupon_override=None):
+        self.calc_coupon_payment(coupon_override=coupon_override)
+        self.schedule.df['total_payment'] = self.schedule.df['notional_payment'] + self.schedule.df['coupon_payment']
+        self._discount_payments(prefix='notional_')
+        self._discount_payments(prefix='coupon_')
+        self.schedule.df['notional_payment_present_value'] = (self.schedule.df['notional_payment'] *
+                                                               self.schedule.df['notional_discount_factor'])
+        self.schedule.df['coupon_payment_present_value'] = (self.schedule.df['coupon_payment'] *
+                                                            self.schedule.df['coupon_discount_factor'])
+        self.schedule.df['total_payment_present_value'] = (self.schedule.df['notional_payment_present_value'] +
+                                                           self.schedule.df['coupon_payment_present_value'])
+        return self.schedule.df['total_payment_present_value'].sum()
+
+    def calc_clean_pv(self):
+        return self.calc_dirty_pv() - self.calc_accrued_interest()
+
+    def get_current_non_current_split(self, calc_npv=True):
+        if calc_npv:
+            self.calc_dirty_pv()
+
+        current, non_current = 0, 0
+        value_date_plus_one_year = frm.utils.VALUE_DATE + pd.DateOffset(years=1)
+
+        if frm.utils.INCLUDE_PAYMENTS_ON_VALUE_DATE_IN_NPV:
+            current_period_idxs = self.schedule.df['notional_payment_date'] <= value_date_plus_one_year
+        else:
+            current_period_idxs = self.schedule.df['notional_payment_date'] < value_date_plus_one_year
+        current += self.schedule.df['notional_payment_present_value'][current_period_idxs].sum()
+        non_current += self.schedule.df['notional_payment_present_value'][~current_period_idxs].sum()
+
+        if frm.utils.INCLUDE_PAYMENTS_ON_VALUE_DATE_IN_NPV:
+            current_period_idxs = self.schedule.df['coupon_payment_date'] <= value_date_plus_one_year
+        else:
+            current_period_idxs = self.schedule.df['coupon_payment_date'] < value_date_plus_one_year
+        current += self.schedule.df['coupon_payment_present_value'][current_period_idxs].sum()
+        non_current += self.schedule.df['notional_payment_present_value'][~current_period_idxs].sum()
+
+        return current, non_current
+
+    def _bucket_payments_helper(self, buckets, prefix):
+        payment_col = prefix + 'payment'
+        payment_date_col = prefix + 'payment_date'
+
+        l = []
+        if frm.utils.INCLUDE_PAYMENTS_ON_VALUE_DATE_IN_NPV:
+            mask_lower = self.schedule.df[payment_date_col] >= frm.utils.VALUE_DATE
+        else:
+            mask_lower = self.schedule.df[payment_date_col] > frm.utils.VALUE_DATE
+
+        for i,v in enumerate(buckets):
+            upper_pillar = frm.utils.VALUE_DATE + pd.DateOffset(years=v)
+            mask_upper = self.schedule.df[payment_date_col] < (upper_pillar)
+            l.append(self.schedule.df[payment_col][mask_lower & mask_upper].sum())
+            mask_lower = self.schedule.df[payment_date_col] >= upper_pillar
+
+        mask_lower = self.schedule.df[payment_date_col] >= upper_pillar
+        l.append(self.schedule.df[payment_col][mask_lower].sum())
+        index = buckets + (np.inf,)
+
+        return pd.DataFrame(l, index=index, columns=[payment_col])
+
+    def bucket_payments(self, calc_npv=True, buckets=(1,2,3,5)):
+        if calc_npv:
+            self.calc_dirty_pv()
+        coupon_payments_bucketed = self._bucket_payments_helper(buckets, prefix='coupon_')
+        notional_payments_bucketed = self._bucket_payments_helper(buckets, prefix='notional_')
+        combined = pd.concat([coupon_payments_bucketed, notional_payments_bucketed], axis=1)
+        combined['total_payment'] = combined['coupon_payment'] + combined['notional_payment']
+        return combined
 
 
     def calc_dv01(self):
         # Shared DV01 calculation with +/- 100 bps shift
         pass
 
-
     def __post_init__(self):
+        self.schedule.df.loc[:,['notional', 'notional_payment']] = self.schedule.df[['notional', 'notional_payment']] * self.pay_rcv.multiplier
         self.schedule.add_period_length_to_schedule(day_count_basis=self.day_count_basis)
-        self.calc_notional_schedule()
-        #self.calc_cashflow_schedule()
-        #self.schedule.df['total_payment'] = np.nan
-        #self.schedule.df['discount_factor'] = np.nan
-        #self.schedule.df['total_payment_present_value'] = np.nan
 
 
 @dataclass
@@ -211,55 +280,30 @@ class FixedLeg(Leg):
 
     def __post_init__(self):
         super().__post_init__()
+        self.schedule.df['fixed_rate'] = self.fixed_rate
 
-    def calc_payment_schedule(self, solver_override=None):
-        self.schedule.df['fixed_rate'] = self.fixed_rate if solver_override is None else solver_override
-        self.schedule.df['cashflow'] = self.schedule.df['notional'] * self.schedule.df['fixed_rate'] * self.schedule.df['period_years']
-        self.schedule.df['total_payment'] = self.schedule.df['notional_payment'] + self.schedule.df['cashflow']
+    def calc_coupon_payment(self, coupon_override=None):
+        if coupon_override is not None:
+            self.schedule.df['fixed_rate'] = coupon_override
+        self.schedule.df['coupon_payment'] = self.pay_rcv.multiplier * self.schedule.df['notional'] * self.schedule.df['fixed_rate'] * self.schedule.df['period_years']
+        mask = pd.isna(self.schedule.df['coupon_payment_date'])
+        self.schedule.df.loc[mask,'coupon_payment'] = 0.0
 
-    def calc_accrued_interest(self):
-
-        value_date = frm.utils.value_date
-
-        # Calculate the unsettled cashflows
-        if frm.utils.include_payments_on_value_date_in_npv:
-            mask = (self.schedule.df['payment_date'] >= value_date) & (self.schedule.df['period_end'] <= value_date)
-        else:
-            mask = (self.schedule.df['payment_date'] > value_date) & (self.schedule.df['period_end'] <= value_date)
-        if mask.sum() > 1:
-            warnings.warn('Multiple periods found for unsettled cashflow calculation.')
-        unsettled_cashflows = self.schedule.df['cashflow'].sum()
-
-        # Calculate the accrued interest
-        current_period_idxs = (self.schedule.df['period_start'] <= value_date) & (self.schedule.df['period_end'] > value_date)
+    def _calc_accrued_interest(self):
+        current_period_idxs = (self.schedule.df['period_start'] <= frm.utils.VALUE_DATE) & (self.schedule.df['period_end'] > frm.utils.VALUE_DATE)
         if current_period_idxs.sum() > 1:
             warnings.warn('Multiple periods found for accrual interest calculation.')
-        accrued_period_years = year_frac(self.schedule.df['period_start'][current_period_idxs].iloc[0], value_date, day_count_basis=self.day_count_basis)
+        accrued_period_years = year_frac(self.schedule.df['period_start'][current_period_idxs].iloc[0], frm.utils.VALUE_DATE, day_count_basis=self.day_count_basis)
         accrued_interest = (self.schedule.df['notional'][current_period_idxs]
                             * self.schedule.df['fixed_rate'][current_period_idxs]
                             * accrued_period_years).sum()
+        return accrued_interest
 
-        if frm.utils.limit_accrued_interest_to_unsettled_cashflow:
-            if unsettled_cashflows > 0:
-                return unsettled_cashflows
-            else:
-                return accrued_interest
-        else:
-            return accrued_interest + unsettled_cashflows
+    def _get_solved_field_name(self):
+        return 'fixed_rate'
 
 
-class ZerocouponLeg(Leg):
-    zero_rate: float=np.nan
-    compounding_frequency: CompoundingFrequency=CompoundingFrequency.ANNUAL
-    # Ending notional?
-
-    def __post_init__(self):
-        super().__post_init__()
-
-    def calc_cashflow_schedule(self):
-        self.schedule.df['zero_rate'] = self.zero_rate
-
-
+@dataclass
 class FloatTermLeg(Leg):
     spread: float=np.nan
     forward_rate_type: TermRate=TermRate.SIMPLE
@@ -267,36 +311,110 @@ class FloatTermLeg(Leg):
 
     def __post_init__(self):
         super().__post_init__()
+        self.schedule.df[['fixing','spread','coupon_rate']] = np.nan
+        self.schedule.df['spread'] = self.spread
+        #self.calc_notional_schedule(coupon_fields_to_set_to_zero=['fixing','spread','coupon_rate'])
 
-        if self.forward_curve is None:
-            self.forward_curve = self.discount_curve
-
-    def calc_payment_schedule(self):
+    def calc_coupon_payment(self, coupon_override=None):
         self.schedule.df['fixing'] = np.nan
-        self.schedule.df['coupon_rate'] = self.schedule.df['fixing'] + self.spread
-        self.schedule.df['cashflow'] = self.schedule.df['notional'] * self.schedule.df['coupon_rate'] * self.schedule.df['period_years']
-        self.schedule.df['total_payment'] = self.schedule.df['notional_payment'] + self.schedule.df['cashflow']
+        if coupon_override is not None:
+            self.schedule.df['spread'] = coupon_override
+        self.schedule.df['coupon_rate'] = self.schedule.df['fixing'] + self.schedule.df['spread']
+        self.schedule.df['coupon_payment'] = self.schedule.df['notional'] * self.schedule.df['coupon_rate'] * self.schedule.df['period_years']
+        mask = pd.isna(self.schedule.df['coupon_payment_date'])
+        self.schedule.df.loc[mask,'coupon_payment'] = 0.0
+
+    def _calc_accrued_interest(self):
+        current_period_idxs = (self.schedule.df['period_start'] <= frm.utils.VALUE_DATE) & (self.schedule.df['period_end'] > frm.utils.VALUE_DATE)
+        if current_period_idxs.sum() > 1:
+            warnings.warn('Multiple periods found for accrual interest calculation.')
+        accrued_period_years = year_frac(self.schedule.df['period_start'][current_period_idxs].iloc[0], VALUE_DATE, day_count_basis=self.day_count_basis)
+        accrued_interest = (self.schedule.df['notional'][current_period_idxs]
+                            * self.schedule.df['spread'][current_period_idxs]
+                            * accrued_period_years).sum()
+        return accrued_interest
+
+    def _get_solved_field_name(self):
+        return 'spread'
 
 
+@dataclass
 class FloatRFRLeg(Leg):
     spread: float=np.nan
     forward_rate_type: RFRFixingCalcMethod=RFRFixingCalcMethod.DAILY_COMPOUNDED
-    compound_spread: bool=False
+    compound_spread: bool=False # TODO
     forward_curve: Optional[ZeroCurve]=None
 
     def __post_init__(self):
         super().__post_init__()
+        self.schedule.df[['fixing','spread','coupon_rate']] = np.nan
+        self.schedule.df['spread'] = self.spread
+        #self.calc_notional_schedule(coupon_fields_to_set_to_zero=['fixing','spread','coupon_rate'])
 
-        if self.forward_curve is None:
-            self.forward_curve = self.discount_curve
+    def calc_coupon_payment(self, coupon_override=None):
+        self.schedule.df['fixing'] = np.nan # TODO
+        if coupon_override is not None:
+            self.schedule.df['spread'] = coupon_override
+        self.schedule.df['coupon_rate'] = self.schedule.df['fixing'] + self.schedule.df['spread']
+        self.schedule.df['coupon_payment'] = self.schedule.df['notional'] * self.schedule.df['coupon_rate'] * self.schedule.df['period_years']
+        mask = pd.isna(self.schedule.df['coupon_payment_date'])
+        self.schedule.df.loc[mask,'coupon_payment'] = 0.0
 
-    def calc_payment_schedule(self):
-        self.schedule.df['fixing'] = np.nan
-        self.schedule.df['coupon_rate'] = self.schedule.df['fixing'] + self.spread
-        self.schedule.df['cashflow'] = self.schedule.df['notional'] * self.schedule.df['coupon_rate'] * self.schedule.df['period_years']
-        self.schedule.df['total_payment'] = self.schedule.df['cashflow'] + self.schedule.df['notional_payment']
+    def _calc_accrued_interest(self):
+        current_period_idxs = (self.schedule.df['period_start'] <= frm.utils.VALUE_DATE) & (self.schedule.df['period_end'] > frm.utils.VALUE_DATE)
+        if current_period_idxs.sum() > 1:
+            warnings.warn('Multiple periods found for accrual interest calculation.')
+        accrued_period_years = year_frac(self.schedule.df['period_start'][current_period_idxs].iloc[0], frm.utils.VALUE_DATE, day_count_basis=self.day_count_basis)
+        accrued_interest = (self.pay_rcv.multiplier * self.schedule.df['notional'][current_period_idxs]
+                            * self.schedule.df['coupon_rate'][current_period_idxs]
+                            * accrued_period_years).sum()
+        return accrued_interest
+
+    def _get_solved_field_name(self):
+        return 'spread'
 
 
+@dataclass
+class ZerocouponLeg(Leg):
+    zero_rate: float=np.nan
+    compounding_frequency: CompoundingFrequency=CompoundingFrequency.ANNUAL
+    # Ending notional?
+
+    def __post_init__(self):
+        super().__post_init__()
+        self.schedule.df['zero_rate'] = self.zero_rate
+        #self.calc_notional_schedule(coupon_fields_to_set_to_zero=['zero_rate'])
+
+    def calc_coupon_payment(self, coupon_override=None):
+        if coupon_override is not None:
+            self.schedule.df['zero_rate'] = coupon_override
+        multiplier = (1.0 / discount_factor_from_zero_rate(
+            years=self.schedule.df['period_years'],
+            zero_rate=self.schedule.df['zero_rate'],
+            compounding_frequency=self.compounding_frequency)) - 1.0
+        self.schedule.df['coupon_payment'] = self.pay_rcv.multiplier * self.schedule.df['notional'] * multiplier
+        mask = pd.isna(self.schedule.df['coupon_payment_date'])
+        self.schedule.df.loc[mask,'coupon_payment'] = 0.0
+
+    def _calc_accrued_interest(self):
+        current_period_idxs = (self.schedule.df['period_start'] <= frm.utils.VALUE_DATE) & (
+                    self.schedule.df['period_end'] > frm.utils.VALUE_DATE)
+        if current_period_idxs.sum() > 1:
+            warnings.warn('Multiple periods found for accrual interest calculation.')
+        accrued_period_years = year_frac(self.schedule.df['period_start'][current_period_idxs].iloc[0], frm.utils.VALUE_DATE,
+                                         day_count_basis=self.day_count_basis)
+        multiplier = (1.0 / discount_factor_from_zero_rate(
+            years=accrued_period_years,
+            zero_rate=self.schedule.df['zero_rate'],
+            compounding_frequency=self.compounding_frequency)) - 1.0
+        accrued_interest =  self.pay_rcv.multiplier * self.schedule.df['notional'] * multiplier
+        return accrued_interest
+
+    def _get_solved_field_name(self):
+        return 'zero_rate'
+
+
+# TBC at later date.
 class InflationZCLeg(Leg):
     fixing_lag_months: int=2
     initial_fixing: float=np.nan
@@ -304,11 +422,16 @@ class InflationZCLeg(Leg):
     def __post_init__(self):
         super().__post_init__()
 
-    def calc_payment_schedule(self):
-        # Specific implementation for InflationZC leg
+    def calc_coupon_cashflow(self):
         pass
 
+    def _calc_accrued_interest(self):
+        pass
 
+    def _get_solved_field_name(self):
+        return 'final_fixing'
+
+# TBC at later date.
 class InflationYoYLeg(Leg):
     fixing_lag_months: int=2
     initial_fixing: float=np.nan
@@ -317,28 +440,13 @@ class InflationYoYLeg(Leg):
     def __post_init__(self):
         super().__post_init__()
 
-    def calc_payment_schedule(self):
-        # Specific implementation for InflationYoY leg
+    def calc_coupon_cashflow(self):
         pass
 
+    def _calc_accrued_interest(self):
+        pass
 
-#%%
+    def _get_solved_field_name(self):
+        return 'spread'
 
 
-
-fp = 'C:/Users/shasa/Documents/frm_private/tests_private/test_optionlet_support_20240628.xlsm'
-curve_date = pd.Timestamp('2024-06-28')
-busdaycal = get_busdaycal('AUD')
-day_count_basis = DayCountBasis.ACT_365
-
-zero_curve = ZeroCurve(curve_date=curve_date,
-                       data=pd.read_excel(io=fp, sheet_name='DF_3M'),
-                       day_count_basis=day_count_basis,
-                       busdaycal=busdaycal,
-                       interpolation_method='cubic_spline_on_zero_rates')
-
-# Schedule parameters
-schedule = Schedule(start_date=pd.Timestamp('2024-07-01'), end_date=pd.Timestamp('2025-07-01'), frequency=PeriodFrequency.QUARTERLY)
-
-fixed_leg = FixedLeg(schedule=schedule, discount_curve=zero_curve, fixed_rate=0.05, day_count_basis=day_count_basis)
-               

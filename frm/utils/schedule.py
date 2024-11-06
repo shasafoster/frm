@@ -1,16 +1,14 @@
 # -*- coding: utf-8 -*-
 import os
 from dataclasses import dataclass, field
-
-if __name__ == "__main__":
-    os.chdir(os.environ.get('PROJECT_DIR_FRM'))
-    
 import numpy as np
 import pandas as pd
 from typing import List, Tuple, Union
-from frm.enums.utils import RollConvention, TimingConvention, StubType, PeriodFrequency, DayRoll, DayCountBasis
+from frm.enums.utils import RollConvention, TimingConvention, StubType, PeriodFrequency, DayRoll, DayCountBasis, ExchangeNotionals
 from frm.utils.daycount import year_frac, day_count
 
+if __name__ == "__main__":
+    os.chdir(os.environ.get('PROJECT_DIR_FRM'))
 
 def set_default(value, default):
     if pd.isna(value) or value is None:
@@ -32,20 +30,35 @@ class Schedule:
     last_stub_type: StubType = StubType.DEFAULT
     roll_user_specified_dates: bool = False
     busdaycal: np.busdaycalendar = np.busdaycalendar()
-    # Payment date parameters
-    add_payment_dates: bool = True
-    payment_delay: int = 0
-    payment_timing: TimingConvention = TimingConvention.IN_ARREARS
+    # Coupon payment date parameters
+    add_coupon_payment_dates: bool = False
+    coupon_payment_delay: int = 0
+    coupon_payment_timing: TimingConvention = TimingConvention.IN_ARREARS
+    # Notional schedule parameters
+    add_notional_schedule: bool = False
+    notional_amount: float | np.ndarray = 100e6
+    exchange_notionals: ExchangeNotionals = ExchangeNotionals.NEITHER
+    add_notional_payment_dates: bool = False
+    notional_payment_delay: int = 0
+    notional_payment_timing: TimingConvention = TimingConvention.IN_ARREARS
+
     # Fixing date parameters
-    add_fixing_dates: bool = False
-    fixing_days_ahead: int = 0
-    fixing_timing: TimingConvention = TimingConvention.IN_ADVANCE
+    fixing_data_params = None
+    #add_fixing_dates: bool = False
+    #fixing_days_ahead: int = 0
+    #fixing_timing: TimingConvention = TimingConvention.IN_ADVANCE
 
     # The schedule DataFrame is initialized after the object is created
     df: pd.DataFrame = field(init=False)
 
     def __post_init__(self):
         self.generate_schedule()
+
+        if self.add_coupon_payment_dates:
+            self.add_payment_dates_to_schedule(self.coupon_payment_delay, self.coupon_payment_timing, prefix='coupon_')
+
+        if self.add_notional_schedule:
+            self.setup_notional_schedule(self.notional_amount, self.exchange_notionals)
 
     def generate_schedule(self):
         # Generate the schedule DataFrame using the stored parameters
@@ -60,13 +73,7 @@ class Schedule:
             first_stub_type=self.first_stub_type,
             last_stub_type=self.last_stub_type,
             roll_user_specified_dates=self.roll_user_specified_dates,
-            busdaycal=self.busdaycal,
-            add_payment_dates=self.add_payment_dates,
-            payment_delay=self.payment_delay,
-            payment_timing=self.payment_timing,
-            add_fixing_dates=self.add_fixing_dates,
-            fixing_days_ahead=self.fixing_days_ahead,
-            fixing_timing=self.fixing_timing,
+            busdaycal=self.busdaycal
         )
 
     def update_and_regenerate(self, **kwargs):
@@ -86,34 +93,134 @@ class Schedule:
         self.generate_schedule()
 
 
+    def add_payment_dates_to_schedule(self,
+                                      payment_delay: int=0,
+                                      payment_timing: TimingConvention = TimingConvention.IN_ARREARS,
+                                      prefix: str=''):
+        """
+        Add payment dates to the schedule DataFrame.
+
+        Parameters
+        ----------
+        payment_delay : int
+            Specifies how many days after period start_date/end_date (if payments are in_advance/in_arrears), the payment is made. The default is 0.
+        payment_timing : TimingConvention
+            Specifies when payments are made. The default is TimingConvention.IN_ARREARS.
+        prefix: str
+            Prefix to add to the payment_date column name. The default is ''.
+        """
+        match payment_timing:
+            case TimingConvention.IN_ARREARS:
+                dates = self.df['period_end'].to_numpy(dtype='datetime64[D]')
+            case TimingConvention.IN_ADVANCE:
+                dates = self.df['period_start'].to_numpy(dtype='datetime64[D]')
+            case _:
+                raise ValueError(f"Invalid payment_timing {payment_timing}")
+
+        dates_np = np.busday_offset(dates, offsets=payment_delay, roll=self.roll_convention.value, busdaycal=self.busdaycal)
+        self.df[prefix + 'payment_date'] = pd.DatetimeIndex(dates_np).astype('datetime64[ns]')
+
+
+    def add_fixing_dates_to_schedule(self,
+                                     fixing_days_ahead: int=0,
+                                     fixing_timing: TimingConvention = TimingConvention.IN_ADVANCE,
+                                     roll_convention: RollConvention=None):
+
+        if roll_convention is None:
+            roll_convention = self.roll_convention
+
+        match fixing_timing:
+            case TimingConvention.IN_ARREARS:
+                dates = self.df['period_end'].to_numpy(dtype='datetime64[D]')
+            case TimingConvention.IN_ADVANCE:
+                dates = self.df['period_start'].to_numpy(dtype='datetime64[D]')
+            case _:
+                raise ValueError(f"Invalid fixing_timing {fixing_timing}")
+
+        dates_np = np.busday_offset(dates, offsets=-1 * fixing_days_ahead, roll=roll_convention.value, busdaycal=self.busdaycal)
+        self.df.instert(0, 'fixing_date', pd.DatetimeIndex(dates_np).astype('datetime64[ns]'))
+
+
+    def setup_notional_schedule(self,
+                                notional_amount: float | np.ndarray,
+                                exchange_notionals: ExchangeNotionals=ExchangeNotionals.NEITHER,
+                                initial_notional_exchange_date=None):
+
+        notional_amount = np.atleast_1d(notional_amount)
+        if notional_amount.shape == (1,):
+            self.df['notional_payment'] = 0
+            self.df['notional'] = notional_amount[0]
+        elif notional_amount.shape == self.df.shape[0]:
+            self.df['notional'] = notional_amount
+            self.df['notional_payment'] = notional_amount[:-1] - notional_amount[1:]
+        else:
+            raise ValueError("Invalid notional_amount shape")
+
+        self.add_payment_dates_to_schedule(self.notional_payment_delay, self.notional_payment_timing,
+                                           prefix='notional_')
+
+        if exchange_notionals == ExchangeNotionals.START or exchange_notionals == ExchangeNotionals.BOTH:
+            # Add initial notional exchange period
+            self._add_initial_notional_exchange_period_to_schedule(initial_notional_exchange_date)
+            self.df.loc[self.df.index[0], 'notional'] = 0
+            self.df.loc[self.df.index[0], 'notional_payment'] = -1 * notional_amount[0]
+
+        if exchange_notionals == ExchangeNotionals.END or exchange_notionals == ExchangeNotionals.BOTH:
+            # Add final notional exchange period
+            self.df.loc[self.df.index[-1], 'notional_payment'] = notional_amount[-1]
+
+
+    def _add_initial_notional_exchange_period_to_schedule(self, initial_notional_exchange_date=None):
+        #assert 'period_years' in self.df.columns
+        assert 'notional_payment_date' in self.df.columns
+        column_order = self.df.columns
+
+        if initial_notional_exchange_date is None:
+            initial_notional_exchange_date = self.df['period_start'].iloc[0]
+
+        row_data = {'notional_payment_date': initial_notional_exchange_date}
+        self.df = pd.concat([pd.DataFrame(row_data, index=[0]), self.df], ignore_index=True)
+
+        self.df = self.df[column_order]
+        self.df.reset_index(drop=True, inplace=True)
+
+
     def add_period_length_to_schedule(self, day_count_basis: DayCountBasis):
-        self.df = add_period_length_to_schedule(self.df, day_count_basis)
+        """ Add the period length in days and years to the schedule DataFrame, always replacing existing columns"""
+
+        # Remove 'period_days' and 'period_years' if they already exist
+        if 'period_days' in self.df.columns:
+            self.df.pop('period_days')
+        if 'period_years' in self.df.columns:
+            self.df.pop('period_years')
+
+        # Get the column index for 'period_end'
+        col_index = self.df.columns.get_loc('period_end')
+
+        # Insert 'period_days' and 'period_years' at the specified positions
+        mask = np.logical_and(self.df['period_start'].notnull(), self.df['period_end'].notnull())
+        days = np.full(self.df.shape[0], np.nan)
+        years = np.full(self.df.shape[0], np.nan)
+        days[mask] = day_count(self.df['period_start'][mask], self.df['period_end'][mask], day_count_basis)
+        years[mask] = year_frac(self.df['period_start'][mask], self.df['period_end'][mask], day_count_basis)
+        self.df.insert(loc=col_index + 1, column='period_days',value=days)
+        self.df.insert(loc=col_index + 2, column='period_years', value=years)
 
 
 
-def add_period_length_to_schedule(schedule_df: pd.DataFrame, day_count_basis: DayCountBasis):
-    """ Add the period length in days and years to the schedule DataFrame, always replacing existing columns"""
 
-    # Remove 'period_days' and 'period_years' if they already exist
-    if 'period_days' in schedule_df.columns:
-        schedule_df.pop('period_days')
-    if 'period_years' in schedule_df.columns:
-        schedule_df.pop('period_years')
+def variable_notional_helper():
+    # TODO
+    #  1. Increasing or decreasing amount or percentage
+    #  2. Annuity (custom fixed rate or floating rate) in order to get fixed total payments (coupon + notional) over the life
+    pass
 
-    # Get the column index for 'period_end'
-    col_index = schedule_df.columns.get_loc('period_end')
 
-    # Insert 'period_days' and 'period_years' at the specified positions
-    schedule_df.insert(loc=col_index + 1, column='period_days',
-                       value=day_count(schedule_df['period_start'], schedule_df['period_end'], day_count_basis))
-    schedule_df.insert(loc=col_index + 2, column='period_years',
-                       value=year_frac(schedule_df['period_start'], schedule_df['period_end'], day_count_basis))
 
-    return schedule_df
+
 
 
 def get_schedule(
-        # Schedule parameters
         start_date: [pd.Timestamp, np.datetime64],
         end_date: [pd.Timestamp, np.datetime64],
         frequency: PeriodFrequency,
@@ -125,14 +232,6 @@ def get_schedule(
         last_stub_type: StubType=StubType.DEFAULT,
         roll_user_specified_dates: bool=False,
         busdaycal: np.busdaycalendar=np.busdaycalendar(),
-        # Payment date parameters
-        add_payment_dates: bool=True,
-        payment_delay: int=0,
-        payment_timing: TimingConvention = TimingConvention.IN_ARREARS,
-        # Fixing date parameters
-        add_fixing_dates: bool=False,
-        fixing_days_ahead: int=0,
-        fixing_timing: TimingConvention = TimingConvention.IN_ADVANCE,
         ) -> pd.DataFrame:
     """
     Create a schedule. Optional detailed stub logic.
@@ -161,18 +260,6 @@ def get_schedule(
         Boolean flag for whether to roll (per business day calendar and roll convention) the user specified dates (start_date, end_date, first_cpn_end_date, last_cpn_start_date)
     busdaycal : np.busdaycalendar
         Specifies the business day calendar to observe.
-    add_payment_dates : bool
-        Boolean flag for whether to add payment dates to the schedule. The default is True.
-    payment_delay : int
-        Specifies how many days after period start_date/end_date (if payments are in_advance/in_arrears), the payment is made. The default is 0.
-    payment_timing : TimingConvention
-        Specifies when payments are made. The default is TimingConvention.IN_ARREARS.
-    add_fixing_dates : bool
-        Boolean flag for whether to add fixing dates to the schedule. The default is False.
-    fixing_days_ahead : int
-        Specifies how many days prior to period start_date/end_date (if payments are in_advance/in_arrears), the fixing is made. The default is 0.
-    fixing_timing : TimingConvention
-        Specifies when fixings occur. The default is TimingConvention.IN_ADVANCE
 
     Returns
     -------
@@ -184,19 +271,6 @@ def get_schedule(
             - payment_date (if add_payment_dates=True)
     """
 
-    # Set defaults for optional parameters
-    #first_cpn_end_date = set_default(first_cpn_end_date, None)
-    #last_cpn_start_date = set_default(last_cpn_start_date, None)
-
-    #busdaycal = set_default(busdaycal, np.busdaycalendar())
-    #roll_user_specified_dates = set_default(roll_user_specified_dates, False)
-
-    # Clean and validate function parameters
-    #roll_convention = RollConvention.from_value(roll_convention)
-    #day_roll = DayRoll.from_value(day_roll)
-    #first_stub_type = StubType.from_value(first_stub_type)
-    #last_stub_type = StubType.from_value(last_stub_type)
-
     start_date, end_date, first_cpn_end_date, last_cpn_start_date = \
         [pd.Timestamp(d) if isinstance(d, np.datetime64) else d for d in \
          [start_date, end_date, first_cpn_end_date, last_cpn_start_date]]
@@ -204,11 +278,6 @@ def get_schedule(
     # Input validation
     if start_date >= end_date:
         raise ValueError(f"start_date {start_date} must be before end_date {end_date}")
-
-    #if PeriodFrequency.is_valid(frequency):
-    #    freq_obj = PeriodFrequency.from_value(frequency)
-    #else:
-    #    raise ValueError(f"Invalid 'frequency' {frequency}")
 
     if first_cpn_end_date is not None:
         assert start_date < first_cpn_end_date <= end_date
@@ -366,33 +435,7 @@ def get_schedule(
                 else:
                     raise ValueError("Unexpected logic branch - please raise GitHub issue")
 
-
     schedule = pd.DataFrame({'period_start': d1, 'period_end': d2})
-
-    if add_fixing_dates:
-        match fixing_timing:
-            case TimingConvention.IN_ARREARS:
-                dates = schedule['period_end'].to_numpy(dtype='datetime64[D]')
-            case TimingConvention.IN_ADVANCE:
-                dates = schedule['period_start'].to_numpy(dtype='datetime64[D]')
-            case _:
-                raise ValueError(f"Invalid fixing_timing {fixing_timing}")
-
-        dates_np = np.busday_offset(dates, offsets=-1 * fixing_days_ahead, roll=roll_convention.value, busdaycal=busdaycal)
-        schedule.insert(0, 'fixing_date', pd.DatetimeIndex(dates_np).astype('datetime64[ns]'))
-
-    if add_payment_dates:
-        match payment_timing:
-            case TimingConvention.IN_ARREARS:
-                dates = schedule['period_end'].to_numpy(dtype='datetime64[D]')
-            case TimingConvention.IN_ADVANCE:
-                dates = schedule['period_start'].to_numpy(dtype='datetime64[D]')
-            case _:
-                raise ValueError(f"Invalid payment_timing {payment_timing}")
-
-        dates_np = np.busday_offset(dates, offsets=payment_delay, roll=roll_convention.value, busdaycal=busdaycal)
-        schedule['payment_date'] = pd.DatetimeIndex(dates_np).astype('datetime64[ns]')
-
     return schedule
 
 

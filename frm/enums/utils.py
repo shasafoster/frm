@@ -294,6 +294,11 @@ class StubType(Enum):
     def from_value(cls, value):
         return get_enum_member(cls, value)
         
-        
+
+class ExchangeNotionals(Enum):
+    START = 'start'
+    END = 'end'
+    BOTH = 'both'
+    NEITHER = 'neither'
 
 
