@@ -67,7 +67,7 @@ df['swap_termination_date'] = np.busday_offset(
     dates=(df['swap_effective_date'] + df['swap_term'].apply(tenor_to_date_offset)).to_numpy().astype('datetime64[D]'),
     offsets=settlement_delay, roll='following', busdaycal=busdaycal)
 
-df['expiry_years'] = year_fraction(curve_date, df['expiry_date'], day_count_basis)
+df['expiry_years'] = year_frac(curve_date, df['expiry_date'], day_count_basis)
 
 for i, row in df.iterrows():
     df.loc[i,'frequency'] = PeriodFrequency.from_value(row['frequency'])

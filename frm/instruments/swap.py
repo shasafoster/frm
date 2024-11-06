@@ -116,3 +116,4 @@ class Swap(ABC):
 
 
 # Potentially, create bunch of classes for different types of swaps that fill in default values (i.e ZC swap, Fixed/Float swap, etc)
+# Then, for common quote types, can define all the "non-quote" parameters in the class and then pass in the quote parameters.

@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import re
 
-from frm.utils.daycount import year_fraction
+from frm.utils.daycount import year_frac
 from frm.enums.utils import DayCountBasis, PeriodFrequency
 from frm.enums.term_structures import TermRate
 from frm.utils.tenor import clean_tenor, tenor_to_date_offset
@@ -52,8 +52,8 @@ def process_capfloor_quotes(
         vol_ln_df.at[i, 'last_optionlet_expiry_date'] = np.busday_offset(last_optionlet_expiry_date_np, offsets=0, roll='following',busdaycal=busdaycal)
         vol_ln_df.at[i, 'termination_date'] = np.busday_offset(termination_date_date_np, offsets=0, roll='following', busdaycal=busdaycal)
 
-    vol_ln_df['term_years'] = year_fraction(vol_ln_df['effective_date'], vol_ln_df['termination_date'], day_count_basis)
-    vol_ln_df['last_optionlet_expiry_years'] = year_fraction(curve_date, vol_ln_df['last_optionlet_expiry_date'], day_count_basis)
+    vol_ln_df['term_years'] = year_frac(vol_ln_df['effective_date'], vol_ln_df['termination_date'], day_count_basis)
+    vol_ln_df['last_optionlet_expiry_years'] = year_frac(curve_date, vol_ln_df['last_optionlet_expiry_date'], day_count_basis)
     vol_ln_df['F'] = np.nan
     vol_ln_df['ln_shift'] = ln_shift
 
@@ -78,10 +78,10 @@ def process_capfloor_quotes(
                                 end_date=termination_date,
                                 frequency=PeriodFrequency.QUARTERLY,
                                 busdaycal=busdaycal)
-    optionlet_df['coupon_term'] = year_fraction(optionlet_df['period_start'], optionlet_df['period_end'], day_count_basis)
+    optionlet_df['coupon_term'] = year_frac(optionlet_df['period_start'], optionlet_df['period_end'], day_count_basis)
     optionlet_df['discount_factors'] = zero_curve.get_discount_factors(dates=optionlet_df['payment_dates'])
     optionlet_df['annuity_factor'] = optionlet_df['coupon_term'] * optionlet_df['discount_factors']
-    optionlet_df['expiry_years'] = year_fraction(curve_date, optionlet_df['period_start'], day_count_basis)
+    optionlet_df['expiry_years'] = year_frac(curve_date, optionlet_df['period_start'], day_count_basis)
     optionlet_df['F'] = zero_curve.get_forward_rates(period_start=optionlet_df['period_start'],
                                                      period_end=optionlet_df['period_end'],
                                                      forward_rate_type=TermRate.SIMPLE)

@@ -206,7 +206,35 @@ class Schedule:
         self.df.insert(loc=col_index + 1, column='period_days',value=days)
         self.df.insert(loc=col_index + 2, column='period_years', value=years)
 
+    def copy(self):
+        # Create a new instance of Schedule - refresh with ChatGPT if main class changes
+        new_schedule = Schedule(
+            start_date=self.start_date,
+            end_date=self.end_date,
+            frequency=self.frequency,
+            roll_convention=self.roll_convention,
+            day_roll=self.day_roll,
+            first_cpn_end_date=self.first_cpn_end_date,
+            last_cpn_start_date=self.last_cpn_start_date,
+            first_stub_type=self.first_stub_type,
+            last_stub_type=self.last_stub_type,
+            roll_user_specified_dates=self.roll_user_specified_dates,
+            busdaycal=np.busdaycalendar(weekmask=self.busdaycal.weekmask, holidays=self.busdaycal.holidays),
+            add_coupon_payment_dates=self.add_coupon_payment_dates,
+            coupon_payment_delay=self.coupon_payment_delay,
+            coupon_payment_timing=self.coupon_payment_timing,
+            add_notional_schedule=self.add_notional_schedule,
+            notional_amount=self.notional_amount,
+            exchange_notionals=self.exchange_notionals,
+            add_notional_payment_dates=self.add_notional_payment_dates,
+            notional_payment_delay=self.notional_payment_delay,
+            notional_payment_timing=self.notional_payment_timing,
+        )
 
+        # Deep copy of the schedule DataFrame
+        new_schedule.df = self.df.copy(deep=True)
+
+        return new_schedule
 
 
 def variable_notional_helper():
