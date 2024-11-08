@@ -12,7 +12,7 @@ ROLL_USER_SPECIFIED_DATES  = False
 
 # Day count basis
 REPORTING_DAY_COUNT_BASIS = DayCountBasis._30_360 # For current/non-current splits and cashflow bucketing
-DATE2YEARFRAC_DAY_COUNT_BASIS = DayCountBasis.ACT_ACT #
+DATE2YEARFRAC_DAY_COUNT_BASIS = DayCountBasis.ACT_365 #
 
 # Interpolation methods
 ZERO_CURVE_INTERPOLATION_METHOD  = 'linear_on_log_of_discount_factors'
