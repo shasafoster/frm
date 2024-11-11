@@ -82,12 +82,11 @@ def tenor_to_date_offset(tenor: str) -> pd.DateOffset:
 
 def workday(dates: [pd.Timestamp, pd.DatetimeIndex],
             offset: int,
-            busdaycal: np.busdaycalendar) -> pd.Timestamp:
+            cal: np.busdaycalendar) -> pd.Timestamp:
 
     # Convert to datetime64[D] to use in np.busday_offset
     dates = dates.to_numpy().astype('datetime64[D]')
-
-    return np.busday_offset(dates=dates, offsets=offset, roll='following', busdaycal=busdaycal)
+    return np.busday_offset(dates=dates, offsets=offset, roll='following', busdaycal=cal)
 
 
 
@@ -107,7 +106,7 @@ def check_day_offset_consistency(
 def calc_implied_business_day_offset(
         date: pd.Timestamp,
         offset_date: pd.Timestamp,
-        busdaycal: np.busdaycalendar) -> int:
+        cal: np.busdaycalendar) -> int:
     assert date >= offset_date, "date must be greater than or equal to offset_date"
 
     offset = 0
@@ -115,23 +114,23 @@ def calc_implied_business_day_offset(
         offset += 1
         date += pd.DateOffset(days=1)
         date_np = date.to_numpy().astype('datetime64[D]')
-        date = np.busday_offset(date_np, offsets=0, roll='following', busdaycal=busdaycal)
+        date = np.busday_offset(date_np, offsets=0, roll='following', busdaycal=cal)
     return offset
 
 
 def resolve_fx_curve_dates(
         ccy_pair: str,
-        busdaycal: np.busdaycalendar,
+        cal: np.busdaycalendar,
         curve_date: Optional[pd.Timestamp] = None,
         spot_offset: Optional[int] = None,
         spot_date: Optional[pd.Timestamp] = None):
 
     if curve_date is not None and spot_date is not None and spot_offset is not None:
         # All three dates are specified, check for consistency
-        check_day_offset_consistency(date=curve_date, offset_date=spot_date, offset=spot_offset, busdaycal=busdaycal)
+        check_day_offset_consistency(date=curve_date, offset_date=spot_date, offset=spot_offset, busdaycal=cal)
     elif spot_offset is None and curve_date is not None and spot_date is not None:
         # Spot offset is not specified, calculate it based on curve date and spot date
-        spot_offset = calc_implied_business_day_offset(curve_date, spot_date, busdaycal)
+        spot_offset = calc_implied_business_day_offset(curve_date, spot_date, cal)
     else:
         # Only one of {curve_date, spot_date} are specified, get spot_offset per market convention from ccy_pair
         spot_offset = get_fx_spot_day_offset(ccy_pair)
@@ -139,11 +138,11 @@ def resolve_fx_curve_dates(
     if spot_date is None:
         curve_date_np = curve_date.to_numpy().astype('datetime64[D]')
         spot_date = pd.Timestamp(
-            np.busday_offset(curve_date_np, offsets=spot_offset, roll='following', busdaycal=busdaycal))
+            np.busday_offset(curve_date_np, offsets=spot_offset, roll='following', busdaycal=cal))
     elif curve_date is None:
         spot_date_np = spot_date.to_numpy().astype('datetime64[D]')
         curve_date = pd.Timestamp(
-            np.busday_offset(spot_date_np, offsets=-spot_offset, roll='preceding', busdaycal=busdaycal))
+            np.busday_offset(spot_date_np, offsets=-spot_offset, roll='preceding', busdaycal=cal))
 
     return curve_date, spot_offset, spot_date
 

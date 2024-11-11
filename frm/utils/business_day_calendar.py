@@ -7,11 +7,13 @@ import holidays
 import numpy as np
 import pandas as pd
 import dill
+import openpyxl
 
+# Set the base directory to the 'frm/utils' directory relative to the current module location
+utils_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '.'))
+file_path_locale_holiday = os.path.join(utils_dir, 'LOCALE_HOLIDAY.pkl')
+file_path_ccy_holiday = os.path.join(utils_dir, 'CCY_HOLIDAY.pkl')
 
-script_dir = os.path.dirname(os.path.abspath(__file__))
-file_path_locale_holiday = os.path.join(script_dir, 'LOCALE_HOLIDAY.pkl') 
-file_path_ccy_holiday = os.path.join(script_dir, 'CCY_HOLIDAY.pkl')
 with open(file_path_locale_holiday, 'rb') as f:
     LOCALE_HOLIDAY = dill.load(f)
 
@@ -94,6 +96,7 @@ if __name__ == "__main__":
         'IN-MUMBAI': holidays.IN(subdiv='MH', categories=['public'], years=years),
         'IL-TEL_AVIV': holidays.IL(categories=['public'], years=years),
         'IS-REYKJAVIK': holidays.IS(categories=['public'], years=years),
+        'JP-TOYKO': holidays.JP(categories=['public'], years=years),
         'MY-KUALA_LUMPUR': holidays.MY(subdiv='KUL', categories=['public'], years=years),
         'MX-MEXICO_CITY': holidays.MX(categories=['public'], years=years),
         'NO-OSLO': holidays.NO(categories=['public'], years=years),
@@ -134,6 +137,7 @@ if __name__ == "__main__":
         'INR': holidays.IN(subdiv='MH', categories=['public'], years=years),
         'ILS': holidays.IL(categories=['public'], years=years),
         'ISK': holidays.IS(categories=['public'], years=years),
+        'JPY': holidays.JP(categories=['public'], years=years),
         'MYR': holidays.MY(subdiv='KUL', categories=['public'], years=years),
         'MXN': holidays.MX(categories=['public'], years=years),
         'NOK': holidays.NO(categories=['public'], years=years),
@@ -162,12 +166,11 @@ if __name__ == "__main__":
     with open(file_path_ccy_holiday, 'wb') as f:
         dill.dump(CCY_HOLIDAY, f)
         
-# Create code for static holidays definition
+
 if __name__ == "__main__":
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    sys.path.append(current_dir)
-    
-    df = pd.read_excel(current_dir + "\\calendar_map.xlsx", usecols=range(6))
+
+    # Create code for static holidays definition
+    df = pd.read_excel(utils_dir + "\\calendar_map.xlsx", usecols=range(6))
     holiday_dict = {}
     holiday_dict_str = "LOCALE_HOLIDAY = dict(sorted({\n"
     ccy_holiday_dict = {}
@@ -217,3 +220,51 @@ if __name__ == "__main__":
 
 
 
+
+    # Initialize Excel writer
+    # Prepare the output file path
+    output_path = os.path.join(utils_dir, 'currency_holidays.xlsx')
+
+    # Create a new workbook and select the active worksheet
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'holidays'
+
+    # Define column mappings for each currency
+    col_start = 1  # Initial column start in openpyxl (1-based index)
+
+    for ccy in ['aud', 'eur', 'gbp', 'jpy', 'nzd', 'usd']:
+        # Prepare data for each currency
+        dates = list(CCY_HOLIDAY[ccy.upper()].keys())
+        holiday_name = list(CCY_HOLIDAY[ccy.upper()].values())
+
+        # Create a DataFrame with currency-specific columns
+        holiday_df = pd.DataFrame({
+            f'{ccy.upper()}_date': dates,
+            f'{ccy.upper()}_holiday_name': holiday_name
+        })
+
+        # Sort the DataFrame by date
+        holiday_df.sort_values(by=f'{ccy.upper()}_date', inplace=True)
+        holiday_df.reset_index(drop=True, inplace=True)
+
+        # Write headers
+        ws.cell(row=1, column=col_start, value=f'{ccy.upper()}_date')
+        ws.cell(row=1, column=col_start + 1, value=f'{ccy.upper()}_holiday_name')
+
+        # Write sorted data
+        for i, row in holiday_df.iterrows():
+            ws.cell(row=i + 2, column=col_start, value=row[f'{ccy.upper()}_date'])
+            ws.cell(row=i + 2, column=col_start + 1, value=row[f'{ccy.upper()}_holiday_name'])
+
+        # Move to the next pair of columns for the next currency
+        col_start += 2
+
+    # Save the workbook
+    wb.save(output_path)
+
+    # Define the output path
+    #output_path = os.path.join(utils_dir, 'currency_holidays.xlsx')
+
+    # Write to an Excel file, starting from column A
+    #combined_df.to_excel(output_path, index=False, sheet_name='Currency Holidays')

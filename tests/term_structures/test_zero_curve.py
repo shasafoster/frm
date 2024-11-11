@@ -12,7 +12,7 @@ if __name__ == "__main__":
 
 import pandas as pd
 from frm.term_structures.zero_curve import ZeroCurve
-from frm.enums import CompoundingFrequency, TermRate
+from frm.enums import CompoundingFreq, TermRate
 
 
 def test_construction_from_discount_factors():
@@ -43,7 +43,7 @@ def test_construction_from_discount_factors():
                         [pd.Timestamp(2071,1,4),0.410],
                         [pd.Timestamp(2081,1,6),0.354]],columns=['date','discount_factor'])
     
-    zc = ZeroCurve(curve_date=pd.Timestamp(2021,9,30),data=df)
+    zc = ZeroCurve(curve_date=pd.Timestamp(2021,9,30),pillar_df=df, interp_method='linear_on_ln_discount')
     for i,row in df.iterrows():
         assert abs(row['discount_factor'] - zc.get_discount_factors(row['date'])[0]) < epsilon
   
@@ -56,17 +56,17 @@ def test_construction_from_zero_rates():
                        [pd.Timestamp(2023,1,1), 0.05],
                        [pd.Timestamp(2024,1,1), 0.05],
                        [pd.Timestamp(2025,1,1), 0.05]],columns=['date','zero_rate'])
-    zc = ZeroCurve(curve_date=pd.Timestamp(2021, 12, 31),data=df, compounding_frequency=CompoundingFrequency.CONTINUOUS)
+    zc = ZeroCurve(curve_date=pd.Timestamp(2021, 12, 31),pillar_df=df, compounding_freq=CompoundingFreq.CONTINUOUS, interp_method='linear_on_ln_discount')
 
     # Test zero rate
     date = pd.Timestamp(2022, 12, 31)
-    simple      = zc.get_zero_rates(CompoundingFrequency.SIMPLE, dates=date)
-    continuous  = zc.get_zero_rates(CompoundingFrequency.CONTINUOUS, dates=date)
-    daily       = zc.get_zero_rates(CompoundingFrequency.DAILY, dates=date)
-    monthly     = zc.get_zero_rates(CompoundingFrequency.MONTHLY, dates=date)
-    quarterly   = zc.get_zero_rates(CompoundingFrequency.QUARTERLY, dates=date)
-    semi_annual = zc.get_zero_rates(CompoundingFrequency.SEMIANNUAL, dates=date)
-    annual      = zc.get_zero_rates(CompoundingFrequency.ANNUAL, dates=date)
+    simple      = zc.get_zero_rates(CompoundingFreq.SIMPLE, dates=date)
+    continuous  = zc.get_zero_rates(CompoundingFreq.CONTINUOUS, dates=date)
+    daily       = zc.get_zero_rates(CompoundingFreq.DAILY, dates=date)
+    monthly     = zc.get_zero_rates(CompoundingFreq.MONTHLY, dates=date)
+    quarterly   = zc.get_zero_rates(CompoundingFreq.QUARTERLY, dates=date)
+    semi_annual = zc.get_zero_rates(CompoundingFreq.SEMIANNUAL, dates=date)
+    annual      = zc.get_zero_rates(CompoundingFreq.ANNUAL, dates=date)
 
     assert abs(simple[0]      - 0.05127109637602412) < epsilon
     assert abs(continuous[0]  - 0.05) < epsilon
@@ -95,14 +95,56 @@ def test_construction_from_zero_rates():
                        [pd.Timestamp(2022,1,4), 0.0033946],
                        [pd.Timestamp(2022,1,11),0.0042867],
                        [pd.Timestamp(2022,4,5), 0.0096205]],columns=['date','zero_rate'])
-    zc = ZeroCurve(curve_date=pd.Timestamp(2021,12,31),data=df, compounding_frequency=CompoundingFrequency.ANNUAL)
+    zc = ZeroCurve(curve_date=pd.Timestamp(2021,12,31),pillar_df=df, compounding_freq=CompoundingFreq.ANNUAL, interp_method='linear_on_ln_discount')
 
     for i,row in df.iterrows():
-        assert abs(row['zero_rate'] - zc.get_zero_rates(CompoundingFrequency.ANNUAL, row['date'])[0]) < epsilon
+        assert abs(row['zero_rate'] - zc.get_zero_rates(CompoundingFreq.ANNUAL, row['date'])[0]) < epsilon
 
 
 if __name__ == "__main__":
     test_construction_from_discount_factors()
+
+
+#%%
+
+# -*- coding: utf-8 -*-
+import numpy as np
+import pandas as pd
+from frm.term_structures.zero_curve import ZeroCurve
+from frm.pricing_engine.hw1f import HullWhite1Factor
+from frm.utils import year_frac
+from frm.enums import DayCountBasis
+import matplotlib.pyplot as plt
+
+import warnings
+warnings.filterwarnings('ignore')
+
+# ESTR swap curve on 1 April 2024 per https://github.com/YANJINI/One-Factor-Hull-White-Model-Calibration-with-CAF
+curve_date = pd.Timestamp('2024-04-01')
+df = pd.DataFrame({
+    'tenor': ['ON', 'SW', '2W', '3W', '1M', '2M', '3M', '4M', '5M', '6M', '7M', '8M', '9M', '10M', '11M', '12M', '15M', '18M', '21M', '2Y', '3Y', '4Y', '5Y', '6Y', '7Y', '8Y', '9Y', '10Y', '11Y', '12Y', '15Y', '20Y', '25Y', '30Y'],
+    'date': pd.to_datetime(['2-Apr-2024', '10-Apr-2024', '17-Apr-2024', '24-Apr-2024', '3-May-2024', '3-Jun-2024', '3-Jul-2024', '5-Aug-2024', '3-Sep-2024', '3-Oct-2024', '4-Nov-2024', '3-Dec-2024', '3-Jan-2025', '3-Feb-2025', '3-Mar-2025', '3-Apr-2025', '3-Jul-2025', '3-Oct-2025', '5-Jan-2026', '7-Apr-2026', '5-Apr-2027', '3-Apr-2028', '3-Apr-2029', '3-Apr-2030', '3-Apr-2031', '5-Apr-2032', '4-Apr-2033', '3-Apr-2034', '3-Apr-2035', '3-Apr-2036', '4-Apr-2039', '4-Apr-2044', '5-Apr-2049', '3-Apr-2054']),
+    'discount_factor': [0.999892, 0.999026, 0.998266, 0.997514, 0.996546, 0.993222, 0.99014, 0.98688, 0.984079, 0.981287, 0.978453, 0.975944, 0.973358, 0.970875, 0.968705, 0.966373, 0.959921, 0.954107, 0.948336, 0.942805, 0.922607, 0.903406, 0.884216, 0.864765, 0.845061, 0.824882, 0.804566, 0.783991, 0.763235, 0.742533, 0.683701, 0.605786, 0.54803, 0.500307]
+})
+df['years'] = year_frac(curve_date, df['date'], DayCountBasis.ACT_ACT)
+
+zero_curve = ZeroCurve(curve_date=curve_date, pillar_df=df[['years','discount_factor']], interp_method='cubic_spline_on_ln_discount')
+
+# HW1F model parameters
+short_rate_mean_rev_lvl = 0.05 # Standard values are 1%-10% annualized
+short_rate_vol = 0.0196 # Standard values are 1%-10% annualized
+hw1f = HullWhite1Factor(zero_curve=zero_curve, mean_rev_lvl=short_rate_mean_rev_lvl, vol=short_rate_vol)
+
+# Fit the model to the zero curve
+grid_length = 50
+hw1f.setup_theta(num=grid_length)
+
+# Demonstrate the fit of the model to the zero curve with a table of the errors (in basis points ) for each source data point
+avg_error_bps = hw1f.calc_error_for_theta_fit(print_results=True)
+
+#%%
+
+
 
 
 #%%

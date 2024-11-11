@@ -10,7 +10,7 @@ from frm.pricing_engine.monte_carlo_generic import generate_rand_nbs
 
 from dataclasses import dataclass, field
 from typing import Optional
-from frm.enums import CompoundingFrequency
+from frm.enums import CompoundingFreq
 from prettytable import PrettyTable
 
 # Notes on calibration
@@ -35,13 +35,13 @@ class HullWhite1Factor:
     theta_spline: tuple=field(init=False) # tuple (t,c,k) used by scipy.interpolate.splev
 
     def __post_init__(self):
-        assert self.zero_curve.interpolation_method == 'cubic_spline_on_zero_rates'
+        assert self.zero_curve.interp_method in ('cubic_spline_on_ln_discount', 'cubic_spline_on_cczr')
 
         # Set to t=0 datapoint if available, otherwise extrapolate cubic spline to t=0.
-        if self.zero_curve.data['years'].min() == 0:
-            self.r0 = float(self.zero_curve.data['nacc'].iloc[0])
+        if self.zero_curve.pillar_df['years'].min() == 0:
+            self.r0 = float(self.zero_curve.pillar_df['cczr'].iloc[0])
         else:
-            self.r0 = float(self.zero_curve.get_zero_rates(years=0, compounding_frequency=CompoundingFrequency.CONTINUOUS)[0])
+            self.r0 = float(self.zero_curve.get_zero_rates(years=1e-8, compounding_freq=CompoundingFreq.CONTINUOUS)[0])
 
     def fit_theta(self,
                   dts=(1e-3,1e-4,1e-5,1e-6),
@@ -76,11 +76,10 @@ class HullWhite1Factor:
 
     def calc_error_for_theta_fit(self, print_results=False):
         """Calculate the basis point error between the pillar zero rates and the theta fit."""
-        years_pillars = self.zero_curve.data['years'].values
-        cczr_pillars = self.zero_curve.data['nacc'].values
+        years_pillars = self.zero_curve.pillar_df['years'].values
+        cczr_pillars = self.zero_curve.pillar_df['cczr'].values
 
         cczr_recalcs = np.array([-1*np.log(self.calc_discount_factor_by_solving_ode_1(0, yr))/yr for yr in years_pillars])
-        #cczr_recalcs = np.array([self.get_zero_rate(0, yr) for yr in years_pillars])
         diff_bps = 1e4 * (cczr_pillars - cczr_recalcs)
         average_error_bps = np.sqrt(np.mean(diff_bps ** 2))
 
@@ -107,7 +106,7 @@ class HullWhite1Factor:
             if num is None:
                 num = self.num
 
-            years_pillars = self.zero_curve.data['years'].values
+            years_pillars = self.zero_curve.pillar_df['years'].values
 
             # Same number of grid points between each pillar point
             interp_values = [np.linspace(years_pillars[i], years_pillars[i + 1], num=num, endpoint=False)
@@ -252,8 +251,8 @@ class HullWhite1Factor:
 
         results = {'R': R,
                    'years_grid': years_grid,
-                   'sim_dsc_factors': sim_dsc_factors,
-                   'sim_cczrs': sim_cczrs,
+                   'sim_dsc_factor': sim_dsc_factors,
+                   'sim_cczr': sim_cczrs,
                    'averages_df': averages_df}
 
         return results

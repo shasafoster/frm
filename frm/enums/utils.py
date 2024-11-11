@@ -65,7 +65,7 @@ class DayCountBasis(Enum):
         raise ValueError(f"Invalid value: {value}. Valid codes are: {valid_values}") 
 
 
-class CompoundingFrequency(Enum):
+class CompoundingFreq(Enum):
     # If storing instrument definitions in CDM, use 'code' to define valid fieldnames
     SIMPLE = 'simple'
     CONTINUOUS = 'continuous'
@@ -106,7 +106,7 @@ class CompoundingFrequency(Enum):
         # raise ValueError(f"Invalid value: {value}. Valid codes are: {valid_values}")
 
 
-class PeriodFrequency(Enum):
+class PeriodFreq(Enum):
     # If storing instrument definitions in CDM, use 'code' to define valid fieldnames
     DAILY = 'daily'
     WEEKLY = 'weekly'
@@ -116,8 +116,8 @@ class PeriodFrequency(Enum):
     SEMIANNUAL = 'semiannual'
     ANNUAL = 'annual'
     ZERO_COUPON = 'zerocoupon'
-    CDS = 'cds' # 20th of Mar/Jun/Sep/Dec
-    IMM = 'imm' # 3rd Wednesday of Mar/Jun/Sep/Dec
+    #CDS = 'cds' # 20th of Mar/Jun/Sep/Dec
+    #IMM = 'imm' # 3rd Wednesday of Mar/Jun/Sep/Dec
 
     def __init__(self, value):        
         date_offset_map = {
@@ -231,7 +231,7 @@ class DayRoll(Enum):
         
         
     
-class RollConvention(Enum):
+class RollConv(Enum):
     UNADJUSTED = 'unadjusted '
     FOLLOWING = 'following'
     PRECEDING = 'preceding'
@@ -270,13 +270,13 @@ class TimingConvention(Enum):
         
     
     
-class StubType(Enum):
+class Stub(Enum):
     NONE = 'none'
     SHORT = 'short'
     LONG = 'long'
     DEFAULT = 'default'
-    DEFINED_PER_FIRST_CPN_END_DATE = 'defined_per_first_cpn_end_date'
-    DEFINED_PER_LAST_CPN_START_DATE = 'defined_per_last_cpn_start_date'
+    DEFINED_PER_FIRST_PERIOD_END_DATE = 'defined_per_first_period_end_date'
+    DEFINED_PER_LAST_PERIOD_START_DATE = 'defined_per_last_period_start_date'
 
     @classmethod
     def default(cls):

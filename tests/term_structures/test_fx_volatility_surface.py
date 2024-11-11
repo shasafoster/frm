@@ -10,7 +10,7 @@ from frm.term_structures.zero_curve import ZeroCurve
 from frm.term_structures.fx_volatility_surface import FXVolatilitySurface
 
 from frm.utils.business_day_calendar import get_busdaycal
-from frm.enums.utils import DayCountBasis, CompoundingFrequency
+from frm.enums.utils import DayCountBasis, CompoundingFreq
 
 import numpy as np
 import pandas as pd
@@ -115,21 +115,21 @@ def test_fx_volatility_surface():
     zero_rate_foreign_df = zero_rate_df[['tenor', 'foreign_zero_rate']].copy()
     zero_rate_foreign_df.rename(columns={'foreign_zero_rate': 'zero_rate'}, inplace=True)
 
-    busdaycal_domestic = get_busdaycal(domestic_ccy)
-    busdaycal_foreign = get_busdaycal(foreign_ccy)
+    domestic_cal = get_busdaycal(domestic_ccy)
+    foreign_cal = get_busdaycal(foreign_ccy)
 
     zero_curve_domestic = ZeroCurve(data=zero_rate_domestic_df, curve_date=pd.Timestamp('2023-06-30'),
                                     day_count_basis=DayCountBasis.ACT_360,
-                                    compounding_frequency=CompoundingFrequency.CONTINUOUS, busdaycal=busdaycal_domestic)
+                                    compounding_freq=CompoundingFreq.CONTINUOUS, cal=domestic_cal)
     zero_curve_foreign = ZeroCurve(data=zero_rate_foreign_df, curve_date=pd.Timestamp('2023-06-30'),
                                    day_count_basis=DayCountBasis.ACT_365,
-                                   compounding_frequency=CompoundingFrequency.CONTINUOUS, busdaycal=busdaycal_foreign)
-    del zero_rate_domestic_df, zero_rate_foreign_df, zero_rate_df, busdaycal_domestic, busdaycal_foreign
+                                   compounding_freq=CompoundingFreq.CONTINUOUS, cal=foreign_cal)
+    del zero_rate_domestic_df, zero_rate_foreign_df, zero_rate_df, domestic_cal, foreign_cal
 
     # If no business day calendar is specified, create it based on holiday calendars of both currencies
-    busdaycal = None
-    if busdaycal is None:
-        busdaycal = get_busdaycal([domestic_ccy, foreign_ccy])
+    cal = None
+    if cal is None:
+        cal = get_busdaycal([domestic_ccy, foreign_ccy])
 
 
     for smile_interpolation_method in [
@@ -151,7 +151,7 @@ def test_fx_volatility_surface():
                                               foreign_zero_curve=zero_curve_foreign,
                                               vol_quotes=vol_quotes,
                                               curve_date=curve_date,
-                                              busdaycal=busdaycal,
+                                              cal=cal,
                                               smile_interpolation_method=smile_interpolation_method)
 
             surf = vol_surface

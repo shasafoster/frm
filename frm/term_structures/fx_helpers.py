@@ -22,7 +22,7 @@ VALID_DELTA_CONVENTIONS = ['regular_spot','regular_forward','premium_adjusted_sp
 def fx_term_structure_helper(df: pd.DataFrame,
                              curve_date: pd.Timestamp,
                              spot_offset: int,
-                             busdaycal: np.busdaycalendar,
+                             cal: np.busdaycalendar,
                              rate_set_date_str: str) -> pd.DataFrame:
 
     df['tenor'] = df['tenor'].apply(clean_tenor)
@@ -45,13 +45,13 @@ def fx_term_structure_helper(df: pd.DataFrame,
             pass
         elif pd.notna(row[rate_set_date_str]):
             rate_set_date_np = row[rate_set_date_str].astype('datetime64[D]')
-            df.at[i,'delivery_date'] = np.busday_offset(rate_set_date_np, offsets=-1*spot_offset, roll='preceding',busdaycal=busdaycal)
+            df.at[i,'delivery_date'] = np.busday_offset(rate_set_date_np, offsets=-1*spot_offset, roll='preceding',busdaycal=cal)
         elif pd.notna(row['tenor']):
             date_offset = tenor_to_date_offset(row['tenor'])
             rate_set_date = curve_date + date_offset
             rate_set_date_np = rate_set_date.to_numpy().astype('datetime64[D]')
-            df.at[i,rate_set_date_str] = np.busday_offset(rate_set_date_np, offsets=0, roll='following',busdaycal=busdaycal)
-            df.at[i,'delivery_date'] = np.busday_offset(rate_set_date_np, offsets=spot_offset, roll='following',busdaycal=busdaycal)
+            df.at[i,rate_set_date_str] = np.busday_offset(rate_set_date_np, offsets=0, roll='following',busdaycal=cal)
+            df.at[i,'delivery_date'] = np.busday_offset(rate_set_date_np, offsets=spot_offset, roll='following',busdaycal=cal)
         else:
             raise ValueError("'delivery_date', '{rate_set_date_str}' and 'tenor' are all missing")
 
@@ -70,7 +70,7 @@ def fx_term_structure_helper(df: pd.DataFrame,
 def fx_forward_curve_helper(fx_forward_curve_df: pd.DataFrame,
                             curve_date: pd.Timestamp,
                             spot_offset: int,
-                            busdaycal: np.busdaycalendar) -> pd.DataFrame:
+                            cal: np.busdaycalendar) -> pd.DataFrame:
 
     fx_forward_curve_df = convert_column_to_consistent_data_type(fx_forward_curve_df)
 
@@ -81,7 +81,7 @@ def fx_forward_curve_helper(fx_forward_curve_df: pd.DataFrame,
     fx_forward_curve_df = fx_term_structure_helper(df=fx_forward_curve_df,
                                                    curve_date=curve_date,
                                                    spot_offset=spot_offset,
-                                                   busdaycal=busdaycal,
+                                                   cal=cal,
                                                    rate_set_date_str='fixing_date')
     return fx_forward_curve_df
     

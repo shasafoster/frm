@@ -24,7 +24,7 @@ from frm.term_structures.fx_helpers import (clean_vol_quotes_column_names,
 
 from scipy.interpolate import CubicSpline, InterpolatedUnivariateSpline
 from frm.utils import year_frac, get_busdaycal, resolve_fx_curve_dates
-from frm.enums import DayCountBasis, CompoundingFrequency
+from frm.enums import DayCountBasis, CompoundingFreq
 
 import numpy as np
 import pandas as pd
@@ -51,7 +51,7 @@ class FXVolatilitySurface:
     spot_offset: Optional[int] = None
     spot_date: Optional[pd.Timestamp] = None
 
-    busdaycal: np.busdaycalendar = None
+    cal: np.busdaycalendar = None
     day_count_basis: DayCountBasis = DayCountBasis.ACT_ACT
     smile_interpolation_method: FXSmileInterpolationMethod = FXSmileInterpolationMethod.UNIVARIATE_SPLINE
 
@@ -72,11 +72,11 @@ class FXVolatilitySurface:
 
         self.ccy_pair, self.domestic_ccy, self.foreign_ccy =  validate_ccy_pair(self.foreign_ccy + self.domestic_ccy)
 
-        if self.busdaycal is None:
-            self.busdaycal = get_busdaycal([self.domestic_ccy, self.foreign_ccy])
+        if self.cal is None:
+            self.cal = get_busdaycal([self.domestic_ccy, self.foreign_ccy])
 
         self.curve_date, self.spot_offset, self.spot_date = resolve_fx_curve_dates(self.ccy_pair,
-                                                                                   self.busdaycal,
+                                                                                   self.cal,
                                                                                    self.curve_date,
                                                                                    self.spot_offset,
                                                                                    self.spot_date)
@@ -86,7 +86,7 @@ class FXVolatilitySurface:
         self.fx_forward_curve_df = fx_forward_curve_helper(fx_forward_curve_df=self.fx_forward_curve_df,
                                                            curve_date=self.curve_date,
                                                            spot_offset=self.spot_offset,
-                                                           busdaycal=self.busdaycal)
+                                                           cal=self.cal)
         mask = self.fx_forward_curve_df['tenor'] == 'sp'
         self.fx_spot_rate = self.fx_forward_curve_df.loc[mask, 'fx_forward_rate'].values[0]
 
@@ -107,9 +107,9 @@ class FXVolatilitySurface:
                                                            dates=df['expiry_date'],
                                                            date_type='fixing_date')
         df['domestic_zero_rate'] = self.domestic_zero_curve.get_zero_rates(dates=df['expiry_date'],
-                                                                          compounding_frequency=CompoundingFrequency.CONTINUOUS)
+                                                                          compounding_freq=CompoundingFreq.CONTINUOUS)
         df['foreign_zero_rate'] = self.foreign_zero_curve.get_zero_rates(dates=df['expiry_date'],
-                                                                        compounding_frequency=CompoundingFrequency.CONTINUOUS)
+                                                                        compounding_freq=CompoundingFreq.CONTINUOUS)
         return df
 
 
@@ -120,7 +120,7 @@ class FXVolatilitySurface:
             vol_smile_pillar_df = fx_term_structure_helper(df=vol_smile_pillar_df,
                                                            curve_date=self.curve_date,
                                                            spot_offset=self.spot_offset,
-                                                           busdaycal=self.busdaycal,
+                                                           cal=self.cal,
                                                            rate_set_date_str='expiry_date')
             vol_smile_pillar_df['expiry_years'] = year_frac(self.curve_date, vol_smile_pillar_df['expiry_date'], self.day_count_basis)
             vol_smile_pillar_df = self._add_fx_ir_to_df(vol_smile_pillar_df)
@@ -136,7 +136,7 @@ class FXVolatilitySurface:
         min_expiry = self.vol_smile_pillar_df['expiry_date'].min()
         max_expiry = self.vol_smile_pillar_df['expiry_date'].max()
         expiry_dates = pd.date_range(min_expiry, max_expiry, freq='d')
-        delivery_dates = workday(expiry_dates, offset=self.spot_offset, busdaycal=self.busdaycal)
+        delivery_dates = workday(expiry_dates, offset=self.spot_offset, cal=self.cal)
 
         expiry_years = year_frac(self.curve_date, expiry_dates, self.day_count_basis)
 
@@ -390,7 +390,7 @@ class FXVolatilitySurface:
 
         delivery_date_grid = delivery_date_grid.unique().sort_values(ascending=True)
         delivery_date_grid = delivery_date_grid.union(self.spot_date)
-        fixing_date_grid = np.busday_offset(delivery_date_grid, offsets=-1*self.spot_offset, roll='preceding', busdaycal=self.busdaycal)
+        fixing_date_grid = np.busday_offset(delivery_date_grid, offsets=-1*self.spot_offset, roll='preceding', busdaycal=self.cal)
         mask = self.vol_smile_daily_df['expiry_date'].isin(fixing_date_grid)
         vol_smile_daily_df = self.vol_smile_daily_df.loc[mask].copy()
 
@@ -449,7 +449,7 @@ class FXVolatilitySurface:
 
         delivery_date_grid = delivery_date_grid.unique().sort_values(ascending=True)
         delivery_date_grid = delivery_date_grid.union(self.spot_date)
-        fixing_date_grid = np.busday_offset(delivery_date_grid, offsets=-1*self.spot_offset, roll='preceding', busdaycal=self.busdaycal)
+        fixing_date_grid = np.busday_offset(delivery_date_grid, offsets=-1*self.spot_offset, roll='preceding', busdaycal=self.cal)
         #mask = self.vol_smile_daily_df['expiry_date'].isin(fixing_date_grid)
         #vol_smile_daily_df = self.vol_smile_daily_df.loc[mask].copy()
         self._solve_vol_daily_smile_func(fixing_date_grid)
