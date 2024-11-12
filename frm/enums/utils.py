@@ -129,8 +129,8 @@ class PeriodFreq(Enum):
             'semiannual': pd.DateOffset(months=6),
             'annual': pd.DateOffset(years=1),
             'zerocoupon': None, # No date offset for zero coupon
-            'cds': None, # Custom logic
-            'imm': None, # Custom logic
+            #'cds': None, # Custom logic
+            #'imm': None, # Custom logic
             }
         self.date_offset = date_offset_map[self.value]
 

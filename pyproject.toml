@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "frm"
-version = "0.0.8"
+version = "0.0.9"
 authors = [
   { name="Shasa Foster", email="shasa.foster@gmail.com" },
 ]
@@ -30,7 +30,7 @@ classifiers = [
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/frmcalcs/frm"
+"Homepage" = "https://github.com/shasa/frm"
 "Website" = "https://www.frmcalcs.com"
 
 [tool.hatch.build.targets.wheel]
