@@ -232,10 +232,10 @@ class DayRoll(Enum):
         
     
 class RollConv(Enum):
-    UNADJUSTED = 'unadjusted '
+    UNADJUSTED = 'unadjusted'
     FOLLOWING = 'following'
     PRECEDING = 'preceding'
-    MODIFIED_FOLLOWING = 'modifiedfollowing' # 
+    MODIFIED_FOLLOWING = 'modifiedfollowing'
     MODIFIED_PRECEDING = 'modifiedpreceding'
      
     @classmethod

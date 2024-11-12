@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 from typing import List, Tuple, Union
+
+from black import datetime
 from frm.enums.utils import RollConv, TimingConvention, Stub, PeriodFreq, DayRoll, DayCountBasis, ExchangeNotionals
 from frm.utils.daycount import year_frac, day_count
 
@@ -19,13 +21,13 @@ if __name__ == "__main__":
 @dataclass
 class Schedule:
     # Schedule parameters
-    start_date: [pd.Timestamp, np.datetime64]
-    end_date: [pd.Timestamp, np.datetime64]
+    start_date: [pd.Timestamp, np.datetime64, datetime.date, datetime.datetime]
+    end_date: [pd.Timestamp, np.datetime64, datetime.date, datetime.datetime]
     freq: PeriodFreq
     roll_conv: RollConv = RollConv.MODIFIED_FOLLOWING
     day_roll: DayRoll = DayRoll.NONE
-    first_period_end: Union[pd.Timestamp, np.datetime64, None] = None
-    last_period_start: Union[pd.Timestamp, np.datetime64, None] = None
+    first_period_end: Union[pd.Timestamp, np.datetime64, datetime.date, datetime.datetime, None] = None
+    last_period_start: Union[pd.Timestamp, np.datetime64, datetime.date, datetime.datetime, None] = None
     first_stub: Stub = Stub.DEFAULT
     last_stub: Stub = Stub.DEFAULT
     roll_user_specified_dates: bool = False
@@ -36,7 +38,7 @@ class Schedule:
     cpn_payment_timing: TimingConvention = TimingConvention.IN_ARREARS
     # Notional schedule parameters
     add_notional_schedule: bool = False
-    notional_amount: float | np.ndarray = 100e6
+    notional_amount: float | np.ndarray = 100_000_000
     exchange_notionals: ExchangeNotionals = ExchangeNotionals.NEITHER
     add_notional_payment_dates: bool = False
     notional_payment_delay: int = 0
@@ -52,6 +54,12 @@ class Schedule:
     df: pd.DataFrame = field(init=False)
 
     def __post_init__(self):
+        # Convert to pandas Timestamp
+        self.start_date = pd.Timestamp(self.start_date)
+        self.end_date = pd.Timestamp(self.end_date)
+        self.first_period_end = pd.Timestamp(self.first_period_end) if self.first_period_end is not None else None
+        self.last_period_start = pd.Timestamp(self.last_period_start) if self.last_period_start is not None else None
+
         self.generate_schedule()
 
         if self.add_cpn_payment_dates:
@@ -260,13 +268,13 @@ def variable_notional_helper():
 
 
 def get_schedule(
-        start_date: [pd.Timestamp, np.datetime64],
-        end_date: [pd.Timestamp, np.datetime64],
+        start_date: [pd.Timestamp, np.datetime64, datetime.date, datetime.datetime],
+        end_date: [pd.Timestamp, np.datetime64, datetime.date, datetime.datetime],
         freq: PeriodFreq,
         roll_conv: RollConv=RollConv.MODIFIED_FOLLOWING,
         day_roll: DayRoll=DayRoll.NONE,
-        first_period_end: Union[pd.Timestamp, np.datetime64, None] = None,
-        last_period_start: Union[pd.Timestamp, np.datetime64, None] = None,
+        first_period_end: Union[pd.Timestamp, np.datetime64, datetime.date, datetime.datetime, None] = None,
+        last_period_start: Union[pd.Timestamp, np.datetime64, datetime.date, datetime.datetime, None] = None,
         first_stub: Stub=Stub.DEFAULT,
         last_stub: Stub=Stub.DEFAULT,
         roll_user_specified_dates: bool=False,
@@ -310,9 +318,10 @@ def get_schedule(
             - payment_date (if add_payment_dates=True)
     """
 
-    start_date, end_date, first_period_end, last_period_start = \
-        [pd.Timestamp(d) if isinstance(d, np.datetime64) else d for d in \
-         [start_date, end_date, first_period_end, last_period_start]]
+    start_date, end_date, first_period_end, last_period_start = [
+        pd.Timestamp(d) if isinstance(d, (np.datetime64, date, datetime)) else d
+        for d in [start_date, end_date, first_period_end, last_period_start]
+    ]
 
     # Input validation
     if start_date >= end_date:
