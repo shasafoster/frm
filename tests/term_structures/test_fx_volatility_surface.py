@@ -118,10 +118,10 @@ def test_fx_volatility_surface():
     domestic_cal = get_busdaycal(domestic_ccy)
     foreign_cal = get_busdaycal(foreign_ccy)
 
-    zero_curve_domestic = ZeroCurve(data=zero_rate_domestic_df, curve_date=pd.Timestamp('2023-06-30'),
+    zero_curve_domestic = ZeroCurve(pillar_df=zero_rate_domestic_df, curve_date=pd.Timestamp('2023-06-30'),
                                     day_count_basis=DayCountBasis.ACT_360,
                                     compounding_freq=CompoundingFreq.CONTINUOUS, cal=domestic_cal)
-    zero_curve_foreign = ZeroCurve(data=zero_rate_foreign_df, curve_date=pd.Timestamp('2023-06-30'),
+    zero_curve_foreign = ZeroCurve(pillar_df=zero_rate_foreign_df, curve_date=pd.Timestamp('2023-06-30'),
                                    day_count_basis=DayCountBasis.ACT_365,
                                    compounding_freq=CompoundingFreq.CONTINUOUS, cal=foreign_cal)
     del zero_rate_domestic_df, zero_rate_foreign_df, zero_rate_df, domestic_cal, foreign_cal

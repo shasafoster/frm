@@ -4,10 +4,10 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 from typing import List, Tuple, Union
-
-from black import datetime
+import datetime
 from frm.enums.utils import RollConv, TimingConvention, Stub, PeriodFreq, DayRoll, DayCountBasis, ExchangeNotionals
 from frm.utils.daycount import year_frac, day_count
+
 
 if __name__ == "__main__":
     os.chdir(os.environ.get('PROJECT_DIR_FRM'))
@@ -319,7 +319,7 @@ def get_schedule(
     """
 
     start_date, end_date, first_period_end, last_period_start = [
-        pd.Timestamp(d) if isinstance(d, (np.datetime64, date, datetime)) else d
+        pd.Timestamp(d) if isinstance(d, (np.datetime64, datetime.date, datetime.datetime)) else d
         for d in [start_date, end_date, first_period_end, last_period_start]
     ]
 
