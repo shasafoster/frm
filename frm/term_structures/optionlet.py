@@ -8,8 +8,8 @@ import pandas as pd
 import scipy
 from frm.pricing_engine.black76_bachelier import black76_price, bachelier_price, black76_solve_implied_vol, bachelier_solve_implied_vol, normal_vol_to_black76_sln, black76_sln_to_normal_vol, black76_sln_to_normal_vol_analytical, normal_vol_atm_to_black76_sln_atm, VOL_SLN_BOUNDS, VOL_N_BOUNDS
 from frm.pricing_engine.sabr import solve_alpha_from_sln_vol, calc_sln_vol_for_strike_from_sabr_params
-from frm.utils import year_fraction, clean_tenor, tenor_to_date_offset, convert_column_to_consistent_data_type, Schedule, get_schedule, add_period_length_to_schedule
-from frm.enums import DayCountBasis, PeriodFrequency, TermRate
+from frm.utils import year_frac, clean_tenor, tenor_to_date_offset, convert_column_to_consistent_data_type, Schedule, get_schedule
+from frm.enums import DayCountBasis, PeriodFreq, TermRate
 from frm.term_structures.zero_curve import ZeroCurve
 from typing import Optional, Union, List
 import time
@@ -24,7 +24,7 @@ class Optionlet:
     quote_vol_sln: pd.DataFrame
     ln_shift: float
     zero_curve: ZeroCurve
-    optionlet_frequency: PeriodFrequency
+    optionlet_freq: PeriodFreq
     settlement_delay: Optional[int]=None
     settlement_date: Optional[pd.Timestamp]=None
     busdaycal: Optional[np.busdaycalendar]=np.busdaycalendar()
@@ -56,7 +56,7 @@ class Optionlet:
                                                     busdaycal=self.busdaycal)
 
         # TODO This should be a setting - settlement_date + freq (as below) or effective at the settlement date.
-        effective_date_np = (self.settlement_date + self.optionlet_frequency.date_offset).to_numpy().astype('datetime64[D]')
+        effective_date_np = (self.settlement_date + self.optionlet_freq.date_offset).to_numpy().astype('datetime64[D]')
         effective_date = np.busday_offset(effective_date_np, offsets=0, roll='following', busdaycal=self.busdaycal)
         self.quote_vol_sln['tenor'] = self.quote_vol_sln['tenor'].apply(clean_tenor)
         self.quote_vol_sln['settlement_date'] = self.settlement_date
@@ -67,7 +67,7 @@ class Optionlet:
         for i, row in self.quote_vol_sln.iterrows():
             date_offset = tenor_to_date_offset(row['tenor'])
             termination_date = self.settlement_date + date_offset
-            last_optionlet_expiry_date = termination_date - self.optionlet_frequency.date_offset
+            last_optionlet_expiry_date = termination_date - self.optionlet_freq.date_offset
             last_optionlet_expiry_date_np = last_optionlet_expiry_date.to_numpy().astype('datetime64[D]')
             termination_date_date_np = termination_date.to_numpy().astype('datetime64[D]')
             self.quote_vol_sln.at[i, 'last_optionlet_expiry_date'] = np.busday_offset(
@@ -75,9 +75,9 @@ class Optionlet:
             self.quote_vol_sln.at[i, 'termination_date'] = np.busday_offset(
                 termination_date_date_np, offsets=0,roll='following', busdaycal=self.busdaycal)
 
-        self.quote_vol_sln['term_years'] = year_fraction(
+        self.quote_vol_sln['term_years'] = year_frac(
             self.quote_vol_sln['effective_date'], self.quote_vol_sln['termination_date'], self.day_count_basis)
-        self.quote_vol_sln['last_optionlet_expiry_years'] = year_fraction(
+        self.quote_vol_sln['last_optionlet_expiry_years'] = year_frac(
             self.curve_date, self.quote_vol_sln['last_optionlet_expiry_date'],self.day_count_basis)
         self.quote_vol_sln['F'] = np.nan
 
@@ -104,13 +104,13 @@ class Optionlet:
         nb_quotes = len(self.quote_vol_sln) - 1
         self.term_structure = get_schedule(start_date=self.quote_vol_sln.loc[nb_quotes, 'effective_date'],
                                            end_date=self.quote_vol_sln.loc[nb_quotes, 'termination_date'],
-                                           frequency=self.optionlet_frequency,
-                                           busdaycal=self.busdaycal)
-        self.term_structure = add_period_length_to_schedule(schedule_df=self.term_structure, day_count_basis=self.day_count_basis)
+                                           freq=self.optionlet_freq,
+                                           cal=self.cal)
+        self.term_structure.add_period_yearfrac(day_count_basis=self.day_count_basis)
 
         self.term_structure['discount_factors'] = self.zero_curve.get_discount_factors(dates=self.term_structure['payment_date'])
-        self.term_structure['annuity_factor'] = self.term_structure['period_years'] * self.term_structure['discount_factors']
-        self.term_structure['expiry_years'] = year_fraction(self.curve_date, self.term_structure['period_start'], self.day_count_basis)
+        self.term_structure['annuity_factor'] = self.term_structure['period_yearfrac'] * self.term_structure['discount_factors']
+        self.term_structure['expiry_years'] = year_frac(self.curve_date, self.term_structure['period_start'], self.day_count_basis)
         self.term_structure['F'] = self.zero_curve.get_forward_rates(period_start=self.term_structure['period_start'],
                                                                      period_end=self.term_structure['period_end'],
                                                                      forward_rate_type=TermRate.SIMPLE)
@@ -540,7 +540,7 @@ class Optionlet:
         # Remove any duplicate (occurs if duplicate across term structure and effective_dates)
         interp_sabr_params = interp_sabr_params[~interp_sabr_params.index.duplicated(keep='first')]
 
-        interp_sabr_params.loc[:,'expiry_years'] = year_fraction(self.curve_date, schedule_df['period_start'], self.day_count_basis)
+        interp_sabr_params.loc[:,'expiry_years'] = year_frac(self.curve_date, schedule_df['period_start'], self.day_count_basis)
         interp_sabr_params.loc[:,'F'] = F
         interp_sabr_params.loc[:,['vol_sln_atm', 'alpha']] = np.nan
 
@@ -599,7 +599,7 @@ class Optionlet:
                           use_term_structure: bool = False,
                           solve_equivalent_flat_vol=False) -> pd.DataFrame:
 
-        schedule.add_period_length_to_schedule(day_count_basis=day_count_basis)
+        schedule.add_period_yearfrac(day_count_basis=day_count_basis)
         schedule_length = len(schedule.df)
 
         # Validate inputs
@@ -633,7 +633,7 @@ class Optionlet:
         detail_df['K'] = K
         detail_df['cp'] = cp
         detail_df['discount_factor'] = self.zero_curve.get_discount_factors(dates=detail_df['payment_date'])
-        detail_df['annuity_factor'] = detail_df['period_years'] * detail_df['discount_factor']
+        detail_df['annuity_factor'] = detail_df['period_yearfrac'] * detail_df['discount_factor']
 
         # Choose the appropriate pricing model
         if vol_n_override is not None:

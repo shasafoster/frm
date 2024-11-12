@@ -1,21 +1,17 @@
 # -*- coding: utf-8 -*-
 import os
-if __name__ == "__main__":
-    os.chdir(os.environ.get('PROJECT_DIR_FRM')) 
-    
-
 import numpy as np
 import pandas as pd
 import re
-from typing import Optional, Union
+from typing import Union
 import warnings
-
 from frm.utils.utilities import convert_column_to_consistent_data_type
 from frm.utils.tenor import clean_tenor, tenor_to_date_offset
 
+if __name__ == "__main__":
+    os.chdir(os.environ.get('PROJECT_DIR_FRM')) 
 
 VALID_DELTA_CONVENTIONS = ['regular_spot','regular_forward','premium_adjusted_spot','premium_adjusted_forward']
-
 
 
 

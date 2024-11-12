@@ -1,14 +1,12 @@
 # -*- coding: utf-8 -*-
 import os
-
-if __name__ == "__main__":
-    os.chdir(os.environ.get('PROJECT_DIR_FRM'))
-
 import numpy as np
 import pandas as pd
 from scipy.stats import norm
-from scipy.optimize import root_scalar, newton, minimize
-import time
+from scipy.optimize import root_scalar, minimize
+
+if __name__ == "__main__":
+    os.chdir(os.environ.get('PROJECT_DIR_FRM'))
 
 VOL_SLN_BOUNDS = (0.1 / 100, 1000 / 100)  # 0.1% to 1000% (0.001 to 10)
 VOL_N_BOUNDS = (0.01 / 100, 100 / 100)  # 0.01% to 100% (0.0001 to 1)

@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 import os
-if __name__ == "__main__":
-    os.chdir(os.environ.get('PROJECT_DIR_FRM'))
-
 import numpy as np
 from numpy.typing import NDArray
 import scipy
 from typing import Optional
 import numbers
+
+if __name__ == "__main__":
+    os.chdir(os.environ.get('PROJECT_DIR_FRM'))
 
 
 def calc_sln_vol_for_strike_from_sabr_params(

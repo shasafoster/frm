@@ -9,7 +9,7 @@ import logging
 import numpy as np
 import pandas as pd
 from pandas import DateOffset
-from typing import Optional, Union
+from typing import Optional
 
 
 def clean_tenor(tenor: str) -> str:

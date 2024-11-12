@@ -328,11 +328,11 @@ class ZeroCurve:
                 cczr = -1 * ln_df_interp / years
                 discount_factor = np.exp(ln_df_interp)
             elif self.interp_method == 'cubic_spline_on_ln_discount':
-                ln_df_interp = scipy.interpolate.splev(years, self.cubic_spline_definition, der=0)
+                ln_df_interp = splev(years, self.cubic_spline_definition, der=0)
                 cczr = -1 * ln_df_interp / years
                 discount_factor = np.exp(ln_df_interp)
             elif self.interp_method == 'cubic_spline_on_cczr':
-                cczr = scipy.interpolate.splev(years, self.cubic_spline_definition, der=0)
+                cczr = splev(years, self.cubic_spline_definition, der=0)
                 discount_factor = np.exp(-1 * cczr * years)
             else:
                 raise ValueError

@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-import numpy as np
 
 from frm.enums import DayCountBasis
 
@@ -47,6 +46,8 @@ dv01_adjustment = +0.0001 # +0.01%
 EXCEL_DATE_FORMAT = '%d-%b-%Y'
 EXCEL_AMT_FORMAT = '#,##0_-;(#,##0)_-;-_-'
 
+
+MAX_SIMULATIONS_PER_LOOP = 100_000_000  # Maximum number of total random numbers per loop
 
 # Default number of monte carlo paths
 

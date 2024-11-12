@@ -248,7 +248,7 @@ def test_garman_kohlhagen_solve_strike_from_delta():
     r_d = -0.00528
     tau = 0.75
     F = 138.031
-    delta = 0.2
+    signed_delta = 0.2
     delta_convention = 'premium_adjusted_spot'
     strike = garman_kohlhagen_solve_strike_from_delta(S0=S0,tau=tau,r_d=r_d,r_f=r_f,vol=vol,signed_delta=signed_delta,delta_convention=delta_convention, F=F)
     assert abs(strike_test - strike) / strike_test < epsilon_px

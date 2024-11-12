@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import numpy as np
-MAX_SIMULATIONS_PER_LOOP = 100e6
+
+from frm.utils import MAX_SIMULATIONS_PER_LOOP
 
 def generate_rand_nbs(nb_steps: int,
                       nb_rand_vars: int=1,

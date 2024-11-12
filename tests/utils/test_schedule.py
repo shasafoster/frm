@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import os
-from frm.utils import get_schedule, generate_date_schedule, PeriodFreq, Stub, RollConv, DayRoll, TimingConvention
+from frm.utils import get_schedule, generate_date_schedule, PeriodFreq, Stub, RollConv, DayRoll
 import pandas as pd
 import pytest    
 os.chdir(os.environ.get('PROJECT_DIR_FRM'))

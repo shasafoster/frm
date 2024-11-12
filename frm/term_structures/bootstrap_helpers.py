@@ -17,8 +17,7 @@ def cash_rates_quote_helper(
         day_count_basis: DayCountBasis,
         settlement_delay: Optional[int]=None,
         settlement_date: Optional[pd.Timestamp]=None,
-        busdaycal: np.busdaycalendar=np.busdaycalendar):
-
+        cal: np.busdaycalendar=np.busdaycalendar):
 
     assert 'rate' in df.columns
     assert 'tenor' in df.columns or ('effective_date' in df.columns and 'maturity_date' in df.columns)
@@ -27,7 +26,7 @@ def cash_rates_quote_helper(
 
     if settlement_date is None:
         assert settlement_delay is not None
-        settlement_date = workday(dates=curve_date, offset=settlement_delay, busdaycal=busdaycal)
+        settlement_date = workday(dates=curve_date, offset=settlement_delay, cal=cal)
 
     if 'effective_date' not in df.columns:
         df['has_settlement_delay'] = df['tenor'] != 'on'
@@ -36,7 +35,7 @@ def cash_rates_quote_helper(
 
     if 'maturity_date' not in df.columns:
         date_offset = df['tenor'].apply(tenor_to_date_offset).values
-        df['maturity_date'] = workday(dates=(df['effective_date'] + date_offset), offset=0, busdaycal=busdaycal)
+        df['maturity_date'] = workday(dates=(df['effective_date'] + date_offset), offset=0, cal=cal)
 
     df['period_years'] = year_frac(df['effective_date'], df['maturity_date'], day_count_basis)
 
@@ -178,8 +177,8 @@ def futures_helper_asx_90day(
 
     # Calculate the effective period of the BBSW 3M fixing of the contract.
     df['effective_date'] = df['settlement_date']
-    busdaycal = get_busdaycal('AU-SYDNEY')
-    df['maturity_date'] = workday(df['settlement_date'] + pd.DateOffset(months=3), 0, busdaycal=busdaycal)
+    cal = get_busdaycal('AU-SYDNEY')
+    df['maturity_date'] = workday(df['settlement_date'] + pd.DateOffset(months=3), 0, cal=cal)
 
     if 'price' in df.columns:
         # Per the ASX contract definition: Settlement Value = 100 - [BBSW 3M Fixing]

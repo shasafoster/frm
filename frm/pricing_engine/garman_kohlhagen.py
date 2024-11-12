@@ -1,13 +1,12 @@
 # -*- coding: utf-8 -*-
 import os
-if __name__ == "__main__":
-    os.chdir(os.environ.get('PROJECT_DIR_FRM')) 
-
 import numpy as np
 import pandas as pd
 from scipy.stats import norm
 from scipy.optimize import root_scalar, newton
 
+if __name__ == "__main__":
+    os.chdir(os.environ.get('PROJECT_DIR_FRM')) 
 
 def garman_kohlhagen_price(
         S0: [float, np.ndarray],

@@ -8,9 +8,9 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from frm.enums.utils import CompoundingFrequency, PeriodFrequency
+from frm.enums.utils import CompoundingFreq, PeriodFreq
 from frm.enums.term_structures import OISCouponCalcMethod, TermRate
-from frm.utils.daycount import year_fraction
+from frm.utils.daycount import year_frac
 from frm.term_structures.zero_curve import ZeroCurve
 from frm.term_structures.historical_swap_index_fixings import OISFixings, TermFixings
 
@@ -30,8 +30,8 @@ class TermSwapCurve:
     def get_fixings(self,
                     period_start: pd.DatetimeIndex,
                     period_end: pd.DatetimeIndex,
-                    fixing_frequency: PeriodFrequency, # TODO think about this and the enum
-                    cpn_calc_method: CompoundingFrequency=TermRate.SIMPLE):
+                    fixing_freq: PeriodFreq, # TODO think about this and the enum
+                    cpn_calc_method: CompoundingFreq=TermRate.SIMPLE):
 
         fixings = np.full(period_start.shape, np.nan)
 
@@ -105,8 +105,8 @@ class OISCurve:
                                   crossover_period_start: pd.DatetimeIndex,
                                   crossover_period_end: pd.DatetimeIndex,
                                   cpn_calc_method: OISCouponCalcMethod):
-        historical_year_frac = year_fraction(crossover_period_start, self.zero_curve.curve_date, self.zero_curve.day_count_basis)
-        future_year_frac = year_fraction(self.zero_curve.curve_date, crossover_period_end, self.zero_curve.day_count_basis)
+        historical_year_frac = year_frac(crossover_period_start, self.zero_curve.curve_date, self.zero_curve.day_count_basis)
+        future_year_frac = year_frac(self.zero_curve.curve_date, crossover_period_end, self.zero_curve.day_count_basis)
 
         curve_datetime_index = pd.DatetimeIndex([self.zero_curve.curve_date for _ in range(len(crossover_period_start))])
 

@@ -1,13 +1,10 @@
 # -*- coding: utf-8 -*-
 import os
+import numpy as np
+import warnings
+
 if __name__ == "__main__":
     os.chdir(os.environ.get('PROJECT_DIR_FRM')) 
-
-import numpy as np
-import pandas as pd
-import re
-from typing import Optional, Union
-import warnings
 
 
 def forward_volatility(t1: float | np.ndarray,

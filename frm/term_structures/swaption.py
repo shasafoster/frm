@@ -2,8 +2,8 @@
 import os
 import numpy as np
 import pandas as pd
-from frm.enums import TermRate, PeriodFrequency, DayCountBasis
-from frm.utils import tenor_to_date_offset, clean_tenor, get_busdaycal, year_frac, Schedule
+from frm.enums import TermRate, PeriodFreq, DayCountBasis
+from frm.utils import tenor_to_date_offset, clean_tenor, get_busdaycal, year_frac, Schedule, workday
 from frm.term_structures.zero_curve import ZeroCurve
 from frm.pricing_engine.sabr import fit_sabr_params_to_sln_smile
 from frm.term_structures.interest_rate_option_helpers import standardise_relative_quote_col_names, standardise_atmf_quote_col_names
@@ -18,25 +18,25 @@ discount_factors_3m = pd.read_excel(io=fp, sheet_name='DF_3M')
 discount_factors_6m = pd.read_excel(io=fp, sheet_name='DF_6M')
 
 curve_date = pd.Timestamp('2024-06-28')
-busdaycal = get_busdaycal('AUD')
+cal = get_busdaycal('AUD')
 day_count_basis = DayCountBasis.ACT_365
 
 zero_curve_3m = ZeroCurve(curve_date=curve_date,
-                          data=discount_factors_3m,
+                          pillar_df=discount_factors_3m,
                           day_count_basis=DayCountBasis.ACT_365,
-                          busdaycal=busdaycal,
-                          interpolation_method='linear_on_log_of_discount_factors')
+                          cal=cal,
+                          interp_method='linear_on_ln_discount')
 zero_curve_6m = ZeroCurve(curve_date=curve_date,
-                          data=discount_factors_6m,
+                          pillar_df=discount_factors_6m,
                           day_count_basis=DayCountBasis.ACT_365,
-                          busdaycal=busdaycal,
-                          interpolation_method='linear_on_log_of_discount_factors')
+                          cal=cal,
+                          interp_method='linear_on_ln_discount')
 
 swaption_quotes = pd.read_excel(io=fp, sheet_name='Swaption1Y')
 vol_sln_df = swaption_quotes.loc[swaption_quotes['field']=='lognormal_vol', :].reset_index(drop=True)
 
 
-fixed_frequency = PeriodFrequency.QUARTERLY
+fixed_frequency = PeriodFreq.QUARTERLY
 settlement_delay = 1
 ln_shift = 0.01
 
@@ -55,22 +55,14 @@ df = vol_sln_df[['expiry', 'swap_term', 'frequency']].copy()
 
 # Set the swaption expiry date, and the underlying swap effective date and swap termination date.
 df['expiry'] = df['expiry'].apply(clean_tenor)
-df['expiry_date'] = np.busday_offset(
-    dates=(curve_date + df['expiry'].apply(tenor_to_date_offset)).to_numpy().astype('datetime64[D]'),
-    offsets=0, roll='following', busdaycal=busdaycal)
-
-df['swap_effective_date'] = np.busday_offset(dates=df['expiry_date'].to_numpy().astype('datetime64[D]'),
-    offsets=settlement_delay, roll='following', busdaycal=busdaycal)
-
+df['expiry_date'] = workday(curve_date + df['expiry'].apply(tenor_to_date_offset), 0, cal)
+df['swap_effective_date'] = workday(df['expiry_date'], settlement_delay, cal)
 df['swap_term'] = df['swap_term'].apply(clean_tenor)
-df['swap_termination_date'] = np.busday_offset(
-    dates=(df['swap_effective_date'] + df['swap_term'].apply(tenor_to_date_offset)).to_numpy().astype('datetime64[D]'),
-    offsets=settlement_delay, roll='following', busdaycal=busdaycal)
-
+df['swap_termination_date'] = workday(df['swap_effective_date'] + df['swap_term'].apply(tenor_to_date_offset), settlement_delay, cal)
 df['expiry_years'] = year_frac(curve_date, df['expiry_date'], day_count_basis)
 
 for i, row in df.iterrows():
-    df.loc[i,'frequency'] = PeriodFrequency.from_value(row['frequency'])
+    df.loc[i,'frequency'] = PeriodFreq.from_value(row['frequency'])
 
 
 # Functions
@@ -87,26 +79,25 @@ for i, row in df.iterrows():
 df['F'] = np.nan
 for i, row in df.iterrows():
 
-    frequency = row['frequency']
+    freq = row['frequency']
 
     fixed_schedule = Schedule(start_date=row['swap_effective_date'],
                              end_date=row['swap_termination_date'],
-                             frequency=frequency,
-                             busdaycal=busdaycal,
-                             add_fixing_dates=True)
-    fixed_schedule.add_period_length_to_schedule(day_count_basis=day_count_basis)
+                             freq=freq,
+                             cal=cal)
+    fixed_schedule.add_period_yearfrac(day_count_basis=day_count_basis)
 
-    if frequency == PeriodFrequency.QUARTERLY:
+    if freq == PeriodFreq.QUARTERLY:
         fixed_schedule.df['forward_rate'] = zero_curve_3m.get_forward_rates(period_start=fixed_schedule.df['period_start'],
-                                                                        period_end=fixed_schedule.df['period_end'],
-                                                                        forward_rate_type=TermRate.SIMPLE)
-    elif frequency == PeriodFrequency.SEMIANNUAL:
+                                                                            period_end=fixed_schedule.df['period_end'],
+                                                                            forward_rate_type=TermRate.SIMPLE)
+    elif freq == PeriodFreq.SEMIANNUAL:
         fixed_schedule.df['forward_rate'] = zero_curve_6m.get_forward_rates(period_start=fixed_schedule.df['period_start'],
-                                                                        period_end=fixed_schedule.df['period_end'],
-                                                                        forward_rate_type=TermRate.SIMPLE)
+                                                                            period_end=fixed_schedule.df['period_end'],
+                                                                            forward_rate_type=TermRate.SIMPLE)
 
     fixed_schedule.df['discount_factor'] = zero_curve_3m.get_discount_factors(dates=fixed_schedule.df['payment_date'])
-    fixed_schedule.df['annuity_factor'] = fixed_schedule.df['period_years'] * fixed_schedule.df['discount_factor']
+    fixed_schedule.df['annuity_factor'] = fixed_schedule.df['period_yearfrac'] * fixed_schedule.df['discount_factor']
     df.loc[i,'F'] = (fixed_schedule.df['forward_rate'] * fixed_schedule.df['annuity_factor'] \
                      / fixed_schedule.df['annuity_factor'].sum()).sum()
 

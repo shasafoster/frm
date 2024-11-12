@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 from functools import reduce
 import os
-import sys
-
 import holidays
 import numpy as np
 import pandas as pd

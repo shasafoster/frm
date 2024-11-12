@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 import numpy as np
 from scipy.interpolate import interp1d
-from frm.pricing_engine.monte_carlo_generic import generate_rand_nbs, MAX_SIMULATIONS_PER_LOOP
+from frm.pricing_engine.monte_carlo_generic import generate_rand_nbs
+from frm.utils import MAX_SIMULATIONS_PER_LOOP
 
 def clewlow_strickland_1_factor_simulate(forward_curve, nb_simulations, segments_per_day, T, alpha, sigma):
     """
