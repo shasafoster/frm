@@ -10,7 +10,7 @@ import warnings
 
 import frm.utils
 from frm.utils import Schedule, get_schedule, day_count, year_frac, get_busdaycal
-from frm.enums import CompoundingFrequency, TermRate, RFRFixingCalcMethod, PeriodFrequency, DayCountBasis, ExchangeNotionals
+from frm.enums import CompoundingFreq, TermRate, RFRFixingCalcMethod, PeriodFreq, DayCountBasis, ExchangeNotionals
 from frm.term_structures.zero_curve import ZeroCurve
 from frm.term_structures.zero_curve_helpers import discount_factor_from_zero_rate
 from scipy.optimize import root_scalar
