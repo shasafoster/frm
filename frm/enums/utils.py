@@ -183,7 +183,7 @@ class PeriodFreq(Enum):
 
 
 class DayRoll(Enum):
-    NONE = None
+    UNADJUSTED = 'unadjusted'
     _1 = 1
     _2 = 2
     _3 = 3
