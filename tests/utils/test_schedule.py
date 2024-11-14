@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import os
-from frm.utils import get_schedule, generate_date_schedule, PeriodFreq, Stub, RollConv, DayRoll
+from frm.utils import make_schedule, generate_date_schedule, PeriodFreq, Stub, RollConv, DayRoll
 import pandas as pd
 import pytest    
 os.chdir(os.environ.get('PROJECT_DIR_FRM'))
@@ -50,7 +50,7 @@ def test_schedule():
         if 'day_roll' in function_parameters.keys():
             function_parameters['day_roll'] = DayRoll.from_value(function_parameters['day_roll'])
 
-        df_schedule = get_schedule(**function_parameters)
+        df_schedule = make_schedule(**function_parameters)
 
         correct_result = case['correct_results'].drop('test_#', axis=1)
 

@@ -12,15 +12,10 @@ from frm.utils.daycount import year_frac, day_count
 if __name__ == "__main__":
     os.chdir(os.environ.get('PROJECT_DIR_FRM'))
 
-# def set_default(value, default):
-#     if pd.isna(value) or value is None:
-#         return default
-#     return value
-
 
 @dataclass
-class Schedule:
-    # Schedule parameters
+class BaseSchedule:
+    # Base Schedule parameters
     start_date: [pd.Timestamp, np.datetime64, datetime.date, datetime.datetime]
     end_date: [pd.Timestamp, np.datetime64, datetime.date, datetime.datetime]
     freq: PeriodFreq
@@ -32,24 +27,6 @@ class Schedule:
     last_stub: Stub = Stub.DEFAULT
     roll_user_specified_dates: bool = False
     cal: np.busdaycalendar = np.busdaycalendar()
-    # Coupon payment date parameters
-    add_cpn_payment_dates: bool = False
-    cpn_payment_delay: int = 0
-    cpn_payment_timing: TimingConvention = TimingConvention.IN_ARREARS
-    # Notional schedule parameters
-    add_notional_schedule: bool = False
-    notional_amount: float | np.ndarray = 100_000_000
-    exchange_notionals: ExchangeNotionals = ExchangeNotionals.NEITHER
-    add_notional_payment_dates: bool = False
-    notional_payment_delay: int = 0
-    notional_payment_timing: TimingConvention = TimingConvention.IN_ARREARS
-
-    # Fixing date parameters
-    fixing_data_params = None
-    #add_fixing_dates: bool = False
-    #fixing_days_ahead: int = 0
-    #fixing_timing: TimingConvention = TimingConvention.IN_ADVANCE
-
     # The schedule DataFrame is initialized after the object is created
     df: pd.DataFrame = field(init=False)
 
@@ -59,18 +36,11 @@ class Schedule:
         self.end_date = pd.Timestamp(self.end_date)
         self.first_period_end = pd.Timestamp(self.first_period_end) if self.first_period_end is not None else None
         self.last_period_start = pd.Timestamp(self.last_period_start) if self.last_period_start is not None else None
+        self.make_schedule()
 
-        self.generate_schedule()
-
-        if self.add_cpn_payment_dates:
-            self.add_payment_dates_to_schedule(self.cpn_payment_delay, self.cpn_payment_timing, prefix='cpn_')
-
-        if self.add_notional_schedule:
-            self.setup_notional_schedule(self.notional_amount, self.exchange_notionals)
-
-    def generate_schedule(self):
+    def make_schedule(self):
         # Generate the schedule DataFrame using the stored parameters
-        self.df = get_schedule(
+        self.df = make_schedule(
             start_date=self.start_date,
             end_date=self.end_date,
             freq=self.freq,
@@ -88,30 +58,12 @@ class Schedule:
             self.start_date = self.df['period_start'].iloc[0]
             self.end_date = self.df['period_end'].iloc[-1]
 
-
-    def update_and_regenerate(self, **kwargs):
+    def add_payment_dates(self,
+                          payment_delay: int=0,
+                          payment_timing: TimingConvention = TimingConvention.IN_ARREARS,
+                          col_name: str='payment_date'):
         """
-        Update specified parameters and regenerate the schedule.
-
-        Parameters:
-            **kwargs: Dictionary of parameters to update.
-        """
-        # Update the parameters
-        for key, value in kwargs.items():
-            if hasattr(self, key):
-                setattr(self, key, value)
-            else:
-                raise AttributeError(f"'Schedule' object has no attribute '{key}'")
-        # Regenerate the schedule with updated parameters
-        self.generate_schedule()
-
-
-    def add_payment_dates_to_schedule(self,
-                                      payment_delay: int=0,
-                                      payment_timing: TimingConvention = TimingConvention.IN_ARREARS,
-                                      prefix: str=''):
-        """
-        Add payment dates to the schedule DataFrame.
+        Add payment dates to the schedule DataFrame for valid periods.
 
         Parameters
         ----------
@@ -119,8 +71,8 @@ class Schedule:
             Specifies how many days after period start_date/end_date (if payments are in_advance/in_arrears), the payment is made. The default is 0.
         payment_timing : TimingConvention
             Specifies when payments are made. The default is TimingConvention.IN_ARREARS.
-        prefix: str
-            Prefix to add to the payment_date column name. The default is ''.
+        col_name: str
+            Column name to use for the payment dates. The default is 'payment_date'.
         """
         match payment_timing:
             case TimingConvention.IN_ARREARS:
@@ -130,76 +82,12 @@ class Schedule:
             case _:
                 raise ValueError(f"Invalid payment_timing {payment_timing}")
 
-        dates_np = np.busday_offset(dates, offsets=payment_delay, roll=self.roll_conv.value, busdaycal=self.cal)
-        self.df[prefix + 'payment_date'] = pd.DatetimeIndex(dates_np).astype('datetime64[ns]')
-
-
-    def add_fixing_dates_to_schedule(self,
-                                     fixing_days_ahead: int=0,
-                                     fixing_timing: TimingConvention = TimingConvention.IN_ADVANCE,
-                                     roll_conv: RollConv=None):
-
-        if roll_conv is None:
-            roll_conv = self.roll_conv
-
-        match fixing_timing:
-            case TimingConvention.IN_ARREARS:
-                dates = self.df['period_end'].to_numpy(dtype='datetime64[D]')
-            case TimingConvention.IN_ADVANCE:
-                dates = self.df['period_start'].to_numpy(dtype='datetime64[D]')
-            case _:
-                raise ValueError(f"Invalid fixing_timing {fixing_timing}")
-
-        dates_np = np.busday_offset(dates, offsets=-1 * fixing_days_ahead, roll=roll_conv.value, busdaycal=self.cal)
-        self.df.instert(0, 'fixing_date', pd.DatetimeIndex(dates_np).astype('datetime64[ns]'))
-
-
-    def setup_notional_schedule(self,
-                                notional_amount: float | np.ndarray,
-                                exchange_notionals: ExchangeNotionals=ExchangeNotionals.NEITHER,
-                                initial_notional_exchange_date=None):
-
-        notional_amount = np.atleast_1d(notional_amount)
-        if notional_amount.shape == (1,):
-            self.df['notional_payment'] = 0
-            self.df['notional'] = notional_amount[0]
-        elif notional_amount.shape == self.df.shape[0]:
-            self.df['notional'] = notional_amount
-            self.df['notional_payment'] = notional_amount[:-1] - notional_amount[1:]
-        else:
-            raise ValueError("Invalid notional_amount shape")
-
-        self.add_payment_dates_to_schedule(self.notional_payment_delay, self.notional_payment_timing,
-                                           prefix='notional_')
-
-        if exchange_notionals == ExchangeNotionals.START or exchange_notionals == ExchangeNotionals.BOTH:
-            # Add initial notional exchange period
-            self._add_initial_notional_exchange_period_to_schedule(initial_notional_exchange_date)
-            self.df.loc[self.df.index[0], 'notional'] = 0
-            self.df.loc[self.df.index[0], 'notional_payment'] = -1 * notional_amount[0]
-
-        if exchange_notionals == ExchangeNotionals.END or exchange_notionals == ExchangeNotionals.BOTH:
-            # Add final notional exchange period
-            self.df.loc[self.df.index[-1], 'notional_payment'] = notional_amount[-1]
-
-
-    def _add_initial_notional_exchange_period_to_schedule(self, initial_notional_exchange_date=None):
-        #assert 'period_years' in self.df.columns
-        assert 'notional_payment_date' in self.df.columns
-        column_order = self.df.columns
-
-        if initial_notional_exchange_date is None:
-            initial_notional_exchange_date = self.df['period_start'].iloc[0]
-
-        row_data = {'notional_payment_date': initial_notional_exchange_date}
-        self.df = pd.concat([pd.DataFrame(row_data, index=[0]), self.df], ignore_index=True)
-
-        self.df = self.df[column_order]
-        self.df.reset_index(drop=True, inplace=True)
-
+        dates = np.where(np.isnan(dates), None, dates)
+        dates_np = np.where(dates != None, np.busday_offset(dates, offsets=payment_delay, roll=self.roll_conv.value, busdaycal=self.cal), None)
+        self.df[col_name] = pd.DatetimeIndex(dates_np).astype('datetime64[ns]')
 
     def add_period_daycount(self, day_count_basis: DayCountBasis):
-        """ Add the period length in days and years to the schedule DataFrame, always replacing existing columns"""
+        """ Add the period length in days to the schedule DataFrame, always replacing existing columns"""
 
         # Remove 'period_days' and 'period_years' if they already exist
         if 'period_daycount' in self.df.columns:
@@ -215,7 +103,7 @@ class Schedule:
         self.df.insert(loc=col_index + 1, column='period_daycount',value=days)
 
     def add_period_yearfrac(self, day_count_basis: DayCountBasis):
-        """ Add the period length in days and years to the schedule DataFrame, always replacing existing columns"""
+        """ Add the period length years to the schedule DataFrame, always replacing existing columns"""
 
         if 'period_yearfrac' in self.df.columns:
             self.df.pop('period_yearfrac')
@@ -229,45 +117,124 @@ class Schedule:
         years[mask] = year_frac(self.df['period_start'][mask], self.df['period_end'][mask], day_count_basis)
         self.df.insert(loc=col_index + 2, column='period_yearfrac', value=years)
 
-    def copy(self):
-        # Create a new instance of Schedule - refresh with ChatGPT if main class changes
-        new_schedule = Schedule(
-            start_date=self.start_date,
-            end_date=self.end_date,
-            freq=self.freq,
-            roll_conv=self.roll_conv,
-            day_roll=self.day_roll,
-            first_period_end=self.first_period_end,
-            last_period_start=self.last_period_start,
-            first_stub=self.first_stub,
-            last_stub=self.last_stub,
-            roll_user_specified_dates=self.roll_user_specified_dates,
-            cal=np.busdaycalendar(weekmask=self.cal.weekmask, holidays=self.cal.holidays),
-            add_cpn_payment_dates=self.add_cpn_payment_dates,
-            cpn_payment_delay=self.cpn_payment_delay,
-            cpn_payment_timing=self.cpn_payment_timing,
-            add_notional_schedule=self.add_notional_schedule,
-            notional_amount=self.notional_amount,
-            exchange_notionals=self.exchange_notionals,
-            add_notional_payment_dates=self.add_notional_payment_dates,
-            notional_payment_delay=self.notional_payment_delay,
-            notional_payment_timing=self.notional_payment_timing,
-        )
 
-        # Deep copy of the schedule DataFrame
-        new_schedule.df = self.df.copy(deep=True)
+@dataclass
+class NotionalSchedule(BaseSchedule):
+    notional_amount: float | np.ndarray = 100_000_000
+    exchange_notionals: ExchangeNotionals = ExchangeNotionals.NEITHER
+    add_notional_payment_dates: bool = False
+    notional_payment_delay: int = 0
+    notional_payment_timing: TimingConvention = TimingConvention.IN_ARREARS
+    initial_notional_exchange_date: Union[pd.Timestamp, np.datetime64, datetime.date, datetime.datetime, None] = None
 
-        return new_schedule
+    def __post_init__(self):
+        super().__post_init__()
+        self.add_notional_schedule()
+
+    def add_notional_schedule(self):
+        """Adds columns 'notional', 'notional_payment' and 'notional_payment_date' to the schedule DataFrame"""
+
+        notional_amount = np.atleast_1d(self.notional_amount)
+        if notional_amount.shape == (1,):
+            self.df['notional_payment'] = 0
+            self.df['notional'] = notional_amount[0]
+        elif notional_amount.shape == self.df.shape[0]:
+            self.df['notional'] = notional_amount
+            self.df['notional_payment'] = notional_amount[:-1] - notional_amount[1:]
+        else:
+            raise ValueError("Invalid notional_amount shape")
+
+        self.add_payment_dates(self.notional_payment_delay, self.notional_payment_timing, col_name='notional_payment_date')
+
+        if self.exchange_notionals == ExchangeNotionals.START or self.exchange_notionals == ExchangeNotionals.BOTH:
+            column_order = self.df.columns
+            if self.initial_notional_exchange_date is None:
+                self.initial_notional_exchange_date = self.df['period_start'].iloc[0]
+
+            row_data = {'notional_payment_date': self.initial_notional_exchange_date}
+            self.df = pd.concat([pd.DataFrame(row_data, index=[0]), self.df], ignore_index=True)
+            self.df = self.df[column_order]
+            self.df.reset_index(drop=True, inplace=True)
+
+            self.df.loc[self.df.index[0], 'notional'] = 0
+            self.df.loc[self.df.index[0], 'notional_payment'] = -1 * notional_amount[0]
+
+        if self.exchange_notionals == ExchangeNotionals.END or self.exchange_notionals == ExchangeNotionals.BOTH:
+            # Add final notional exchange period
+            self.df.loc[self.df.index[-1], 'notional_payment'] = notional_amount[-1]
 
 
-def variable_notional_helper():
-    # TODO
-    #  1. Increasing or decreasing amount or percentage
-    #  2. Annuity (custom fixed rate or floating rate) in order to get fixed total payments (coupon + notional) over the life
-    pass
+@dataclass
+class CouponSchedule(NotionalSchedule):
+    coupon_payment_delay: int = 0
+    coupon_payment_timing: TimingConvention = TimingConvention.IN_ARREARS
+    contractual_coupon_component: float | np.ndarray = None
+
+    def __post_init__(self):
+        super().__post_init__()
+        if self.contractual_coupon_component is not None:
+
+            contractual_coupon_component = np.atleast_1d(self.contractual_coupon_component)
+            if self.exchange_notionals in [ExchangeNotionals.START, ExchangeNotionals.BOTH] and contractual_coupon_component.shape in [(1,), self.df.shape[0] - 1]:
+                self.df.loc[1:, 'notional'] = contractual_coupon_component
+            elif self.exchange_notionals in [ExchangeNotionals.END, ExchangeNotionals.NEITHER] and contractual_coupon_component.shape in [(1,), self.df.shape[0]]:
+                self.df['notional'] = contractual_coupon_component
+            else:
+                raise ValueError(f"Invalid contractual_coupon_component shape: {contractual_coupon_component.shape}")
+
+        self.add_payment_dates(self.coupon_payment_delay, self.coupon_payment_timing, col_name='coupon_payment_date')
 
 
-def get_schedule(
+
+
+
+
+
+
+
+
+
+
+
+#     def copy(self):
+#         # Create a new instance of Schedule - refresh with ChatGPT if main class changes
+#         new_schedule = Schedule(
+#             start_date=self.start_date,
+#             end_date=self.end_date,
+#             freq=self.freq,
+#             roll_conv=self.roll_conv,
+#             day_roll=self.day_roll,
+#             first_period_end=self.first_period_end,
+#             last_period_start=self.last_period_start,
+#             first_stub=self.first_stub,
+#             last_stub=self.last_stub,
+#             roll_user_specified_dates=self.roll_user_specified_dates,
+#             cal=np.busdaycalendar(weekmask=self.cal.weekmask, holidays=self.cal.holidays),
+#             add_cpn_payment_dates=self.add_cpn_payment_dates,
+#             cpn_payment_delay=self.cpn_payment_delay,
+#             cpn_payment_timing=self.cpn_payment_timing,
+#             add_notional_schedule=self.add_notional_schedule,
+#             notional_amount=self.notional_amount,
+#             exchange_notionals=self.exchange_notionals,
+#             add_notional_payment_dates=self.add_notional_payment_dates,
+#             notional_payment_delay=self.notional_payment_delay,
+#             notional_payment_timing=self.notional_payment_timing,
+#         )
+#
+#         # Deep copy of the schedule DataFrame
+#         new_schedule.df = self.df.copy(deep=True)
+#
+#         return new_schedule
+#
+#
+# def variable_notional_helper():
+#     # TODO
+#     #  1. Increasing or decreasing amount or percentage
+#     #  2. Annuity (custom fixed rate or floating rate) in order to get fixed total payments (coupon + notional) over the life
+#     pass
+
+
+def make_schedule(
         start_date: [pd.Timestamp, np.datetime64, datetime.date, datetime.datetime],
         end_date: [pd.Timestamp, np.datetime64, datetime.date, datetime.datetime],
         freq: PeriodFreq,
