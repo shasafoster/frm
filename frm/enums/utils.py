@@ -13,7 +13,7 @@ class DayCountBasis(Enum):
     # If storing instrument definitions in CDM, use 'code' to define valid fieldnames
     _30_360 = '30/360'
     _30E_360 = '30e/360'
-    _30E_360_ISDA = '30e/360isda'
+    _30E_360_ISDA = '30e/360_isda'
     ACT_360 = 'act/360'
     ACT_365 = 'act/365'
     ACT_ACT = 'act/act'
@@ -23,7 +23,7 @@ class DayCountBasis(Enum):
         days_per_year = {
             '30/360': 360,
             '30e/360': 360,
-            '30e/360isda': 360,
+            '30e/360_isda': 360,
             'act/360': 360,
             'act/365': 365,
             'act/act': np.nan,
@@ -63,6 +63,10 @@ class DayCountBasis(Enum):
         # List all valid codes in case of an error
         valid_values = [enum_member.value for enum_member in cls]
         raise ValueError(f"Invalid value: {value}. Valid codes are: {valid_values}") 
+
+    @property
+    def display_name(self):
+        return self.name.upper().replace('_', ' ').strip()
 
 
 class CompoundingFreq(Enum):
@@ -104,6 +108,10 @@ class CompoundingFreq(Enum):
         # # List all valid codes in case of an error
         # valid_values = [enum_member.value for enum_member in cls]
         # raise ValueError(f"Invalid value: {value}. Valid codes are: {valid_values}")
+
+    @property
+    def display_name(self):
+        return self.name.title().replace('_', ' ').strip()
 
 
 class PeriodFreq(Enum):
@@ -181,6 +189,10 @@ class PeriodFreq(Enum):
                 return key
         return value
 
+    @property
+    def display_name(self):
+        return self.name.title().replace('_', ' ').strip()
+
 
 class DayRoll(Enum):
     UNADJUSTED = 'unadjusted'
@@ -219,7 +231,7 @@ class DayRoll(Enum):
 
     @classmethod
     def default(cls):
-        return cls.NONE # Return the default enum value
+        return cls.UNADJUSTED # Return the default enum value
 
     @classmethod
     def is_valid(cls, value):
@@ -228,6 +240,10 @@ class DayRoll(Enum):
     @classmethod
     def from_value(cls, value):
         return get_enum_member(cls, value)
+
+    @property
+    def display_name(self):
+        return self.name.title().replace('_', ' ').strip()
         
         
     
@@ -237,10 +253,6 @@ class RollConv(Enum):
     PRECEDING = 'preceding'
     MODIFIED_FOLLOWING = 'modifiedfollowing'
     MODIFIED_PRECEDING = 'modifiedpreceding'
-     
-    @classmethod
-    def default(cls):
-        return cls.MODIFIED_FOLLOWING # Return the default enum value
 
     @classmethod
     def is_valid(cls, value):
@@ -250,16 +262,19 @@ class RollConv(Enum):
     def from_value(cls, value):
         return get_enum_member(cls, value)
 
+    @classmethod
+    def default(cls):
+        return cls.MODIFIED_FOLLOWING # Return the default enum value
+
+    @property
+    def display_name(self):
+        return self.name.replace('_', ' ').title()
 
 
 class TimingConvention(Enum):
     IN_ARREARS = 'in_arrears'
     IN_ADVANCE = 'in_advance'
-    
-    @classmethod
-    def default(cls):
-        return cls.IN_ARREARS # Return the default enum value    
-    
+
     @classmethod
     def is_valid(cls, value):
         return is_valid_enum_value(cls, value)
@@ -268,8 +283,18 @@ class TimingConvention(Enum):
     def from_value(cls, value):
         return get_enum_member(cls, value)
         
-    
-    
+    @property
+    def display_name(self):
+        return self.name.title().replace('_', ' ')
+
+    @classmethod
+    def fixing_default(cls):
+        return cls.IN_ADVANCE # Return the default enum value
+
+    @classmethod
+    def payment_default(cls):
+        return cls.IN_ARREARS # Return the default enum value
+
 class Stub(Enum):
     NONE = 'none'
     SHORT = 'short'
@@ -279,20 +304,24 @@ class Stub(Enum):
     DEFINED_PER_LAST_PERIOD_START_DATE = 'defined_per_last_period_start_date'
 
     @classmethod
-    def default(cls):
-        return cls.DEFAULT # Return the default enum value    
-    
-    @classmethod
-    def market_convention(cls):
-        return cls.SHORT # Market convention is a short stub 
-    
-    @classmethod
     def is_valid(cls, value):
         return is_valid_enum_value(cls, value)
 
     @classmethod
     def from_value(cls, value):
         return get_enum_member(cls, value)
+
+    @classmethod
+    def default(cls):
+        return cls.DEFAULT  # Return the default enum value
+
+    @classmethod
+    def market_convention(cls):
+        return cls.SHORT  # Market convention is a short stub
+
+    @property
+    def display_name(self):
+        return self.name.title().replace('_', ' ')
         
 
 class ExchangeNotionals(Enum):
@@ -300,5 +329,21 @@ class ExchangeNotionals(Enum):
     END = 'end'
     BOTH = 'both'
     NEITHER = 'neither'
+
+    @classmethod
+    def is_valid(cls, value):
+        return is_valid_enum_value(cls, value)
+
+    @classmethod
+    def from_value(cls, value):
+        return get_enum_member(cls, value)
+
+    @property
+    def display_name(self):
+        return self.name.title()
+
+    @classmethod
+    def default(cls):
+        return cls.NEITHER # Return the default enum value
 
 

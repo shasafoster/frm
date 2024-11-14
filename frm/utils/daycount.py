@@ -1,16 +1,12 @@
 # -*- coding: utf-8 -*-
-import os
-if __name__ == "__main__":
-    os.chdir(os.environ.get('PROJECT_DIR_FRM')) 
-
 import calendar
 import datetime as dt
 import numpy as np
 import pandas as pd
 from frm.enums import DayCountBasis
 
-            
-def convert_to_same_shape_DatetimeIndex(start_date, end_date):
+
+def convert_to_same_shape_datetimeindex(start_date, end_date):
     start_dti = to_datetimeindex(start_date)
     end_dti = to_datetimeindex(end_date)
     
@@ -38,7 +34,7 @@ def day_count(start_date,
     # [1] The excel file "30-360-2006ISDADefs" sourced from https://www.isda.org/2008/12/22/30-360-day-count-conventions/
     #     Saved to  WayBackMachine on 23 September 2024, https://web.archive.org/web/20240923055727/https://www.isda.org/2008/12/22/30-360-day-count-conventions/
         
-    start_dti, end_dti, scalar_output = convert_to_same_shape_DatetimeIndex(start_date, end_date)
+    start_dti, end_dti, scalar_output = convert_to_same_shape_datetimeindex(start_date, end_date)
     
     assert (start_dti <= end_dti).all()
     
@@ -142,7 +138,7 @@ def year_frac(start_date,
         return day_count(start_date, end_date, day_count_basis, is_end_date_on_termination) / 366.0 
     
     elif day_count_basis == DayCountBasis.ACT_ACT:
-        start_dti, end_dti, scalar_output  = convert_to_same_shape_DatetimeIndex(start_date, end_date)
+        start_dti, end_dti, scalar_output  = convert_to_same_shape_datetimeindex(start_date, end_date)
         assert (start_dti <= end_dti).all()
         
         start_year = start_dti.year
@@ -201,14 +197,17 @@ def to_datetimeindex(date_object) -> 'pd.DatetimeIndex':
 
 
 if __name__ == "__main__":
+    import os
+    os.chdir(os.environ.get('PROJECT_DIR_FRM'))
+    pass
     # Example usage
-    start_date = pd.date_range(start='2024-01-01', end='2024-12-01', freq='ME')
-    end_date = pd.date_range(start='2024-02-29', end='2024-12-31', freq='ME')
-    
-    day_count_basis = DayCountBasis.from_value('act/365')
-    days = day_count(start_date, end_date, day_count_basis)
-    years = year_frac(start_date, end_date, day_count_basis)
-    
-    for d1, d2, day_count, year_frac in zip(start_date, end_date, days, years):
-        print(d1.date(), d2.date(), day_count.item(), round(year_frac.item(),6))
+    # start_date = pd.date_range(start='2024-01-01', end='2024-12-01', freq='ME')
+    # end_date = pd.date_range(start='2024-02-29', end='2024-12-31', freq='ME')
+    #
+    # day_count_basis = DayCountBasis.from_value('act/365')
+    # days = day_count(start_date, end_date, day_count_basis)
+    # years = year_frac(start_date, end_date, day_count_basis)
+    #
+    # for d1, d2, day_count, year_frac in zip(start_date, end_date, days, years):
+    #     print(d1.date(), d2.date(), day_count.item(), round(year_frac.item(),6))
 

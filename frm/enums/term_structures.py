@@ -7,9 +7,13 @@ from enum import Enum
 
 
 class RFRFixingCalcMethod(Enum):
-    DAILY_COMPOUNDED = 'dailycompounded'
-    WEIGHTED_AVERAGE = 'weightedaverage'
-    SIMPLE_AVERAGE = 'simpleaverage'
+    DAILY_COMPOUNDED = 'daily_compounded'
+    WEIGHTED_AVERAGE = 'weighted_average'
+    SIMPLE_AVERAGE = 'simple_average'
+
+    @property
+    def display_name(self):
+        return self.name.replace('_', ' ').strip().upper()
 
 class TermRate(Enum):
     SIMPLE = 'simple'
@@ -21,6 +25,10 @@ class TermRate(Enum):
     #SEMIANNUAL = 'semiannual' # Forward rate formula is not implemented in ZeroCurve
     ANNUAL = 'annual'
 
+    @property
+    def display_name(self):
+        return self.name.title()
+
 
 class FXSmileInterpolationMethod(Enum):
     UNIVARIATE_SPLINE = 'univariate_spline'
@@ -31,11 +39,19 @@ class FXSmileInterpolationMethod(Enum):
     HESTON_LIPTON = 'heston_lipton'
     HESTON_COSINE = 'heston_cosine'
 
+    @property
+    def display_name(self):
+        return self.name.title().replace('_', ' ')
+
 
 class DeltaConvention(Enum):
     REGULAR_SPOT = 'regular_spot'
     REGULAR_FORWARD = 'regular_forward'
     PREMIUM_ADJUSTED_SPOT = 'premium_adjusted_spot'
     PREMIUM_ADJUSTED_FORWARD = 'premium_adjusted_forward'
+
+    @property
+    def display_name(self):
+        return self.name.title().replace('_', ' ')
 
 
