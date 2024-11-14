@@ -25,7 +25,7 @@ class Schedule:
     end_date: [pd.Timestamp, np.datetime64, datetime.date, datetime.datetime]
     freq: PeriodFreq
     roll_conv: RollConv = RollConv.MODIFIED_FOLLOWING
-    day_roll: DayRoll = DayRoll.NONE
+    day_roll: DayRoll = DayRoll.UNADJUSTED
     first_period_end: Union[pd.Timestamp, np.datetime64, datetime.date, datetime.datetime, None] = None
     last_period_start: Union[pd.Timestamp, np.datetime64, datetime.date, datetime.datetime, None] = None
     first_stub: Stub = Stub.DEFAULT
@@ -272,7 +272,7 @@ def get_schedule(
         end_date: [pd.Timestamp, np.datetime64, datetime.date, datetime.datetime],
         freq: PeriodFreq,
         roll_conv: RollConv=RollConv.MODIFIED_FOLLOWING,
-        day_roll: DayRoll=DayRoll.NONE,
+        day_roll: DayRoll=DayRoll.UNADJUSTED,
         first_period_end: Union[pd.Timestamp, np.datetime64, datetime.date, datetime.datetime, None] = None,
         last_period_start: Union[pd.Timestamp, np.datetime64, datetime.date, datetime.datetime, None] = None,
         first_stub: Stub=Stub.DEFAULT,
@@ -294,7 +294,7 @@ def get_schedule(
     roll_conv : RollConv
         How to treat dates that do not fall on a valid day. The default is RollConv.MODIFIED_FOLLOWING.
     day_roll : DayRoll
-        Specifies the day periods should start/end on. The default is DayRoll.NONE.
+        Specifies the day periods should start/end on. The default is DayRoll.UNADJUSTED.
     first_period_end: pandas.Timestamp
         Specifies the end date of the first period. The first_period_end overrides the first_stub field.
     last_period_start: pandas.Timestamp
@@ -491,7 +491,7 @@ def generate_date_schedule(
         freq: PeriodFreq,
         direction: str,
         roll_conv: RollConv=RollConv.MODIFIED_FOLLOWING,
-        day_roll: DayRoll=DayRoll.NONE,
+        day_roll: DayRoll=DayRoll.UNADJUSTED,
         roll_user_specified_dates: bool=False,
         cal: np.busdaycalendar=np.busdaycalendar()
     ) -> Tuple[List, List]:
@@ -537,10 +537,13 @@ def generate_date_schedule(
     
     def apply_specific_day_roll(pd_timestamp: pd.Timestamp,
                                 specific_day_roll: DayRoll) -> pd.Timestamp:
-        try:
-            return pd_timestamp.replace(day=specific_day_roll.value)
-        except ValueError:
-            return pd_timestamp + pd.offsets.MonthEnd(0)   
+        if specific_day_roll == DayRoll.UNADJUSTED:
+            return pd_timestamp
+        else:
+            try:
+                return pd_timestamp.replace(day=specific_day_roll.value)
+            except ValueError:
+                return pd_timestamp + pd.offsets.MonthEnd(0)
 
     # Input validation
     if direction not in {'forward', 'backward'}:

@@ -148,7 +148,7 @@ def test_30360E_ISDA():
     # Test cases taken from the excel file "30-360-2006ISDADefs" sourced from https://www.isda.org/2008/12/22/30-360-day-count-conventions/
     # Webpage saved to  WayBackMachine on 23 September 2024, https://web.archive.org/web/20240923055727/https://www.isda.org/2008/12/22/30-360-day-count-conventions/
 
-    day_count_basis = DayCountBasis.from_value('30e/360isda')
+    day_count_basis = DayCountBasis.from_value('30e/360_isda')
 
     start_dates = pd.DatetimeIndex(['08/20/06', '02/20/07', '08/20/07', '02/20/08', '08/20/08', '02/20/09'])    
     end_dates = pd.DatetimeIndex(['02/20/07', '08/20/07', '02/20/08', '08/20/08', '02/20/09', '08/20/09'])
