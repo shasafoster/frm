@@ -82,9 +82,17 @@ class BaseSchedule:
             case _:
                 raise ValueError(f"Invalid payment_timing {payment_timing}")
 
-        dates = np.where(np.isnan(dates), None, dates)
-        dates_np = np.where(dates != None, np.busday_offset(dates, offsets=payment_delay, roll=self.roll_conv.value, busdaycal=self.cal), None)
-        self.df[col_name] = pd.DatetimeIndex(dates_np).astype('datetime64[ns]')
+        # Convert NaT values to a mask
+        valid_dates_mask = ~pd.isna(dates)
+        valid_dates = dates[valid_dates_mask]
+
+        # Apply np.busday_offset only to non-NaT dates
+        adjusted_dates = np.empty_like(dates, dtype='datetime64[D]')
+        adjusted_dates[valid_dates_mask] = np.busday_offset(valid_dates, offsets=payment_delay, roll=self.roll_conv.value, busdaycal=self.cal)
+        adjusted_dates[~valid_dates_mask] = 'NaT'
+
+        # Update DataFrame
+        self.df[col_name] = pd.DatetimeIndex(adjusted_dates).astype('datetime64[ns]')
 
     def add_period_daycount(self, day_count_basis: DayCountBasis):
         """ Add the period length in days to the schedule DataFrame, always replacing existing columns"""

@@ -9,7 +9,7 @@ from typing import Optional, Union
 import warnings
 
 import frm.utils
-from frm.utils import Schedule, get_schedule, day_count, year_frac, get_busdaycal
+from frm.utils import CouponSchedule, day_count, year_frac, get_busdaycal
 from frm.enums import CompoundingFreq, TermRate, RFRFixingCalcMethod, PeriodFreq, DayCountBasis, ExchangeNotionals
 from frm.term_structures.zero_curve import ZeroCurve
 from frm.term_structures.zero_curve_helpers import discount_factor_from_zero_rate
@@ -50,7 +50,7 @@ class Leg(ABC):
     "Generic class to cover pricing of all types of swap legs and bonds"
 
     # Required parameters
-    schedule: Schedule
+    schedule: CouponSchedule
     discount_curve: Optional[ZeroCurve]
     pay_rcv: Optional[PayRcv]=PayRcv.PAY
     day_count_basis: DayCountBasis=DayCountBasis
