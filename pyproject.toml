@@ -4,24 +4,27 @@ build-backend = "hatchling.build"
 
 [project]
 name = "frm"
-version = "0.0.16"
+version = "0.0.17"
 authors = [
-  { name="Shasa Foster", email="shasa.foster@gmail.com" },
+  { name="Shasa Foster", email="shasa.foster@frmcalcs.com" },
 ]
 description = "A python package for quantitative finance and derivative pricing"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies=[           
-    "holidays",
-    "matplotlib",	
-    "numba",
-    "numpy",
-    "pandas",	
-    "pandas_market_calendars",
-    "PrettyTable",
-    "pycountry",
-    "pytest",
-    "scipy",
+	"dill",
+	"holidays",
+	"matplotlib",
+	"numba",
+	"numpy",
+	"openpyxl",
+	"pandas",
+	"PrettyTable",
+	"pycountry",
+	"pytest",
+	"ruff",
+	"scipy",
+	"snakeviz"
       ]
 classifiers = [
     "Programming Language :: Python :: 3",

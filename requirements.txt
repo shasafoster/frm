@@ -1,12 +1,15 @@
+dill
 holidays
 matplotlib
 numba
 numpy
 openpyxl
 pandas
-PrettyTable 
+PrettyTable
+pycountry
 pytest
 ruff
 scipy
 snakeviz
-dill
+	
+	
