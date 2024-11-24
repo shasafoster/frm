@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "frm"
-version = "0.0.17"
+version = "0.0.18"
 authors = [
   { name="Shasa Foster", email="shasa.foster@frmcalcs.com" },
 ]
@@ -22,7 +22,6 @@ dependencies=[
 	"PrettyTable",
 	"pycountry",
 	"pytest",
-	"ruff",
 	"scipy",
 	"snakeviz"
       ]
