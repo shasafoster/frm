@@ -30,8 +30,8 @@ classifiers = [
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/shasa/frm"
-"Website" = "https://www.frmcalcs.com"
+"Homepage" = "https://github.com/shasafoster/frm"
+"Website" = "https://frmcalcs.com/"
 
 [tool.hatch.build.targets.wheel]
 packages = ["frm"]
