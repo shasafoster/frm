@@ -180,16 +180,32 @@ class CouponSchedule(NotionalSchedule):
     def __post_init__(self):
         super().__post_init__()
         if self.coupon_contractual_component is not None:
-
-            coupon_contractual_component = np.atleast_1d(self.coupon_contractual_component)
-            if self.exchange_notionals in [ExchangeNotionals.START, ExchangeNotionals.BOTH] and coupon_contractual_component.shape in [(1,), self.df.shape[0] - 1]:
-                self.df.loc[1:, 'notional'] = coupon_contractual_component
-            elif self.exchange_notionals in [ExchangeNotionals.END, ExchangeNotionals.NEITHER] and coupon_contractual_component.shape in [(1,), self.df.shape[0]]:
-                self.df['notional'] = coupon_contractual_component
-            else:
-                raise ValueError(f"Invalid coupon_contractual_component shape: {coupon_contractual_component.shape}")
-
+            self._apply_coupon_contractual_component()
         self.add_payment_dates(self.coupon_payment_delay, self.coupon_payment_timing, col_name='coupon_payment_date')
+
+    def _apply_coupon_contractual_component(self):
+        """Validate and apply the coupon_contractual_component to the notional schedule."""
+        coupon_component = np.atleast_1d(self.coupon_contractual_component)
+        valid_shapes = self._determine_valid_shapes()
+
+        if coupon_component.shape not in valid_shapes:
+            raise ValueError(
+                f"Invalid coupon_contractual_component shape: {coupon_component.shape}. "
+                f"Expected one of: {valid_shapes}"
+            )
+
+        if coupon_component.shape == (1,):
+            self.df.loc[1:, 'notional'] = coupon_component[0]
+        else:
+            self.df.loc[1:, 'notional'] = coupon_component
+
+    def _determine_valid_shapes(self):
+        """Determine valid shapes for coupon_contractual_component based on exchange_notionals."""
+        row_count = self.df.shape[0]
+        if self.exchange_notionals in [ExchangeNotionals.START, ExchangeNotionals.BOTH]:
+            return [(1,), (row_count - 1,)]
+        return [(1,), (row_count,)]
+
 
 
 def make_schedule(
