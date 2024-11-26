@@ -130,7 +130,6 @@ class BaseSchedule:
 class NotionalSchedule(BaseSchedule):
     notional_amount: float | np.ndarray = 100_000_000
     exchange_notionals: ExchangeNotionals = ExchangeNotionals.NEITHER
-    add_notional_payment_dates: bool = False
     notional_payment_delay: int = 0
     notional_payment_timing: TimingConvention = TimingConvention.IN_ARREARS
     initial_notional_exchange_date: Union[pd.Timestamp, np.datetime64, datetime.date, datetime.datetime, None] = None
@@ -176,70 +175,21 @@ class NotionalSchedule(BaseSchedule):
 class CouponSchedule(NotionalSchedule):
     coupon_payment_delay: int = 0
     coupon_payment_timing: TimingConvention = TimingConvention.IN_ARREARS
-    contractual_coupon_component: float | np.ndarray = None
+    coupon_contractual_component: float | np.ndarray = None
 
     def __post_init__(self):
         super().__post_init__()
-        if self.contractual_coupon_component is not None:
+        if self.coupon_contractual_component is not None:
 
-            contractual_coupon_component = np.atleast_1d(self.contractual_coupon_component)
-            if self.exchange_notionals in [ExchangeNotionals.START, ExchangeNotionals.BOTH] and contractual_coupon_component.shape in [(1,), self.df.shape[0] - 1]:
-                self.df.loc[1:, 'notional'] = contractual_coupon_component
-            elif self.exchange_notionals in [ExchangeNotionals.END, ExchangeNotionals.NEITHER] and contractual_coupon_component.shape in [(1,), self.df.shape[0]]:
-                self.df['notional'] = contractual_coupon_component
+            coupon_contractual_component = np.atleast_1d(self.coupon_contractual_component)
+            if self.exchange_notionals in [ExchangeNotionals.START, ExchangeNotionals.BOTH] and coupon_contractual_component.shape in [(1,), self.df.shape[0] - 1]:
+                self.df.loc[1:, 'notional'] = coupon_contractual_component
+            elif self.exchange_notionals in [ExchangeNotionals.END, ExchangeNotionals.NEITHER] and coupon_contractual_component.shape in [(1,), self.df.shape[0]]:
+                self.df['notional'] = coupon_contractual_component
             else:
-                raise ValueError(f"Invalid contractual_coupon_component shape: {contractual_coupon_component.shape}")
+                raise ValueError(f"Invalid coupon_contractual_component shape: {coupon_contractual_component.shape}")
 
         self.add_payment_dates(self.coupon_payment_delay, self.coupon_payment_timing, col_name='coupon_payment_date')
-
-
-
-
-
-
-
-
-
-
-
-
-
-#     def copy(self):
-#         # Create a new instance of Schedule - refresh with ChatGPT if main class changes
-#         new_schedule = Schedule(
-#             start_date=self.start_date,
-#             end_date=self.end_date,
-#             freq=self.freq,
-#             roll_conv=self.roll_conv,
-#             day_roll=self.day_roll,
-#             first_period_end=self.first_period_end,
-#             last_period_start=self.last_period_start,
-#             first_stub=self.first_stub,
-#             last_stub=self.last_stub,
-#             roll_user_specified_dates=self.roll_user_specified_dates,
-#             cal=np.busdaycalendar(weekmask=self.cal.weekmask, holidays=self.cal.holidays),
-#             add_cpn_payment_dates=self.add_cpn_payment_dates,
-#             cpn_payment_delay=self.cpn_payment_delay,
-#             cpn_payment_timing=self.cpn_payment_timing,
-#             add_notional_schedule=self.add_notional_schedule,
-#             notional_amount=self.notional_amount,
-#             exchange_notionals=self.exchange_notionals,
-#             add_notional_payment_dates=self.add_notional_payment_dates,
-#             notional_payment_delay=self.notional_payment_delay,
-#             notional_payment_timing=self.notional_payment_timing,
-#         )
-#
-#         # Deep copy of the schedule DataFrame
-#         new_schedule.df = self.df.copy(deep=True)
-#
-#         return new_schedule
-#
-#
-# def variable_notional_helper():
-#     # TODO
-#     #  1. Increasing or decreasing amount or percentage
-#     #  2. Annuity (custom fixed rate or floating rate) in order to get fixed total payments (coupon + notional) over the life
-#     pass
 
 
 def make_schedule(

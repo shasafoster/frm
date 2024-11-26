@@ -71,7 +71,7 @@ if __name__ == "__main__":
 
 @dataclass
 class Swap(ABC):
-    "Generic class to cover pricing of all types of swap legs and bonds"
+    "Generic class to cover pricing of all types of swap legs"
 
     # Required parameters
     leg1: Union[FixedLeg, FloatTermLeg, FloatRFRLeg, ZerocouponLeg]
