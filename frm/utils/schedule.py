@@ -195,9 +195,9 @@ class CouponSchedule(NotionalSchedule):
             )
 
         if coupon_component.shape == (1,):
-            self.df.loc[1:, 'notional'] = coupon_component[0]
+            self.df.loc[1:, 'coupon_contractual_component'] = coupon_component[0]
         else:
-            self.df.loc[1:, 'notional'] = coupon_component
+            self.df.loc[1:, 'coupon_contractual_component'] = coupon_component
 
     def _determine_valid_shapes(self):
         """Determine valid shapes for coupon_contractual_component based on exchange_notionals."""
