@@ -7,7 +7,7 @@ pricing_engine/in_progress
 market_data/tests
 excel_models_private/
 tests_private/
-
+.venv/
 
 # Compiled source #
 ###################
