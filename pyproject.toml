@@ -4,13 +4,13 @@ build-backend = "hatchling.build"
 
 [project]
 name = "frm"
-version = "0.0.26"
+version = "0.0.27"
 authors = [
   { name="Shasa Foster", email="shasa.foster@frmcalcs.com" },
 ]
 description = "A python package for quantitative finance and derivative pricing"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.12"
 dependencies=[           
 	"dill",
 	"holidays",
