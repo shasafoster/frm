@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "frm"
-version = "0.0.27"
+version = "0.0.28"
 authors = [
   { name="Shasa Foster", email="shasa.foster@frmcalcs.com" },
 ]
@@ -15,7 +15,7 @@ dependencies=[
 	"dill",
 	"holidays",
 	"matplotlib",
-	"numba",
+	"numba>=0.60.0",
 	"numpy",
 	"openpyxl",
 	"pandas",
