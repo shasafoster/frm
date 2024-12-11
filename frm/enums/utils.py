@@ -9,7 +9,7 @@ import numpy as np
 from frm.enums.helper import  clean_enum_value, is_valid_enum_value, get_enum_member
 
 
-class ZEROCURVE_INTERP_METHOD(Enum):
+class ZeroCurveInterpMethod(Enum):
     LINEAR_ON_LN_DISCOUNT = 'linear_on_ln_discount'
     CUBIC_SPLINE_ON_LN_DISCOUNT = 'cubic_spline_on_ln_discount'
     CUBIC_SPLINE_ON_CCZR = 'cubic_spline_on_cczr'
@@ -54,7 +54,7 @@ class ZEROCURVE_INTERP_METHOD(Enum):
         return dict_[self.name]
 
 
-class ZEROCURVE_EXTRAP_METHOD(Enum):
+class ZeroCurveExtrapMethod(Enum):
     NONE = 'none'
     FLAT = 'flat'
 

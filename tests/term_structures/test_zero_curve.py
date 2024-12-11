@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import os
 
-from frm.enums import TermRate
+from frm.enums import TermRate, ZeroCurveInterpMethod
 
 if __name__ == "__main__":
     os.chdir(os.environ.get('PROJECT_DIR_FRM'))
@@ -19,7 +19,8 @@ def test_construction_from_discount_factors():
 
     # Test yield curve construction from discount factors
     epsilon = 1e-8
-    
+    interp_method = ZeroCurveInterpMethod.LINEAR_ON_LN_DISCOUNT
+
     df = pd.DataFrame([[pd.Timestamp(2021,9,30),1.0],
                         [pd.Timestamp(2021,10,1),0.99],
                         [pd.Timestamp(2021,10,4),0.999],
@@ -43,20 +44,21 @@ def test_construction_from_discount_factors():
                         [pd.Timestamp(2071,1,4),0.410],
                         [pd.Timestamp(2081,1,6),0.354]],columns=['date','discount_factor'])
     
-    zc = ZeroCurve(curve_date=pd.Timestamp(2021,9,30),pillar_df=df, interp_method='linear_on_ln_discount')
+    zc = ZeroCurve(curve_date=pd.Timestamp(2021,9,30),pillar_df=df, interp_method=interp_method)
     for i,row in df.iterrows():
         assert abs(row['discount_factor'] - zc.get_discount_factors(row['date'])[0]) < epsilon
   
 
 def test_construction_from_zero_rates():
     epsilon = 1e-8
+    interp_method = ZeroCurveInterpMethod.LINEAR_ON_LN_DISCOUNT
 
     # Construct zero curve term structure
     df = pd.DataFrame([[pd.Timestamp(2022,1,1), 0.05],
                        [pd.Timestamp(2023,1,1), 0.05],
                        [pd.Timestamp(2024,1,1), 0.05],
                        [pd.Timestamp(2025,1,1), 0.05]],columns=['date','zero_rate'])
-    zc = ZeroCurve(curve_date=pd.Timestamp(2021, 12, 31),pillar_df=df, compounding_freq=CompoundingFreq.CONTINUOUS, interp_method='linear_on_ln_discount')
+    zc = ZeroCurve(curve_date=pd.Timestamp(2021, 12, 31),pillar_df=df, compounding_freq=CompoundingFreq.CONTINUOUS, interp_method=interp_method)
 
     # Test zero rate
     date = pd.Timestamp(2022, 12, 31)
@@ -95,7 +97,8 @@ def test_construction_from_zero_rates():
                        [pd.Timestamp(2022,1,4), 0.0033946],
                        [pd.Timestamp(2022,1,11),0.0042867],
                        [pd.Timestamp(2022,4,5), 0.0096205]],columns=['date','zero_rate'])
-    zc = ZeroCurve(curve_date=pd.Timestamp(2021,12,31),pillar_df=df, compounding_freq=CompoundingFreq.ANNUAL, interp_method='linear_on_ln_discount')
+
+    zc = ZeroCurve(curve_date=pd.Timestamp(2021,12,31),pillar_df=df, compounding_freq=CompoundingFreq.ANNUAL, interp_method=interp_method)
 
     for i,row in df.iterrows():
         assert abs(row['zero_rate'] - zc.get_zero_rates(CompoundingFreq.ANNUAL, row['date'])[0]) < epsilon
