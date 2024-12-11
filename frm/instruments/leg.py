@@ -9,8 +9,9 @@ from typing import Optional, Union
 import warnings
 
 import frm.utils
-from frm.utils import CouponSchedule, day_count, year_frac, get_busdaycal
-from frm.enums import CompoundingFreq, TermRate, RFRFixingCalcMethod, PeriodFreq, DayCountBasis, ExchangeNotionals
+from frm.term_structures.swap_curve import TermSwapCurve
+from frm.utils import CouponSchedule, day_count, year_frac, get_busdaycal, MarketDataNotAvailableError
+from frm.enums import CompoundingFreq, TermRate, RFRFixingCalcMethod, PeriodFreq, DayCountBasis, ExchangeNotionals, PayRcv
 from frm.term_structures.zero_curve import ZeroCurve
 from frm.term_structures.zero_curve_helpers import discount_factor_from_zero_rate
 from scipy.optimize import root_scalar
@@ -34,16 +35,6 @@ if __name__ == "__main__":
 # Each leg type will have a different method for calculating the forward coupon cashflow amount.
 
 
-
-
-
-class PayRcv(Enum):
-    PAY = 'pay'
-    RCV = 'rcv'
-
-    @property
-    def multiplier(self):
-        return -1 if self == PayRcv.PAY else 1
 
 @dataclass
 class Leg(ABC):
@@ -95,8 +86,8 @@ class Leg(ABC):
         solved_value = self._solver_helper(solved_fieldname=self._get_solved_field_name(), target_value=target_value)
         return solved_value
 
-    def par_solve(self):
 
+    def par_solve(self):
         if 'notional_payment_date' not in self.schedule.df.columns:
             par_value = 0
         else:
@@ -150,6 +141,9 @@ class Leg(ABC):
             return accrued_interest + unsettled_cashflows
 
     def _discount_payments(self, prefix=''):
+        if self.discount_curve is None:
+            raise MarketDataNotAvailableError('Discount curve not available.')
+
         payment_date_col = prefix + 'payment_date'
         discount_factor_col = prefix + 'discount_factor'
 
@@ -247,7 +241,9 @@ class FixedLeg(Leg):
 
     def __post_init__(self):
         super().__post_init__()
-        self.schedule.df['fixed_rate'] = self.fixed_rate
+        renamed_columns = {'coupon_contractual_component': self._get_solved_field_name()}
+        self.schedule.df = self.schedule.df.rename(columns=renamed_columns)
+        self.schedule.df[self._get_solved_field_name()] = self.fixed_rate
 
     def calc_coupon_payment(self, coupon_override=None):
         if coupon_override is not None:
@@ -279,15 +275,20 @@ class FixedLeg(Leg):
 class FloatTermLeg(Leg):
     spread: float=np.nan
     forward_rate_type: TermRate=TermRate.SIMPLE
-    forward_curve: Optional[ZeroCurve]=None
+    term_swap_curve: Optional[TermSwapCurve]=None
 
     def __post_init__(self):
         super().__post_init__()
         self.schedule.df[self._get_legtype_specific_schedule_cols()] = np.nan
-        self.schedule.df['spread'] = self.spread
+        renamed_columns = {'coupon_contractual_component': self._get_solved_field_name()}
+        self.schedule.df = self.schedule.df.rename(columns=renamed_columns)
+        self.schedule.df[self._get_solved_field_name()] = self.spread
         #self.calc_notional_schedule(coupon_fields_to_set_to_zero=['fixing','spread','coupon_rate'])
 
     def calc_coupon_payment(self, coupon_override=None):
+        if term_swap_curve is None:
+            raise MarketDataNotAvailableError('Term Swap curve not available.')
+
         self.schedule.df['fixing'] = np.nan
         if coupon_override is not None:
             self.schedule.df['spread'] = coupon_override
@@ -318,15 +319,20 @@ class FloatRFRLeg(Leg):
     spread: float=np.nan
     forward_rate_type: RFRFixingCalcMethod=RFRFixingCalcMethod.DAILY_COMPOUNDED
     compound_spread: bool=False # TODO
-    forward_curve: Optional[ZeroCurve]=None
+    ois_curve: Optional[OISCurve]=None
 
     def __post_init__(self):
         super().__post_init__()
         self.schedule.df[self._get_legtype_specific_schedule_cols()] = np.nan
-        self.schedule.df['spread'] = self.spread
+        renamed_columns = {'coupon_contractual_component': self._get_solved_field_name()}
+        self.schedule.df = self.schedule.df.rename(columns=renamed_columns)
+        self.schedule.df[self._get_solved_field_name()] = self.spread
         #self.calc_notional_schedule(coupon_fields_to_set_to_zero=['fixing','spread','coupon_rate'])
 
     def calc_coupon_payment(self, coupon_override=None):
+        if ois_curve is None:
+            raise MarketDataNotAvailableError('OIS curve not available.')
+
         self.schedule.df['fixing'] = np.nan # TODO
         if coupon_override is not None:
             self.schedule.df['spread'] = coupon_override
@@ -359,6 +365,8 @@ class ZerocouponLeg(Leg):
 
     def __post_init__(self):
         super().__post_init__()
+        renamed_columns = {'coupon_contractual_component': self._get_solved_field_name()}
+        self.schedule.df = self.schedule.df.rename(columns=renamed_columns)
         self.schedule.df['zero_rate'] = self.zero_rate
         # TODO support specifying the terminal notional
 

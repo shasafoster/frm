@@ -193,6 +193,8 @@ class CouponSchedule(NotionalSchedule):
                 f"Invalid coupon_contractual_component shape: {coupon_component.shape}. "
                 f"Expected one of: {valid_shapes}"
             )
+
+        self.df.loc[:, 'coupon_contractual_component'] = np.nan
         if coupon_component.shape == (1,):
             self.df.loc[index, 'coupon_contractual_component'] = coupon_component[0]
         else:

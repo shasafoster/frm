@@ -9,10 +9,10 @@ import numpy as np
 import pandas as pd
 
 from frm.enums.utils import CompoundingFreq, PeriodFreq
-from frm.enums.term_structures import OISCouponCalcMethod, TermRate
+from frm.enums.term_structures import RFRFixingCalcMethod, TermRate
 from frm.utils.daycount import year_frac
 from frm.term_structures.zero_curve import ZeroCurve
-from frm.term_structures.historical_swap_index_fixings import OISFixings, TermFixings
+from frm.term_structures.historical_swap_index_fixings import RFRFixings, TermFixings
 
 
 
@@ -55,9 +55,9 @@ class TermSwapCurve:
 
 
 @dataclass
-class OISCurve:
+class RFRSwapCurve:
     zero_curve: ZeroCurve
-    historical_fixings: OISFixings
+    historical_fixings: RFRFixings
 
     def __post_init__(self):
         assert self.zero_curve.day_count_basis == self.historical_fixings.day_count_basis
@@ -68,7 +68,7 @@ class OISCurve:
     def get_fixings(self,
                     period_start: pd.DatetimeIndex,
                     period_end: pd.DatetimeIndex,
-                    cpn_calc_method: OISCouponCalcMethod=OISCouponCalcMethod.DAILY_COMPOUNDED):
+                    cpn_calc_method: RFRFixingCalcMethod=RFRFixingCalcMethod.DAILY_COMPOUNDED):
 
         fixings = np.full(period_start.shape, np.nan)
 
@@ -104,7 +104,7 @@ class OISCurve:
     def _get_crossover_coupon_rate(self,
                                   crossover_period_start: pd.DatetimeIndex,
                                   crossover_period_end: pd.DatetimeIndex,
-                                  cpn_calc_method: OISCouponCalcMethod):
+                                  cpn_calc_method: RFRFixingCalcMethod):
         historical_year_frac = year_frac(crossover_period_start, self.zero_curve.curve_date, self.zero_curve.day_count_basis)
         future_year_frac = year_frac(self.zero_curve.curve_date, crossover_period_end, self.zero_curve.day_count_basis)
 

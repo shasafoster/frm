@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 
 from frm.enums.utils import DayCountBasis
-from frm.enums.term_structures import OISCouponCalcMethod
+from frm.enums.term_structures import RFRFixingCalcMethod
 
 
 @dataclass
@@ -26,13 +26,13 @@ class HistoricalSwapIndexFixings(ABC):
 
 
 @dataclass
-class OISFixings(HistoricalSwapIndexFixings):
+class RFRFixings(HistoricalSwapIndexFixings):
 
     def get_coupon_rates(
         self,
         period_start: pd.DatetimeIndex,
         period_end: pd.DatetimeIndex,
-        cpn_calc_method: OISCouponCalcMethod
+        cpn_calc_method: RFRFixingCalcMethod
     ):
         observations_start = period_start
         observations_end = period_end - pd.DateOffset(days=1)
@@ -55,24 +55,24 @@ class OISFixings(HistoricalSwapIndexFixings):
             observation_start: pd.Timestamp,
             observation_end: pd.Timestamp,
             fixings: pd.DataFrame,
-            method: OISCouponCalcMethod
+            method: RFRFixingCalcMethod
     ):
         mask = (fixings['date'] >= observation_start) & (fixings['date'] <= observation_end)
         periods_ois_fixings = fixings.loc[mask]
 
-        if method == OISCouponCalcMethod.SIMPLE_AVERAGE:
+        if method == RFRFixingCalcMethod.SIMPLE_AVERAGE:
             return periods_ois_fixings['fixing'].mean()
 
         date_range = pd.date_range(start=observation_start, end=observation_end, freq='D')
         df = pd.merge_asof(pd.DataFrame({'date': date_range}), periods_ois_fixings, on='date', direction='backward')
 
-        if method == OISCouponCalcMethod.DAILY_COMPOUNDED:
+        if method == RFRFixingCalcMethod.DAILY_COMPOUNDED:
             df['daily_interest'] = 1 + df['fixing'] / self.day_count_basis.days_per_year
             return (df['daily_interest'].prod() - 1) * self.day_count_basis.days_per_year / len(date_range)
-        elif method == OISCouponCalcMethod.WEIGHTED_AVERAGE:
+        elif method == RFRFixingCalcMethod.WEIGHTED_AVERAGE:
             return df['fixing'].mean()
 
-        raise ValueError(f"Invalid OISCouponCalcMethod: {method}")
+        raise ValueError(f"Invalid RFRFixingCalcMethod: {method}")
 
 
 

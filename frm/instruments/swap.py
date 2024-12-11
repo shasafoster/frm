@@ -115,5 +115,5 @@ class Swap(ABC):
         assert self.leg1.pay_rcv != self.leg2.pay_rcv, 'Legs must have opposite pay/receive perspectives'
 
 
-# Potentially, create bunch of classes for different types of swaps that fill in default values (i.e ZC swap, Fixed/Float swap, etc)
+# Potentially, create bunch of classes for different types of swaps that fill in default values (i.e. ZC swap, Fixed/Float swap, etc)
 # Then, for common quote types, can define all the "non-quote" parameters in the class and then pass in the quote parameters.

@@ -9,6 +9,24 @@ import numpy as np
 from frm.enums.helper import  clean_enum_value, is_valid_enum_value, get_enum_member
 
 
+class PayRcv(Enum):
+    PAY = 'pay'
+    RCV = 'rcv'
+
+    @property
+    def multiplier(self):
+        return -1 if self == PayRcv.PAY else 1
+
+
+class BuySell(Enum):
+    BUY = 'buy'
+    SELL = 'sell'
+
+    @property
+    def multiplier(self):
+        return -1 if self == BuySell.SELL else 1
+
+
 class DayCountBasis(Enum):
     # If storing instrument definitions in CDM, use 'code' to define valid fieldnames
     _30_360 = '30/360'
