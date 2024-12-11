@@ -6,7 +6,7 @@ if __name__ == "__main__":
 from frm.utils.daycount import day_count, year_frac
 from frm.utils.tenor import clean_tenor, tenor_to_date_offset
 from frm.utils.utilities import convert_column_to_consistent_data_type
-from frm.enums import DayCountBasis, CompoundingFreq, RFRFixingCalcMethod, TermRate
+from frm.enums import DayCountBasis, CompoundingFreq, RFRFixingCalcMethod, TermRate, ZEROCURVE_EXTRAP_METHOD, ZEROCURVE_INTERP_METHOD
 from frm.term_structures.zero_curve_helpers import zero_rate_from_discount_factor, discount_factor_from_zero_rate
 
 from scipy.interpolate import splrep, splev
@@ -18,8 +18,10 @@ import matplotlib.pyplot as plt
 import datetime as dt
 from dateutil.relativedelta import relativedelta
 
-VALID_INTERPOLATION_METHOD = Literal['linear_on_ln_discount','cubic_spline_on_ln_discount','cubic_spline_on_cczr']
-VALID_EXTRAPOLATION_METHOD = Literal['none','flat']
+
+
+
+
 
 
 @dataclass
@@ -34,8 +36,8 @@ class ZeroCurve:
     # Optional init inputs
     day_count_basis: DayCountBasis=DayCountBasis.ACT_ACT
     cal: np.busdaycalendar=np.busdaycalendar() # used in simple-average forward rate calculation
-    interp_method: str='linear_on_ln_discount'
-    extrap_method: str='none'
+    interp_method: ZEROCURVE_INTERP_METHOD=ZEROCURVE_INTERP_METHOD.LINEAR_ON_LN_DISCOUNT
+    extrap_method: ZEROCURVE_EXTRAP_METHOD=ZEROCURVE_EXTRAP_METHOD.NONE
 
 
     # Attributes set in __post_init__
@@ -116,16 +118,16 @@ class ZeroCurve:
             first_row['days'] = 0.0
 
         match self.interp_method:
-            case 'linear_on_ln_discount':
+            case ZEROCURVE_INTERP_METHOD.LINEAR_ON_LN_DISCOUNT:
                 first_row['cczr'] = pillar_df['cczr'].iloc[0]
                 self.cubic_spline_definition = None
-            case 'cubic_spline_on_ln_discount':
+            case ZEROCURVE_INTERP_METHOD.CUBIC_SPLINE_ON_CCZR:
                 x = [0.0] + pillar_df['years'].to_list()
                 y = [0.0] + np.log(pillar_df['discount_factor']).to_list()
                 self.cubic_spline_definition = splrep(x=x, y=y, k=3)
                 dt = 1e-6
                 first_row['cczr'] = -1 * splev(dt, self.cubic_spline_definition, der=0) / dt
-            case 'cubic_spline_on_cczr':
+            case ZEROCURVE_INTERP_METHOD.CUBIC_SPLINE_ON_CCZR:
                 x = pillar_df['years'].to_list()
                 y = pillar_df['cczr'].to_list()
                 self.cubic_spline_definition = splrep(x=x, y=y, k=3)
@@ -277,11 +279,11 @@ class ZeroCurve:
             return result.values
         
     def get_instantaneous_forward_rate(self, years):
-        if self.interp_method == 'cubic_spline_on_cczr':
+        if self.interp_method == ZEROCURVE_INTERP_METHOD.CUBIC_SPLINE_ON_CCZR:
             zero_rate = self.get_zero_rates(years=years, compounding_freq=CompoundingFreq.CONTINUOUS)
             zero_rate_1st_deriv = splev(x=years, tck=self.cubic_spline_definition, der=1)
             return zero_rate + years * zero_rate_1st_deriv
-        elif self.interp_method == 'cubic_spline_on_ln_discount':
+        elif self.interp_method == ZEROCURVE_INTERP_METHOD.CUBIC_SPLINE_ON_LN_DISCOUNT:
             ln_discount_1st_deriv = splev(x=years, tck=self.cubic_spline_definition, der=1)
             return -ln_discount_1st_deriv
 
@@ -327,11 +329,11 @@ class ZeroCurve:
                 ln_df_interp = np.interp(x=years, xp=self.pillar_df['years'], fp= np.log(self.pillar_df['discount_factor']))
                 cczr = -1 * ln_df_interp / years
                 discount_factor = np.exp(ln_df_interp)
-            elif self.interp_method == 'cubic_spline_on_ln_discount':
+            elif self.interp_method == ZEROCURVE_INTERP_METHOD.CUBIC_SPLINE_ON_LN_DISCOUNT:
                 ln_df_interp = splev(years, self.cubic_spline_definition, der=0)
                 cczr = -1 * ln_df_interp / years
                 discount_factor = np.exp(ln_df_interp)
-            elif self.interp_method == 'cubic_spline_on_cczr':
+            elif self.interp_method == ZEROCURVE_INTERP_METHOD.CUBIC_SPLINE_ON_CCZR:
                 cczr = splev(years, self.cubic_spline_definition, der=0)
                 discount_factor = np.exp(-1 * cczr * years)
             else:

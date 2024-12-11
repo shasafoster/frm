@@ -9,6 +9,91 @@ import numpy as np
 from frm.enums.helper import  clean_enum_value, is_valid_enum_value, get_enum_member
 
 
+class ZEROCURVE_INTERP_METHOD(Enum):
+    LINEAR_ON_LN_DISCOUNT = 'linear_on_ln_discount'
+    CUBIC_SPLINE_ON_LN_DISCOUNT = 'cubic_spline_on_ln_discount'
+    CUBIC_SPLINE_ON_CCZR = 'cubic_spline_on_cczr'
+
+    @classmethod
+    def default(cls):
+        return cls.LINEAR_ON_LN_DISCOUNT # Return the default enum value
+
+    @classmethod
+    def is_valid(cls, value):
+        value = clean_enum_value(value)
+        return value in {enum_member.value for enum_member in cls}
+
+    @classmethod
+    def from_value(cls, value):
+        """Create an enum member from the given value, if valid."""
+
+        def specific_cleaning(value):
+            return value
+
+        cleaned_value = clean_enum_value(value)
+        cleaned_value = specific_cleaning(cleaned_value)
+
+        if cleaned_value is None:
+            return cls.default()
+        for enum_member in cls:
+            if enum_member.value == cleaned_value \
+                    or enum_member.value.replace('/', '') == cleaned_value:
+                return enum_member
+
+        # List all valid codes in case of an error
+        valid_values = [enum_member.value for enum_member in cls]
+        raise ValueError(f"Invalid value: {value}. Valid codes are: {valid_values}")
+
+    @property
+    def display_name(self):
+        dict_ = {
+            'LINEAR_ON_LN_DISCOUNT': 'Linear on log of discount factors',
+            'CUBIC_SPLINE_ON_LN_DISCOUNT': 'Cubic spline on log of discount factors',
+            'CUBIC_SPLINE_ON_CCZR': 'Cubic spline on continuously compounded zero rates'
+        }
+        return dict_[self.name]
+
+
+class ZEROCURVE_EXTRAP_METHOD(Enum):
+    NONE = 'none'
+    FLAT = 'flat'
+
+    @classmethod
+    def default(cls):
+        return cls.NONE # Return the default enum value
+
+    @classmethod
+    def is_valid(cls, value):
+        value = clean_enum_value(value)
+        return value in {enum_member.value for enum_member in cls}
+
+    @classmethod
+    def from_value(cls, value):
+        """Create an enum member from the given value, if valid."""
+
+        def specific_cleaning(value):
+            return value
+
+        cleaned_value = clean_enum_value(value)
+        cleaned_value = specific_cleaning(cleaned_value)
+
+        if cleaned_value is None:
+            return cls.default()
+        for enum_member in cls:
+            if enum_member.value == cleaned_value \
+                    or enum_member.value.replace('/', '') == cleaned_value:
+                return enum_member
+
+        # List all valid codes in case of an error
+        valid_values = [enum_member.value for enum_member in cls]
+        raise ValueError(f"Invalid value: {value}. Valid codes are: {valid_values}")
+
+    @property
+    def display_name(self):
+        return self.name.title()
+
+
+
 class PayRcv(Enum):
     PAY = 'pay'
     RCV = 'rcv'
@@ -16,6 +101,36 @@ class PayRcv(Enum):
     @property
     def multiplier(self):
         return -1 if self == PayRcv.PAY else 1
+
+    @classmethod
+    def is_valid(cls, value):
+        value = clean_enum_value(value)
+        return value in {enum_member.value for enum_member in cls}
+
+    @classmethod
+    def from_value(cls, value):
+        """Create an enum member from the given value, if valid."""
+
+        def specific_cleaning(value):
+            return value
+
+        cleaned_value = clean_enum_value(value)
+        cleaned_value = specific_cleaning(cleaned_value)
+
+        if cleaned_value is None:
+            return cls.default()
+        for enum_member in cls:
+            if enum_member.value == cleaned_value \
+                    or enum_member.value.replace('/', '') == cleaned_value:
+                return enum_member
+
+        # List all valid codes in case of an error
+        valid_values = [enum_member.value for enum_member in cls]
+        raise ValueError(f"Invalid value: {value}. Valid codes are: {valid_values}")
+
+    @property
+    def display_name(self):
+        return self.name.title()
 
 
 class BuySell(Enum):
@@ -25,6 +140,36 @@ class BuySell(Enum):
     @property
     def multiplier(self):
         return -1 if self == BuySell.SELL else 1
+
+    @classmethod
+    def is_valid(cls, value):
+        value = clean_enum_value(value)
+        return value in {enum_member.value for enum_member in cls}
+
+    @classmethod
+    def from_value(cls, value):
+        """Create an enum member from the given value, if valid."""
+
+        def specific_cleaning(value):
+            return value
+
+        cleaned_value = clean_enum_value(value)
+        cleaned_value = specific_cleaning(cleaned_value)
+
+        if cleaned_value is None:
+            return cls.default()
+        for enum_member in cls:
+            if enum_member.value == cleaned_value \
+                    or enum_member.value.replace('/', '') == cleaned_value:
+                return enum_member
+
+        # List all valid codes in case of an error
+        valid_values = [enum_member.value for enum_member in cls]
+        raise ValueError(f"Invalid value: {value}. Valid codes are: {valid_values}")
+
+    @property
+    def display_name(self):
+        return self.name.title()
 
 
 class DayCountBasis(Enum):
@@ -67,9 +212,9 @@ class DayCountBasis(Enum):
             if value == 'act/365fixed':
                 value = 'act/365'
             return value        
-        
+
         cleaned_value = clean_enum_value(value)
-        cleaned_value = specific_cleaning(value)
+        cleaned_value = specific_cleaning(cleaned_value)
         
         if cleaned_value is None:
             return cls.default()        
