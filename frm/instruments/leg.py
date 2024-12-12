@@ -9,7 +9,7 @@ from typing import Optional, Union
 import warnings
 
 import frm.utils
-from frm.term_structures.swap_curve import TermSwapCurve
+from frm.term_structures.swap_curve import TermSwapCurve, RFRSwapCurve
 from frm.utils import CouponSchedule, day_count, year_frac, get_busdaycal, MarketDataNotAvailableError
 from frm.enums import CompoundingFreq, TermRate, RFRFixingCalcMethod, PeriodFreq, DayCountBasis, ExchangeNotionals, PayRcv
 from frm.term_structures.zero_curve import ZeroCurve
@@ -286,7 +286,7 @@ class FloatTermLeg(Leg):
         #self.calc_notional_schedule(coupon_fields_to_set_to_zero=['fixing','spread','coupon_rate'])
 
     def calc_coupon_payment(self, coupon_override=None):
-        if term_swap_curve is None:
+        if self.term_swap_curve is None:
             raise MarketDataNotAvailableError('Term Swap curve not available.')
 
         self.schedule.df['fixing'] = np.nan
@@ -301,7 +301,7 @@ class FloatTermLeg(Leg):
         current_period_idxs = (self.schedule.df['period_start'] <= frm.utils.VALUE_DATE) & (self.schedule.df['period_end'] > frm.utils.VALUE_DATE)
         if current_period_idxs.sum() > 1:
             warnings.warn('Multiple periods found for accrual interest calculation.')
-        accrued_period_yearfrac = year_frac(self.schedule.df['period_start'][current_period_idxs].iloc[0], VALUE_DATE, day_count_basis=self.day_count_basis)
+        accrued_period_yearfrac = year_frac(self.schedule.df['period_start'][current_period_idxs].iloc[0], frm.utils.VALUE_DATE, day_count_basis=self.day_count_basis)
         accrued_interest = (self.schedule.df['notional'][current_period_idxs]
                             * self.schedule.df['spread'][current_period_idxs]
                             * accrued_period_yearfrac).sum()
@@ -319,7 +319,7 @@ class FloatRFRLeg(Leg):
     spread: float=np.nan
     forward_rate_type: RFRFixingCalcMethod=RFRFixingCalcMethod.DAILY_COMPOUNDED
     compound_spread: bool=False # TODO
-    ois_curve: Optional[OISCurve]=None
+    rfr_swap_curve: Optional[RFRSwapCurve]=None
 
     def __post_init__(self):
         super().__post_init__()
@@ -330,7 +330,7 @@ class FloatRFRLeg(Leg):
         #self.calc_notional_schedule(coupon_fields_to_set_to_zero=['fixing','spread','coupon_rate'])
 
     def calc_coupon_payment(self, coupon_override=None):
-        if ois_curve is None:
+        if self.rfr_swap_curve is None:
             raise MarketDataNotAvailableError('OIS curve not available.')
 
         self.schedule.df['fixing'] = np.nan # TODO
