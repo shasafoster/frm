@@ -13,7 +13,7 @@ from scipy.interpolate import splrep, splev
 import pandas as pd
 import numpy as np
 from dataclasses import dataclass, field, InitVar
-from typing import Optional, Union, Literal
+from typing import Optional, Union
 import matplotlib.pyplot as plt
 import datetime as dt
 from dateutil.relativedelta import relativedelta

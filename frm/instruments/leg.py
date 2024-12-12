@@ -1,17 +1,16 @@
 # -*- coding: utf-8 -*-
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field, InitVar
-from enum import Enum
+from dataclasses import dataclass
 import numpy as np
 import os
 import pandas as pd
-from typing import Optional, Union
+from typing import Optional
 import warnings
 
 import frm.utils
 from frm.term_structures.swap_curve import TermSwapCurve, RFRSwapCurve
-from frm.utils import CouponSchedule, day_count, year_frac, get_busdaycal, MarketDataNotAvailableError
-from frm.enums import CompoundingFreq, TermRate, RFRFixingCalcMethod, PeriodFreq, DayCountBasis, ExchangeNotionals, PayRcv
+from frm.utils import CouponSchedule, year_frac, MarketDataNotAvailableError
+from frm.enums import CompoundingFreq, TermRate, RFRFixingCalcMethod, DayCountBasis, PayRcv
 from frm.term_structures.zero_curve import ZeroCurve
 from frm.term_structures.zero_curve_helpers import discount_factor_from_zero_rate
 from scipy.optimize import root_scalar
@@ -44,7 +43,7 @@ class Leg(ABC):
     schedule: CouponSchedule
     discount_curve: Optional[ZeroCurve]
     pay_rcv: Optional[PayRcv]=PayRcv.PAY
-    day_count_basis: DayCountBasis=DayCountBasis
+    day_count_basis: DayCountBasis=DayCountBasis.ACT_365
 
     # Optional parameters
     notional_ccy: str=None
@@ -70,6 +69,26 @@ class Leg(ABC):
     @abstractmethod
     def _get_legtype_specific_schedule_cols(self):
         pass
+
+    def _add_contractual_coupon_param(self, coupon_param):
+        """Validate and apply the coupon_contractual_component to the notional schedule."""
+        coupon_param = np.atleast_1d(coupon_param)
+        index, valid_shapes = self.schedule.determine_valid_shapes_for_coupon_param()
+        coupon_param_name = self._get_solved_field_name()
+
+        if coupon_param.shape not in valid_shapes:
+            raise ValueError(
+                f"Invalid {coupon_param_name} shape: {coupon_param.shape}. "
+                f"Expected one of: {valid_shapes}"
+            )
+
+        index_coupon_payment_date = self.schedule.df.columns.get_loc('coupon_payment_date')
+        self.schedule.df.insert(index_coupon_payment_date, coupon_param_name, np.nan)
+        if coupon_param.shape == (1,):
+            self.schedule.df.loc[index, coupon_param_name] = coupon_param[0]
+        else:
+            self.schedule.df.loc[index, coupon_param_name] = coupon_param
+
 
     def _get_contractual_schedule_cols(self):
 
@@ -201,7 +220,7 @@ class Leg(ABC):
         payment_col = prefix + 'payment'
         payment_date_col = prefix + 'payment_date'
 
-        l = []
+        rows = []
         if frm.utils.INCLUDE_PAYMENTS_ON_VALUE_DATE_IN_NPV:
             mask_lower = self.schedule.df[payment_date_col] >= frm.utils.VALUE_DATE
         else:
@@ -210,14 +229,14 @@ class Leg(ABC):
         for i,v in enumerate(buckets):
             upper_pillar = frm.utils.VALUE_DATE + pd.DateOffset(years=v)
             mask_upper = self.schedule.df[payment_date_col] < (upper_pillar)
-            l.append(self.schedule.df[payment_col][mask_lower & mask_upper].sum())
+            rows.append(self.schedule.df[payment_col][mask_lower & mask_upper].sum())
             mask_lower = self.schedule.df[payment_date_col] >= upper_pillar
 
         mask_lower = self.schedule.df[payment_date_col] >= upper_pillar
-        l.append(self.schedule.df[payment_col][mask_lower].sum())
+        rows.append(self.schedule.df[payment_col][mask_lower].sum())
         index = buckets + (np.inf,)
 
-        return pd.DataFrame(l, index=index, columns=[payment_col])
+        return pd.DataFrame(rows, index=index, columns=[payment_col])
 
     def bucket_payments(self, calc_npv=True, buckets=(1,2,3,5)):
         if calc_npv:
@@ -237,13 +256,14 @@ class Leg(ABC):
 
 @dataclass
 class FixedLeg(Leg):
-    fixed_rate: float=np.nan
+    fixed_rate: float | np.ndarray = np.nan
 
     def __post_init__(self):
         super().__post_init__()
-        renamed_columns = {'coupon_contractual_component': self._get_solved_field_name()}
-        self.schedule.df = self.schedule.df.rename(columns=renamed_columns)
-        self.schedule.df[self._get_solved_field_name()] = self.fixed_rate
+        self._add_contractual_coupon_param(self.fixed_rate)
+        #renamed_columns = {'coupon_contractual_component': self._get_solved_field_name()}
+        #self.schedule.df = self.schedule.df.rename(columns=renamed_columns)
+        #self.schedule.df[self._get_solved_field_name()] = self.fixed_rate
 
     def calc_coupon_payment(self, coupon_override=None):
         if coupon_override is not None:
@@ -273,16 +293,17 @@ class FixedLeg(Leg):
 
 @dataclass
 class FloatTermLeg(Leg):
-    spread: float=np.nan
+    spread: float | np.ndarray = np.nan
     forward_rate_type: TermRate=TermRate.SIMPLE
     term_swap_curve: Optional[TermSwapCurve]=None
 
     def __post_init__(self):
         super().__post_init__()
-        self.schedule.df[self._get_legtype_specific_schedule_cols()] = np.nan
-        renamed_columns = {'coupon_contractual_component': self._get_solved_field_name()}
-        self.schedule.df = self.schedule.df.rename(columns=renamed_columns)
-        self.schedule.df[self._get_solved_field_name()] = self.spread
+        self._add_contractual_coupon_param(self.spread)
+        # self.schedule.df[self._get_legtype_specific_schedule_cols()] = np.nan
+        # renamed_columns = {'coupon_contractual_component': self._get_solved_field_name()}
+        # self.schedule.df = self.schedule.df.rename(columns=renamed_columns)
+        # self.schedule.df[self._get_solved_field_name()] = self.spread
         #self.calc_notional_schedule(coupon_fields_to_set_to_zero=['fixing','spread','coupon_rate'])
 
     def calc_coupon_payment(self, coupon_override=None):
@@ -316,17 +337,18 @@ class FloatTermLeg(Leg):
 
 @dataclass
 class FloatRFRLeg(Leg):
-    spread: float=np.nan
+    spread: float | np.ndarray = np.nan
     forward_rate_type: RFRFixingCalcMethod=RFRFixingCalcMethod.DAILY_COMPOUNDED
     compound_spread: bool=False # TODO
     rfr_swap_curve: Optional[RFRSwapCurve]=None
 
     def __post_init__(self):
         super().__post_init__()
-        self.schedule.df[self._get_legtype_specific_schedule_cols()] = np.nan
-        renamed_columns = {'coupon_contractual_component': self._get_solved_field_name()}
-        self.schedule.df = self.schedule.df.rename(columns=renamed_columns)
-        self.schedule.df[self._get_solved_field_name()] = self.spread
+        self._add_contractual_coupon_param(self.spread)
+        # self.schedule.df[self._get_legtype_specific_schedule_cols()] = np.nan
+        # renamed_columns = {'coupon_contractual_component': self._get_solved_field_name()}
+        # self.schedule.df = self.schedule.df.rename(columns=renamed_columns)
+        # self.schedule.df[self._get_solved_field_name()] = self.spread
         #self.calc_notional_schedule(coupon_fields_to_set_to_zero=['fixing','spread','coupon_rate'])
 
     def calc_coupon_payment(self, coupon_override=None):
@@ -365,9 +387,10 @@ class ZerocouponLeg(Leg):
 
     def __post_init__(self):
         super().__post_init__()
-        renamed_columns = {'coupon_contractual_component': self._get_solved_field_name()}
-        self.schedule.df = self.schedule.df.rename(columns=renamed_columns)
-        self.schedule.df['zero_rate'] = self.zero_rate
+        self._add_contractual_coupon_param(self.zero_rate)
+        # renamed_columns = {'coupon_contractual_component': self._get_solved_field_name()}
+        # self.schedule.df = self.schedule.df.rename(columns=renamed_columns)
+        # self.schedule.df['zero_rate'] = self.zero_rate
         # TODO support specifying the terminal notional
 
     def calc_coupon_payment(self, coupon_override=None):
@@ -408,6 +431,8 @@ class InflationZCLeg(Leg):
 
     def __post_init__(self):
         super().__post_init__()
+        #self._add_contractual_coupon_param(self.spread)
+
 
     def calc_coupon_cashflow(self):
         pass
@@ -416,7 +441,7 @@ class InflationZCLeg(Leg):
         pass
 
     def _get_solved_field_name(self):
-        return 'final_fixing'
+        return 'spread' # Or final fixing?
 
 # TBC at later date.
 class InflationYoYLeg(Leg):
@@ -426,6 +451,7 @@ class InflationYoYLeg(Leg):
 
     def __post_init__(self):
         super().__post_init__()
+        #self._add_contractual_coupon_param(self.spread)
 
     def calc_coupon_cashflow(self):
         pass

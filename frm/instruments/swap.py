@@ -1,19 +1,10 @@
 # -*- coding: utf-8 -*-
-from abc import ABC, abstractmethod
-from dataclasses import dataclass, field, InitVar
-from enum import Enum
-import numpy as np
+from abc import ABC
+from dataclasses import dataclass
 import os
 import pandas as pd
 from typing import Optional, Union
-import warnings
 
-import frm.utils
-from frm.utils import Schedule, get_schedule, day_count, year_frac, get_busdaycal
-from frm.enums import CompoundingFreq, TermRate, RFRFixingCalcMethod, PeriodFreq, DayCountBasis, ExchangeNotionals
-from frm.term_structures.zero_curve import ZeroCurve
-from frm.term_structures.zero_curve_helpers import discount_factor_from_zero_rate
-from scipy.optimize import root_scalar
 
 
 from frm.instruments.leg import FixedLeg, FloatTermLeg, FloatRFRLeg, ZerocouponLeg
@@ -115,5 +106,5 @@ class Swap(ABC):
         assert self.leg1.pay_rcv != self.leg2.pay_rcv, 'Legs must have opposite pay/receive perspectives'
 
 
-# Potentially, create bunch of classes for different types of swaps that fill in default values (i.e. ZC swap, Fixed/Float swap, etc)
+# Potentially, create a bunch of classes for different types of swaps that fill in default values (i.e. ZC swap, Fixed/Float swap, etc)
 # Then, for common quote types, can define all the "non-quote" parameters in the class and then pass in the quote parameters.

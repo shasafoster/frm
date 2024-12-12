@@ -143,8 +143,8 @@ class NotionalSchedule(BaseSchedule):
 
         notional_amount = np.atleast_1d(self.notional_amount)
         if notional_amount.shape == (1,):
-            self.df['notional_payment'] = 0
             self.df['notional'] = notional_amount[0]
+            self.df['notional_payment'] = 0
         elif notional_amount.shape == self.df.shape[0]:
             self.df['notional'] = notional_amount
             self.df['notional_payment'] = notional_amount[:-1] - notional_amount[1:]
@@ -175,33 +175,13 @@ class NotionalSchedule(BaseSchedule):
 class CouponSchedule(NotionalSchedule):
     coupon_payment_delay: int = 0
     coupon_payment_timing: TimingConvention = TimingConvention.IN_ARREARS
-    coupon_contractual_component: float | np.ndarray = None
 
     def __post_init__(self):
         super().__post_init__()
-        if self.coupon_contractual_component is not None:
-            self._apply_coupon_contractual_component()
         self.add_payment_dates(self.coupon_payment_delay, self.coupon_payment_timing, col_name='coupon_payment_date')
 
-    def _apply_coupon_contractual_component(self):
-        """Validate and apply the coupon_contractual_component to the notional schedule."""
-        coupon_component = np.atleast_1d(self.coupon_contractual_component)
-        index, valid_shapes = self._determine_valid_shapes()
-
-        if coupon_component.shape not in valid_shapes:
-            raise ValueError(
-                f"Invalid coupon_contractual_component shape: {coupon_component.shape}. "
-                f"Expected one of: {valid_shapes}"
-            )
-
-        self.df.loc[:, 'coupon_contractual_component'] = np.nan
-        if coupon_component.shape == (1,):
-            self.df.loc[index, 'coupon_contractual_component'] = coupon_component[0]
-        else:
-            self.df.loc[index, 'coupon_contractual_component'] = coupon_component
-
-    def _determine_valid_shapes(self):
-        """Determine valid shapes for coupon_contractual_component based on exchange_notionals."""
+    def determine_valid_shapes_for_coupon_param(self):
+        """Determine valid shapes for the contractual coupon param (fixed rate, spread) based on exchange_notionals."""
         row_count = self.df.shape[0]
         if self.exchange_notionals in [ExchangeNotionals.START, ExchangeNotionals.BOTH]:
             index = self.df.index[1:] # The first row is the initial exchange of notionals, with no coupon
@@ -210,6 +190,9 @@ class CouponSchedule(NotionalSchedule):
             index = self.df.index[0:]
             valid_shape = [(1,), (row_count,)]
         return index, valid_shape
+
+
+
 
 
 
@@ -231,9 +214,9 @@ def make_schedule(
 
     Parameters
     ----------
-    start_dt : pandas.Timestamp
+    start_date : pandas.Timestamp
         Specifies the effective date of the schedule
-    end_dt : pandas.Timestamp
+    end_date : pandas.Timestamp
         Specifies the termination date of the schedule
     freq : str
         Specify the period frequency

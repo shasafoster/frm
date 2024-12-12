@@ -9,6 +9,12 @@ excel_models_private/
 tests_private/
 .venv/
 
+# Python cache files
+###################
+*.pyc
+__pycache__/
+
+
 # Compiled source #
 ###################
 *.com

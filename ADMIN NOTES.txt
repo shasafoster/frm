@@ -1,0 +1,8 @@
+Package release
+
+
+1. Increment version number in pyproject.toml
+2. Run 'ruff check'
+3. Run 'pytest'
+4. Git commit and push
+

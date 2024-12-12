@@ -254,7 +254,7 @@ def fit_sabr_params_to_sln_smile(tau: float,
         return (alpha, beta, rho, volvol), res
     else:
         print(res)
-        raise ValueError(f'Optimization of SABR parameters failed.')
+        raise ValueError('Optimization of SABR parameters failed.')
 
 
 

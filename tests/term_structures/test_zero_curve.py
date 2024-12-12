@@ -12,7 +12,7 @@ if __name__ == "__main__":
 
 import pandas as pd
 from frm.term_structures.zero_curve import ZeroCurve
-from frm.enums import CompoundingFreq, TermRate
+from frm.enums import CompoundingFreq
 
 
 def test_construction_from_discount_factors():

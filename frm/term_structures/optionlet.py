@@ -6,15 +6,15 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 import scipy
-from frm.pricing_engine.black76_bachelier import black76_price, bachelier_price, black76_solve_implied_vol, bachelier_solve_implied_vol, normal_vol_to_black76_sln, black76_sln_to_normal_vol, black76_sln_to_normal_vol_analytical, normal_vol_atm_to_black76_sln_atm, VOL_SLN_BOUNDS, VOL_N_BOUNDS
+from frm.pricing_engine.black76_bachelier import black76_price, bachelier_price, black76_solve_implied_vol, bachelier_solve_implied_vol, normal_vol_to_black76_sln, black76_sln_to_normal_vol, black76_sln_to_normal_vol_analytical, normal_vol_atm_to_black76_sln_atm, VOL_N_BOUNDS
 from frm.pricing_engine.sabr import solve_alpha_from_sln_vol, calc_sln_vol_for_strike_from_sabr_params
-from frm.utils import year_frac, clean_tenor, tenor_to_date_offset, convert_column_to_consistent_data_type, Schedule, get_schedule
+from frm.utils import year_frac, clean_tenor, tenor_to_date_offset, convert_column_to_consistent_data_type, BaseSchedule, make_schedule
 from frm.enums import DayCountBasis, PeriodFreq, TermRate
 from frm.term_structures.zero_curve import ZeroCurve
 from typing import Optional, Union, List
 import time
 import numbers
-from frm.term_structures.interest_rate_option_helpers import standardise_relative_quote_col_names, standardise_atmf_quote_col_names
+from frm.term_structures.interest_rate_option_helpers import standardise_relative_quote_col_names
 
 
 
@@ -43,7 +43,6 @@ class Optionlet:
 
     def __post_init__(self):
 
-        t = time.time()
         self.day_count_basis = self.zero_curve.day_count_basis
 
         # Identical for Cap/Floor and IRS bootstrapping
@@ -102,7 +101,7 @@ class Optionlet:
         self.quote_cols = list(quote_str_map.keys())
     
         nb_quotes = len(self.quote_vol_sln) - 1
-        self.term_structure = get_schedule(start_date=self.quote_vol_sln.loc[nb_quotes, 'effective_date'],
+        self.term_structure = make_schedule(start_date=self.quote_vol_sln.loc[nb_quotes, 'effective_date'],
                                            end_date=self.quote_vol_sln.loc[nb_quotes, 'termination_date'],
                                            freq=self.optionlet_freq,
                                            cal=self.cal)
@@ -590,7 +589,7 @@ class Optionlet:
 
 
     def _price_optionlets(self,
-                          schedule: Schedule,
+                          schedule: BaseSchedule,
                           K: Union[float, List[float], np.ndarray],
                           cp: Union[int, List[int], np.ndarray],
                           day_count_basis: DayCountBasis,
@@ -699,7 +698,7 @@ class Optionlet:
             return detail_df
 
     def price_optionlets_per_term_structure(self,
-                                            schedule: Schedule,
+                                            schedule: BaseSchedule,
                                             K: Union[float, List[float], np.ndarray],
                                             cp: Union[int, List[int], np.ndarray],
                                             day_count_basis: DayCountBasis,
@@ -714,7 +713,7 @@ class Optionlet:
         )
 
     def price_optionlets_per_flat_vol_sln(self,
-                                          schedule: Schedule,
+                                          schedule: BaseSchedule,
                                           K: Union[float, List[float], np.ndarray],
                                           cp: Union[int, List[int], np.ndarray],
                                           day_count_basis: DayCountBasis,
@@ -728,7 +727,7 @@ class Optionlet:
         )
 
     def price_optionlets_per_flat_vol_n(self,
-                                        schedule: Schedule,
+                                        schedule: BaseSchedule,
                                         K: Union[float, List[float], np.ndarray],
                                         cp: Union[int, List[int], np.ndarray],
                                         day_count_basis: DayCountBasis,
