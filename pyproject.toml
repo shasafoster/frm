@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "frm"
-version = "0.0.33"
+version = "0.0.34"
 authors = [
   { name="Shasa Foster", email="shasa.foster@frmcalcs.com" },
 ]

@@ -39,13 +39,10 @@ if __name__ == "__main__":
 class Leg(ABC):
     "Generic class to cover pricing of all types of swap legs and bonds"
 
-    # Required parameters
     schedule: CouponSchedule
-    discount_curve: Optional[ZeroCurve]
-    pay_rcv: Optional[PayRcv]=PayRcv.PAY
+    discount_curve: Optional[ZeroCurve]=None
+    pay_rcv: PayRcv=PayRcv.PAY
     day_count_basis: DayCountBasis=DayCountBasis.ACT_365
-
-    # Optional parameters
     notional_ccy: str=None
     settlement_ccy: str=None
 
