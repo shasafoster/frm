@@ -7,15 +7,15 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from frm.enums.utils import DayCountBasis
-from frm.enums.term_structures import OISCouponCalcMethod
+from frm.enums import DayCountBasis
+from frm.enums import RFRFixingCalcMethod
 
 
 @dataclass
 class OISFixings:
     fixings: pd.DataFrame
     day_count_basis: DayCountBasis
-    cpn_calc_method: OISCouponCalcMethod=None
+    cpn_calc_method: RFRFixingCalcMethod=None
     name: str = None
 
     def __post_init__(self):
@@ -25,15 +25,15 @@ class OISFixings:
         assert isinstance(self.day_count_basis, DayCountBasis), \
             "'day_count_basis' must be an instance of DayCountBasis"
         if self.cpn_calc_method is not None:
-            assert isinstance(self.cpn_calc_method, OISCouponCalcMethod), \
-                "'cpn_calc_method' must be an instance of OISCouponCalcMethod"
+            assert isinstance(self.cpn_calc_method, RFRFixingCalcMethod), \
+                "'cpn_calc_method' must be an instance of RFRFixingCalcMethod"
 
 
     def get_coupon_rates(
         self,
         period_start: pd.DatetimeIndex,
         period_end: pd.DatetimeIndex,
-        cpn_calc_method: OISCouponCalcMethod = None,
+        cpn_calc_method: RFRFixingCalcMethod = None,
     ):
         cpn_calc_method = cpn_calc_method or self.cpn_calc_method
 
@@ -59,24 +59,24 @@ class OISFixings:
             observation_start: pd.Timestamp,
             observation_end: pd.Timestamp,
             fixings: pd.DataFrame,
-            method: OISCouponCalcMethod
+            method: RFRFixingCalcMethod
     ):
         mask = (fixings['date'] >= observation_start) & (fixings['date'] <= observation_end)
         periods_ois_fixings = fixings.loc[mask]
 
-        if method == OISCouponCalcMethod.SIMPLE_AVERAGE:
+        if method == RFRFixingCalcMethod.SIMPLE_AVERAGE:
             return periods_ois_fixings['fixing'].mean()
 
         date_range = pd.date_range(start=observation_start, end=observation_end, freq='D')
         df = pd.merge_asof(pd.DataFrame({'date': date_range}), periods_ois_fixings, on='date', direction='backward')
 
-        if method == OISCouponCalcMethod.DAILY_COMPOUNDED:
+        if method == RFRFixingCalcMethod.DAILY_COMPOUNDED:
             df['daily_interest'] = 1 + df['fixing'] / self.day_count_basis.days_per_year
             return (df['daily_interest'].prod() - 1) * self.day_count_basis.days_per_year / len(date_range)
-        elif method == OISCouponCalcMethod.WEIGHTED_AVERAGE:
+        elif method == RFRFixingCalcMethod.WEIGHTED_AVERAGE:
             return df['fixing'].mean()
 
-        raise ValueError(f"Invalid OISCouponCalcMethod: {method}")
+        raise ValueError(f"Invalid RFRFixingCalcMethod: {method}")
 
 
 
@@ -94,7 +94,7 @@ class TermFixings:
         self,
         period_start: pd.DatetimeIndex,
         period_end: pd.DatetimeIndex,
-        cpn_calc_method: OISCouponCalcMethod = None,
+        cpn_calc_method: RFRFixingCalcMethod = None,
     ):
         cpn_calc_method = cpn_calc_method or self.cpn_calc_method
 
@@ -120,21 +120,21 @@ class TermFixings:
             observation_start: pd.Timestamp,
             observation_end: pd.Timestamp,
             fixings: pd.DataFrame,
-            method: OISCouponCalcMethod
+            method: RFRFixingCalcMethod
     ):
         mask = (fixings['date'] >= observation_start) & (fixings['date'] <= observation_end)
-        periods_ois_fixings = fixings.loc[mask]
+        periods_rfr_fixings = fixings.loc[mask]
 
-        if method == OISCouponCalcMethod.SIMPLE_AVERAGE:
-            return periods_ois_fixings['fixing'].mean()
+        if method == RFRFixingCalcMethod.SIMPLE_AVERAGE:
+            return periods_rfr_fixings['fixing'].mean()
 
         date_range = pd.date_range(start=observation_start, end=observation_end, freq='D')
-        df = pd.merge_asof(pd.DataFrame({'date': date_range}), periods_ois_fixings, on='date', direction='backward')
+        df = pd.merge_asof(pd.DataFrame({'date': date_range}), periods_rfr_fixings, on='date', direction='backward')
 
-        if method == OISCouponCalcMethod.DAILY_COMPOUNDED:
+        if method == RFRFixingCalcMethod.DAILY_COMPOUNDED:
             df['daily_interest'] = 1 + df['fixing'] / self.day_count_basis.days_per_year
             return (df['daily_interest'].prod() - 1) * self.day_count_basis.days_per_year / len(date_range)
-        elif method == OISCouponCalcMethod.WEIGHTED_AVERAGE:
+        elif method == RFRFixingCalcMethod.WEIGHTED_AVERAGE:
             return df['fixing'].mean()
 
-        raise ValueError(f"Invalid OISCouponCalcMethod: {method}")
+        raise ValueError(f"Invalid RFRFixingCalcMethod: {method}")

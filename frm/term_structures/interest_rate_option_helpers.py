@@ -7,11 +7,11 @@ import pandas as pd
 import re
 
 from frm.utils.daycount import year_frac
-from frm.enums.utils import DayCountBasis, PeriodFrequency
+from frm.enums.utils import DayCountBasis, PeriodFreq
 from frm.enums.term_structures import TermRate
 from frm.utils.tenor import clean_tenor, tenor_to_date_offset
 from frm.utils.utilities import convert_column_to_consistent_data_type
-from frm.utils.schedule import get_schedule
+from frm.utils.schedule import make_schedule
 from frm.term_structures.zero_curve import ZeroCurve
 
 from typing import Optional
