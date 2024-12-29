@@ -229,7 +229,7 @@ class DayCountBasis(Enum):
 
     @property
     def display_name(self):
-        return self.name.upper().replace('_', ' ').strip()
+        return self.value.upper().replace('_', ' ').strip()
 
 
 class CompoundingFreq(Enum):
