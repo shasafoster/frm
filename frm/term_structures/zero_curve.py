@@ -2,12 +2,6 @@
 import os
 if __name__ == "__main__":
     os.chdir(os.environ.get('PROJECT_DIR_FRM')) 
-        
-from frm.utils.daycount import day_count, year_frac
-from frm.utils.tenor import clean_tenor, tenor_to_date_offset
-from frm.utils.utilities import convert_column_to_consistent_data_type
-from frm.enums import DayCountBasis, CompoundingFreq, RFRFixingCalcMethod, TermRate, ZeroCurveInterpMethod, ZeroCurveExtrapMethod
-from frm.term_structures.zero_curve_helpers import zero_rate_from_discount_factor, discount_factor_from_zero_rate
 
 from scipy.interpolate import splrep, splev
 import pandas as pd
@@ -17,6 +11,12 @@ from typing import Optional, Union
 import matplotlib.pyplot as plt
 import datetime as dt
 from dateutil.relativedelta import relativedelta
+# Own project imports
+from frm.utils import day_count, year_frac, clean_tenor, tenor_to_date_offset, convert_column_to_consistent_data_type
+from frm.enums import DayCountBasis, CompoundingFreq, RFRFixingCalcMethod, TermRate, ZeroCurveInterpMethod, ZeroCurveExtrapMethod
+from frm.term_structures.zero_curve_helpers import zero_rate_from_discount_factor, discount_factor_from_zero_rate
+
+
 
 
 

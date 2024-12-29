@@ -1,8 +1,7 @@
 Package release
-
-
+===============
 1. Increment version number in pyproject.toml
 2. Run 'ruff check'
-3. Run 'pytest'
+3. Run 'pytest' (this should auto-create new import tests by ./tests/import_test_generator.py)
 4. Git commit and push
-
+5. Create new release on GitHub with the same version number, should auto-create new release on PyPI

@@ -6,7 +6,7 @@ from frm.utils import workday
 if __name__ == "__main__":
     os.chdir(os.environ.get('PROJECT_DIR_FRM')) 
 
-from frm.enums.term_structures import FXSmileInterpolationMethod
+from frm.enums import FXSmileInterpolationMethod, DayCountBasis, CompoundingFreq
 from frm.term_structures.zero_curve import ZeroCurve
 from frm.pricing_engine.monte_carlo_generic import generate_rand_nbs
 from frm.pricing_engine.heston import heston_calibrate_vanilla_smile, heston_price_vanilla_european, heston_simulate
@@ -24,7 +24,6 @@ from frm.term_structures.fx_helpers import (clean_vol_quotes_column_names,
 
 from scipy.interpolate import CubicSpline, InterpolatedUnivariateSpline
 from frm.utils import year_frac, get_busdaycal, resolve_fx_curve_dates
-from frm.enums import DayCountBasis, CompoundingFreq
 
 import numpy as np
 import pandas as pd

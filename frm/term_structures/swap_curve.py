@@ -8,9 +8,8 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from frm.enums.utils import CompoundingFreq, PeriodFreq
-from frm.enums.term_structures import RFRFixingCalcMethod, TermRate
-from frm.utils.daycount import year_frac
+from frm.enums import CompoundingFreq, PeriodFreq, RFRFixingCalcMethod, TermRate
+from frm.utils import year_frac
 from frm.term_structures.zero_curve import ZeroCurve
 from frm.term_structures.historical_swap_index_fixings import RFRFixings, TermFixings
 

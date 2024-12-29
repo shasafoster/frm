@@ -8,8 +8,8 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from frm.enums.utils import DayCountBasis
-from frm.enums.term_structures import RFRFixingCalcMethod
+from frm.enums import DayCountBasis, RFRFixingCalcMethod
+
 
 
 @dataclass

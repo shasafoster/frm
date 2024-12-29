@@ -7,11 +7,8 @@ import pandas as pd
 import re
 
 from frm.utils.daycount import year_frac
-from frm.enums.utils import DayCountBasis, PeriodFreq
-from frm.enums.term_structures import TermRate
-from frm.utils.tenor import clean_tenor, tenor_to_date_offset
-from frm.utils.utilities import convert_column_to_consistent_data_type
-from frm.utils.schedule import make_schedule
+from frm.enums import DayCountBasis, PeriodFreq, TermRate
+from frm.utils import clean_tenor, tenor_to_date_offset, convert_column_to_consistent_data_type, make_schedule
 from frm.term_structures.zero_curve import ZeroCurve
 
 from typing import Optional
@@ -74,9 +71,9 @@ def process_capfloor_quotes(
     N = len(vol_ln_df) - 1
     effective_date = vol_ln_df.loc[N,'effective_date']
     termination_date = vol_ln_df.loc[N,'termination_date']
-    optionlet_df = get_schedule(start_date=effective_date,
+    optionlet_df = make_schedule(start_date=effective_date,
                                 end_date=termination_date,
-                                frequency=PeriodFrequency.QUARTERLY,
+                                frequency=PeriodFreq.QUARTERLY,
                                 busdaycal=busdaycal)
     optionlet_df['coupon_term'] = year_frac(optionlet_df['period_start'], optionlet_df['period_end'], day_count_basis)
     optionlet_df['discount_factors'] = zero_curve.get_discount_factors(dates=optionlet_df['payment_dates'])
