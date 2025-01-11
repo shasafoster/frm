@@ -1,17 +1,15 @@
 # -*- coding: utf-8 -*-
-
 import numpy as np
 import pandas as pd
 import scipy 
 from scipy.stats import norm
-
-from frm.term_structures.zero_curve import ZeroCurve
-from frm.pricing_engine.monte_carlo_generic import generate_rand_nbs
-
 from dataclasses import dataclass, field
 from typing import Optional
 from frm.enums import CompoundingFreq
 from prettytable import PrettyTable
+from frm.term_structures.zero_curve import ZeroCurve
+from frm.pricing_engine.monte_carlo_generic import generate_rand_nbs
+from frm.enums import ZeroCurveInterpMethod
 
 # Notes on calibration
 # The level of mean reversion should be set, so the implied volatility of the term structure is flatish per Figure 3 of [3]
@@ -35,7 +33,7 @@ class HullWhite1Factor:
     theta_spline: tuple=field(init=False) # tuple (t,c,k) used by scipy.interpolate.splev
 
     def __post_init__(self):
-        assert self.zero_curve.interp_method in ('cubic_spline_on_ln_discount', 'cubic_spline_on_cczr')
+        assert self.zero_curve.interp_method in [ZeroCurveInterpMethod.CUBIC_SPLINE_ON_CCZR, ZeroCurveInterpMethod.CUBIC_SPLINE_ON_LN_DISCOUNT]
 
         # Set to t=0 datapoint if available, otherwise extrapolate cubic spline to t=0.
         if self.zero_curve.pillar_df['years'].min() == 0:
@@ -88,9 +86,9 @@ class HullWhite1Factor:
             print(f'\nDifferences b/t pillar zero rates and theta fit for: dt={self.dt} and num={self.num}')
             print(f'Average error (bps): {average_error_bps:.4g}')
             table.add_column('Years', [f'{yr:.3g}' for yr in years_pillars])
-            table.add_column('Pillar CCZR (%)', np.round(100 * cczr_pillars, 4).tolist())
-            table.add_column('Recalc CCZR (%)', np.round(100 * cczr_recalcs, 4).tolist())
-            table.add_column('Diff. (bps)', np.round(diff_bps, 2).tolist())
+            table.add_column('Pillar CCZR (%)', np.round(100 * cczr_pillars.astype(float), 4).tolist())
+            table.add_column('Recalc CCZR (%)', np.round(100 * cczr_recalcs.astype(float), 4).tolist())
+            table.add_column('Diff. (bps)', np.round(diff_bps.astype(float), 2).tolist())
             print(table)
 
         return average_error_bps
@@ -289,8 +287,8 @@ class HullWhite1Factor:
 
         assert S > T
         # TODO at later date: test if we need to use the HW1F DF/ZC bond price function - why not just call on the ZeroCurve object.
-        P_t_T = self.zero_curve.get_discount_factors(T)  # DF(t,T).
-        P_t_S = self.zero_curve.get_discount_factors(S)  # DF(t,S).
+        P_t_T = self.zero_curve.get_discount_factors(years=T)  # DF(t,T).
+        P_t_S = self.zero_curve.get_discount_factors(years=S) # DF(t,S).
 
         # Calculate bond price volatility between T and S
         σP = σ * np.sqrt((1 - np.exp(-2 * α * (T-t))) / (2 * α)) * self.calc_b(t0=T, T=S)
@@ -333,7 +331,7 @@ class HullWhite1Factor:
         cp_ = -1 * cp
 
         # (2.26) in [1]
-        K_ = 1 / (1 + K * (termination_years - effective_years))
+        K_ = 1 / (1 + K * (termination_years - effective_years)) # Strike for the zero-coupon bond option
         px = self.price_zero_coupon_bond_option(expiry_years=effective_years,
                                                 maturity_years=termination_years,
                                                 K=K_,

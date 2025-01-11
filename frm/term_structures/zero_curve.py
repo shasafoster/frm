@@ -1,8 +1,5 @@
 # -*- coding: utf-8 -*-
 import os
-if __name__ == "__main__":
-    os.chdir(os.environ.get('PROJECT_DIR_FRM')) 
-
 from scipy.interpolate import splrep, splev
 import pandas as pd
 import numpy as np
@@ -15,14 +12,6 @@ from dateutil.relativedelta import relativedelta
 from frm.utils import day_count, year_frac, clean_tenor, tenor_to_date_offset, convert_column_to_consistent_data_type
 from frm.enums import DayCountBasis, CompoundingFreq, RFRFixingCalcMethod, TermRate, ZeroCurveInterpMethod, ZeroCurveExtrapMethod
 from frm.term_structures.zero_curve_helpers import zero_rate_from_discount_factor, discount_factor_from_zero_rate
-
-
-
-
-
-
-
-
 
 @dataclass
 class ZeroCurve: 
@@ -121,7 +110,7 @@ class ZeroCurve:
             case ZeroCurveInterpMethod.LINEAR_ON_LN_DISCOUNT:
                 first_row['cczr'] = pillar_df['cczr'].iloc[0]
                 self.cubic_spline_definition = None
-            case ZeroCurveInterpMethod.CUBIC_SPLINE_ON_CCZR:
+            case ZeroCurveInterpMethod.CUBIC_SPLINE_ON_LN_DISCOUNT:
                 x = [0.0] + pillar_df['years'].to_list()
                 y = [0.0] + np.log(pillar_df['discount_factor']).to_list()
                 self.cubic_spline_definition = splrep(x=x, y=y, k=3)
@@ -291,10 +280,10 @@ class ZeroCurve:
     def get_discount_factors(self,
                             dates: Optional[Union[pd.Timestamp, np.datetime64, dt.datetime, dt.date, pd.Series, pd.DatetimeIndex]]=None,
                             days: Optional[Union[int, pd.Series]]=None,
-                            years: Optional[Union[float, pd.Series]]=None) -> pd.Series:
+                            years: Optional[Union[float, pd.Series]]=None) -> np.array:
 
-        df = self.index_daily_data(dates, days, years)
-        return df['discount_factor'].values
+        result = self.index_daily_data(dates, days, years)['discount_factor'].values
+        return float(result[0]) if len(result) == 1 else result
            
         
     def get_zero_rates(self,
@@ -302,17 +291,17 @@ class ZeroCurve:
                       dates: Optional[Union[pd.Timestamp, np.datetime64, dt.datetime, dt.date, pd.Series, pd.DatetimeIndex]]=None,
                       days:  Optional[Union[int, pd.Series]]=None,
                       years: Optional[Union[float, pd.Series]]=None
-                      ) -> pd.Series:
+                      ) -> np.array:
                 
         df = self.index_daily_data(dates, days, years)
 
         if compounding_freq == CompoundingFreq.CONTINUOUS:
-            return df['cczr'].values
+            result = df['cczr'].values
         else:
-            zero_rate = zero_rate_from_discount_factor(years=df['years'].values,
+            result = zero_rate_from_discount_factor(years=df['years'].values,
                                                        discount_factor=df['discount_factor'].values,
                                                        compounding_freq=compounding_freq)
-            return zero_rate
+        return float(result[0]) if len(result) == 1 else result
         
         
     def index_daily_data(self, 
@@ -353,11 +342,13 @@ class ZeroCurve:
                     dates = pd.DatetimeIndex([dates])
 
             # Message suffix if any dates are outside the available data
-            if self.extrap_method == 'none':
+            if self.extrap_method == ZeroCurveExtrapMethod.NONE:
                 msg = f". NaN will be returned as 'extrapolation_method' is {self.extrap_method}"
-            elif self.extrap_method == 'flat':
+            elif self.extrap_method == ZeroCurveExtrapMethod.FLAT:
                 msg = f". Flat extrapolation will be applied as 'extrap_method' is {self.extrap_method}"
-            
+            else:
+                raise ValueError(f"Invalid extrapolation method {self.extrap_method}")
+
             # Check if any of the dates are outside the available data
             min_date = self.daily_df['date'].min()
             below_range = dates < min_date
