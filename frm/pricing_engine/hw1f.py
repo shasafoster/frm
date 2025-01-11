@@ -293,7 +293,7 @@ class HullWhite1Factor:
         P_t_S = self.zero_curve.get_discount_factors(S)  # DF(t,S).
 
         # Calculate bond price volatility between T and S
-        σP = σ * np.sqrt((1 - np.exp(-2 * α * (T-t))) / (2 * α)) * self.calc_b(T, S)
+        σP = σ * np.sqrt((1 - np.exp(-2 * α * (T-t))) / (2 * α)) * self.calc_b(t0=T, T=S)
         h = (1/σP) * np.log(P_t_S / (K * P_t_T)) + 0.5 * σP
 
         price = cp * (P_t_S * norm.cdf(cp*h) - K * P_t_T * norm.cdf(cp*(h - σP)))
@@ -341,32 +341,13 @@ class HullWhite1Factor:
         return px
 
 
-    def price_swaption(self):
+    def calc_b(self, t0, T):
         """
-        References:
-        [1] Damiano Brigo, Fabio Mercurio - Interest Rate Models Theory and Practice (2001, Springer)
-            In section 3.3 'The Hull-White Extended Vasicek Model, page 77 (125&126/1007 of the pdf)
-        """
+        Calculate b(t,T) used in the ODE's for the ZC bond price (i.e. the discount factor).
 
-        # Use Jamshidian's (1989) decomposition.
-        # Steps:
-        # 1. Solve the short rate, as at swaption expiry,
-        #    that makes the underlying swap of the swaption (per the given strike), a par swap.
-        # 2. For each fixing date of the swaption, calculate the discount factor as at the fixing date, per this short rate.
-        #    This discount factor is used to price a zero-coupon bond option (ZCBO) for the fixing period.
-        # 3. Sum the ZCBO prices to get the swaption price.
-
-        pass
-
-
-    #####################################################################################
-    # Validation functions to demonstrate the mathematical correctness of the HW1F model.
-    # These are not used in the pricing / simulation functions.
-    #####################################################################################
-
-    def calc_b(self, t, T):
-        """
-        Calculate b(t,T) used in the ODE's for the ZC bond price (i.e the discount factor).
+        Args:
+            t0: Time t at which to evaluate the discount factor
+            T: Maturity time T
 
         References:
         [1] MAFS525 – Computational Methods for Pricing Structured Products, Slide 3/41
@@ -374,16 +355,25 @@ class HullWhite1Factor:
              In section 3.3.2 'Bond and Option Pricing', page 75 (page 123/1007 of the pdf)
         """
         α = self.mean_rev_lvl
-        return (1/α) *(1-np.exp(-α*(T- t)))
+        return (1/α) *(1-np.exp(-α*(T- t0)))
 
 
-    def calc_discount_factor_by_solving_ode_1(self, t, T):
+    def calc_discount_factor_by_solving_ode_1(self, t0, T, r=None):
         """
         Calculates the discount factor (i.e. the zero coupon bond price), for the ODE:
         DF(t,T) = exp(a(t,T)-b(t,T) * r(t))
 
+       Args:
+            T: Maturity time T
+            t0: Time t at which to evaluate the discount factor
+            r: Optional short rate to use. If None and t=0, uses self.r0.
+                For t>0, the short rate must be provided.
+
         This is not used in pricings / simulations, only for validation.
         (We call the ZeroCurve object to get discount factors / zero rates)
+
+        Returns:
+            float: The discount factor P(t,T,r)
 
         Reference:
         [1] MAFS525 – Computational Methods for Pricing Structured Products, Slide 3/41
@@ -392,25 +382,24 @@ class HullWhite1Factor:
             def integrand_1(t_): return self.calc_b(t_, T) ** 2
             def integrand_2(t_): return scipy.interpolate.splev(t_, self.theta_spline) * self.calc_b(t_, T)
 
-            integrand_1_res = scipy.integrate.quad(func=integrand_1, a=t, b=T)[0]
+            integrand_1_res = scipy.integrate.quad(func=integrand_1, a=t0, b=T)[0]
             # The 2nd integral is trickier. Increase limit to 100 (from default of 50) for better accuracy.
-            integrand_2_res = scipy.integrate.quad(func=integrand_2, a=t, b=T, limit=100)[0]
+            integrand_2_res = scipy.integrate.quad(func=integrand_2, a=t0, b=T, limit=100)[0]
 
             return 0.5 * self.vol ** 2 * integrand_1_res - integrand_2_res
 
-        b = self.calc_b(t=t, T=T)
+        b = self.calc_b(t0=t0, T=T)
         a = calc_a()
 
-        if t == 0:
+        if t0 == 0:
             r = self.r0
         else:
-            pass
-            # TODO
+            raise ValueError('For t>0, the short rate must be provided.')
 
         return np.exp(a - r*b)
 
 
-    def calc_discount_factor_by_solving_ode_2(self, t, T):
+    def calc_discount_factor_by_solving_ode_2(self, t0, T, r=None):
         """
         Calculates the discount factor (i.e. the zero coupon bond price), for another ODE:
         DF(t,T) = exp(a(t,T)-b(t,T) * r(t))
@@ -420,24 +409,218 @@ class HullWhite1Factor:
         """
 
         def calc_a():
-            df_t = self.zero_curve.get_discount_factors(years=t)[0]
+            df_t = self.zero_curve.get_discount_factors(years=t0)[0]
             df_T = self.zero_curve.get_discount_factors(years=T)[0]
-            f_t = self.zero_curve.get_instantaneous_forward_rate(years=t)
-            B_t_T = self.calc_b(t, T)
+            f_t = self.zero_curve.get_instantaneous_forward_rate(years=t0)
+            B_t_T = self.calc_b(t0, T)
             α = self.mean_rev_lvl
             σ = self.vol
 
             return (df_T / df_t) \
                 * np.exp(
-                    B_t_T * f_t - (σ ** 2 / (4 * α)) * (1 - np.exp(-2 * α * t)) * B_t_T ** 2
+                    B_t_T * f_t - (σ ** 2 / (4 * α)) * (1 - np.exp(-2 * α * t0)) * B_t_T ** 2
                 )
 
-        if t == 0:
+        if t0 == 0:
             r = self.r0
         else:
-            pass
-            # TODO
+            raise ValueError('For t>0, the short rate must be provided.')
 
-        b = self.calc_b(t=t, T=T)
-        a2 = calc_a(t=t, T=T)
+        b = self.calc_b(t0=t0, T=T)
+        a2 = calc_a()
         return a2 * np.exp(- b * r)
+
+    # def price_swaption(self):
+    #     """
+    #     References:
+    #     [1] Damiano Brigo, Fabio Mercurio - Interest Rate Models Theory and Practice (2001, Springer)
+    #         In section 3.3 'The Hull-White Extended Vasicek Model, page 77 (125&126/1007 of the pdf)
+    #     """
+    #
+    #     # Use Jamshidian's (1989) decomposition.
+    #     # Steps:
+    #     # 1. Solve the short rate, as at swaption expiry,
+    #     #    that makes the underlying swap of the swaption (per the given strike), a par swap.
+    #     # 2. For each fixing date of the swaption, calculate the discount factor as at the fixing date, per this short rate.
+    #     #    This discount factor is used to price a zero-coupon bond option (ZCBO) for the fixing period.
+    # #     # 3. Sum the ZCBO prices to get the swaption price.
+    #
+    #     pass
+    #
+    # Hull - White
+    # Jamshidian
+    # Decomposition
+    # Implementation
+
+
+
+    def jamshidian_decomposition(self,
+                                 swaption_expiry: float,
+                                 coupon_payment_times: np.ndarray,
+                                 coupon_year_fractions: np.ndarray,
+                                 notional_payment_time: float,
+                                 fixed_rate: float) -> np.ndarray:
+        """
+        Implements Jamshidian decomposition for swaption pricing under Hull-White model.
+        Valid for European swaptions that are:
+         - vanilla (flat fixed rate, zero spread, non-amortizing)
+         - have the same forward & discount curve on the floating leg of the underlying swap
+
+        This implements equation 10.22 from Andersen & Piterbarg (2010) "Interest Rate
+        Modeling", Volume II, Section 10.1 to find the critical rate x* where:
+        P(T₀,Tₙ,x*) + c∑τᵢP(T₀,Tᵢ₊₁,x*) = 1
+
+        Args:
+            swaption_expiry: T₀, time to swaption expiry in years
+            coupon_payment_times: Array [T₁,...,Tₙ] of the coupon payment times
+            coupon_year_fractions: Array [τ₁,...,τₙ] of the year fractions for the coupon periods
+            notional_payment_time: Tₙ, the time of the terminal notional payment in years (can be different to the last coupon payment)
+            fixed_rate: c, the fixed rate of the underlying swap
+
+        Returns:
+            Array of critical bond prices (strikes) Kᵢ = P(T₀,Tᵢ,x*)
+        """
+
+        def _zero_function(r):
+            """
+            Function to find r* (x* in paper) that solves equation 10.22:
+            P(T₀,Tₙ,x*) + c∑τᵢP(T₀,Tᵢ₊₁,x*) = 1
+            Fixed Leg Notional + Fixed Leg Coupons = Floating Leg (floating leg is 1 if same discount & forward curves)
+            """
+            # P(T₀,Tₙ,x*)
+            terminal_notional = self.calc_discount_factor_by_solving_ode_1(
+                t0=swaption_expiry, T=notional_payment_time, r=r)
+
+            # c∑τᵢP(T₀,Tᵢ₊₁,x*)
+            fixed_leg_coupons = sum(
+                fixed_rate * dcf * self.calc_discount_factor_by_solving_ode_1(
+                    t0=swaption_expiry, T=T, r=r)
+                for T, dcf in zip(coupon_payment_times, coupon_year_fractions)
+            )
+
+            fixed_leg = terminal_notional + fixed_leg_coupons
+            floating_leg = 1 # Assume the same discount & forward curves
+
+            return fixed_leg - floating_leg
+
+        # Input validation
+        if len(coupon_payment_times) != len(coupon_year_fractions):
+            raise ValueError("Length mismatch: coupon_payment_times and coupon_year_fractions "
+                             "must have the same length")
+
+        if not all(x < y for x, y in zip(coupon_payment_times[:-1], coupon_payment_times[1:])):
+            raise ValueError("coupon_payment_times must be strictly increasing")
+
+        if notional_payment_time < coupon_payment_times[-2]:
+            raise ValueError("notional_payment_time must not be earlier than the 2nd to last coupon payment")
+
+        # Find critical rate r* (x* in paper) by solving _zero_function(r*) = 0
+        from scipy.optimize import brentq
+        r_star = brentq(f=_zero_function, a=-1.0, b=1.0)
+
+        # Calculate critical zero coupon bond prices (i.e. discount factors) at the critical rate r*
+        # First for all coupon payments
+        coupon_strikes = np.array([
+            self.calc_discount_factor_by_solving_ode_1(
+                t0=swaption_expiry, T=T, r=r_star)
+            for T in coupon_payment_times
+        ])
+
+        # Then for notional payment if it's different from last coupon
+        if notional_payment_time != coupon_payment_times[-1]:
+            notional_strike = self.calc_discount_factor_by_solving_ode_1(
+                t0=swaption_expiry, T=notional_payment_time, r=r_star)
+            critical_bond_prices = np.append(coupon_strikes, notional_strike)
+        else:
+            critical_bond_prices = coupon_strikes
+
+        return critical_bond_prices
+
+
+    def price_swaption(self,
+                       swaption_expiry: float,
+                       coupon_payment_times: np.ndarray,
+                       coupon_year_fractions: np.ndarray,
+                       notional_payment_time: float,
+                       fixed_rate: float,
+                       is_payer: bool = True,
+                       notional: float = 1.0) -> float:
+        """
+        Prices a European swaption using the Hull-White model via Jamshidian decomposition.
+        Valid for European swaptions that are:
+         - vanilla (flat fixed rate, zero spread, non-amortizing)
+         - have the same forward & discount curve on the floating leg of the underlying swap
+
+        Args:
+            swaption_expiry: T₀, time to swaption expiry in years
+            coupon_payment_times: Array [T₁,...,Tₙ] of the coupon payment times
+            coupon_year_fractions: Array [τ₁,...,τₙ] of the year fractions for the coupon periods
+            notional_payment_time: Tₙ, the time of the terminal notional payment in years
+            fixed_rate: c, the fixed rate of the underlying swap
+            is_payer: True for payer swaption, False for receiver swaption
+            notional: Notional amount of the underlying swap
+
+        Returns:
+            float: Price of the swaption
+
+        References:
+            [1] Andersen & Piterbarg (2010) "Interest Rate Modeling", Volume II, Section 10.1
+        """
+        # Get critical bond prices (strikes) from Jamshidian decomposition
+        critical_bond_prices = self.jamshidian_decomposition(
+            swaption_expiry=swaption_expiry,
+            coupon_payment_times=coupon_payment_times,
+            coupon_year_fractions=coupon_year_fractions,
+            notional_payment_time=notional_payment_time,
+            fixed_rate=fixed_rate
+        )
+
+        # Determine strikes and coefficients for each component bond option
+        coupon_strikes = critical_bond_prices[:-1]
+        notional_strike = critical_bond_prices[-1]
+
+        # For a payer swaption:
+        # - We receive the floating leg (1 at T₀)
+        # - We pay the fixed leg (coupons + notional)
+        # Therefore, for a payer:
+        # - We're short the bond options (buying bonds at strike K)
+        # For a receiver, it's the opposite
+        cp = -1 if is_payer else 1
+
+        # Price the bond options for coupon payments
+        coupon_option_values = np.array([
+            self.price_zero_coupon_bond_option(
+                expiry_years=swaption_expiry,
+                maturity_years=payment_time,
+                K=strike,
+                cp=cp
+            ) for payment_time, strike in zip(coupon_payment_times, coupon_strikes)
+        ])
+
+        # Price the bond option for notional payment
+        notional_option_value = self.price_zero_coupon_bond_option(
+            expiry_years=swaption_expiry,
+            maturity_years=notional_payment_time,
+            K=notional_strike,
+            cp=cp
+        )
+
+        # Sum up the components with their coefficients:
+        # 1. Coupon payments: multiply by fixed_rate * year_fraction
+        coupon_values = fixed_rate * np.sum(
+            coupon_year_fractions * coupon_option_values
+        )
+
+        # 2. Add notional exchange
+        swaption_value = coupon_values + notional_option_value
+
+        return notional * swaption_value
+
+
+
+    #####################################################################################
+    # Validation functions to demonstrate the mathematical correctness of the HW1F model.
+    # These are not used in the pricing / simulation functions.
+    #####################################################################################
+
+
