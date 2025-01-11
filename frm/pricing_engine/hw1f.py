@@ -199,7 +199,7 @@ class HullWhite1Factor:
         References:
         [1] MAFS525 – Computational Methods for Pricing Structured Products, Slide 7/41
         """
-        # TODO, helper function to wrap euler simulation to support 1m+ simulations (which would caused memory issues if done in one go)
+        # TODO at later date: helper function to wrap euler simulation to support 1m+ simulations (which would caused memory issues if done in one go)
 
         rand_nbs = generate_rand_nbs(nb_steps=nb_steps,
                                      nb_rand_vars=1,
@@ -288,7 +288,7 @@ class HullWhite1Factor:
         S = maturity_years # Per notation in [1]
 
         assert S > T
-        # TODO - test if we need to use the HW1F DF/ZC bond price function - why not just call on the ZeroCurve object.
+        # TODO at later date: test if we need to use the HW1F DF/ZC bond price function - why not just call on the ZeroCurve object.
         P_t_T = self.zero_curve.get_discount_factors(T)  # DF(t,T).
         P_t_S = self.zero_curve.get_discount_factors(S)  # DF(t,S).
 
@@ -355,8 +355,6 @@ class HullWhite1Factor:
         # 2. For each fixing date of the swaption, calculate the discount factor as at the fixing date, per this short rate.
         #    This discount factor is used to price a zero-coupon bond option (ZCBO) for the fixing period.
         # 3. Sum the ZCBO prices to get the swaption price.
-
-        # TODO after defining the leg, swap, optionlet and cap/floor classes.
 
         pass
 
