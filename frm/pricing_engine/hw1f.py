@@ -127,18 +127,14 @@ class HullWhite1Factor:
         σ = self.vol
 
         # Calculate the derivative of the instantaneous forward rate  by numerical differentiation
-        f_t = self.get_instantaneous_forward_rate(years=years)
-        f_t_plus_dt = self.get_instantaneous_forward_rate(years=years+self.dt)
-        f_t_minus_dt = self.get_instantaneous_forward_rate(years=years-self.dt)
+        f_t = self.zero_curve.get_instantaneous_forward_rate(years=years)
+        f_t_plus_dt = self.zero_curve.get_instantaneous_forward_rate(years=years+self.dt)
+        f_t_minus_dt = self.zero_curve.get_instantaneous_forward_rate(years=years-self.dt)
         df_dt = (f_t_plus_dt - f_t_minus_dt) / (2 * self.dt)
 
         return df_dt \
                + α * f_t \
                + (σ**2 / (2*α)) * (1 - np.exp(-2 * α * years))
-
-
-    def get_instantaneous_forward_rate(self, years):
-        return self.zero_curve.get_instantaneous_forward_rate(years=years)
 
 
     def get_forward_rate_by_integration(self,t, T):
@@ -256,7 +252,7 @@ class HullWhite1Factor:
         return results
 
 
-    def price_zero_coupon_bond_option(self, expiry_years, maturity_years, K, cp):
+    def price_zero_coupon_bond_option(self, expiry_years, maturity_years, K, cp, t=0):
         """
         Price (at time t) a European option on a zero-coupon bond using the Hull-White model.
 
@@ -279,16 +275,19 @@ class HullWhite1Factor:
             In section 3.3.2 'Bond and Option Pricing, formulae 3.40 and 3.41, page 76 (124/1007 of the pdf)
         """
 
-        t = 0
         σ = self.vol
         α = self.mean_rev_lvl
-        T = expiry_years # Per notation in [1
-        S = maturity_years # Per notation in [1]
+        T = np.atleast_1d(expiry_years) # Per notation in [1
+        S = np.atleast_1d(maturity_years) # Per notation in [1]
 
-        assert S > T
-        # TODO at later date: test if we need to use the HW1F DF/ZC bond price function - why not just call on the ZeroCurve object.
-        P_t_T = self.zero_curve.get_discount_factors(years=T)  # DF(t,T).
-        P_t_S = self.zero_curve.get_discount_factors(years=S) # DF(t,S).
+        if not np.all(S > T):
+            raise ValueError("Maturities must be after the expiries")
+
+        if t == 0:
+            P_t_T = self.zero_curve.get_discount_factors(years=T)  # Discount Bond Price (t,T) = Discount Factor(t,T)
+            P_t_S = self.zero_curve.get_discount_factors(years=S) # Discount Bond Price (t,T) = DiscountFactor(t,S)
+        else:
+            raise ValueError('Need to assess if different functionality (i.e. calc_discount_factor_by_solving_ode_1) needed for P_t_T and P_t_S when t>0')
 
         # Calculate bond price volatility between T and S
         σP = σ * np.sqrt((1 - np.exp(-2 * α * (T-t))) / (2 * α)) * self.calc_b(t0=T, T=S)
