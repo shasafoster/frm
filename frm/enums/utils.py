@@ -276,6 +276,41 @@ class CompoundingFreq(Enum):
     def display_name(self):
         return self.name.title().replace('_', ' ').strip()
 
+    def calc_zero_rate_from_discount_factor(self, years: float, discount_factor: float) -> float:
+        if self == CompoundingFreq.CONTINUOUS:
+            return -np.log(discount_factor) / years
+        elif self == CompoundingFreq.SIMPLE:
+            return ((1.0 / discount_factor) - 1.0) / years
+        elif self.periods_per_year is not None:
+            return self.periods_per_year * ((1.0 / discount_factor) ** (1.0 / (self.periods_per_year * years)) - 1.0)
+        raise ValueError(f"Invalid compounding_frequency {self}")
+
+    def calc_discount_factor_from_zero_rate(self, years: float, zero_rate: float) -> float:
+        if self == CompoundingFreq.CONTINUOUS:
+            return np.exp(-zero_rate * years)
+        elif self == CompoundingFreq.SIMPLE:
+            return 1.0 / (1.0 + zero_rate * years)
+        elif self.periods_per_year is not None:
+            return 1.0 / (1.0 + zero_rate / self.periods_per_year) ** (self.periods_per_year * years)
+        raise ValueError(f"Invalid compounding_frequency {self}")
+
+    def convert_rate_to(self, zero_rate: float, target_compounding_freq) -> float:
+        # First convert to continuous
+        if self == CompoundingFreq.CONTINUOUS:
+            continuous_rate = zero_rate
+        elif self == CompoundingFreq.SIMPLE:
+            continuous_rate = np.log1p(zero_rate)
+        else:
+            continuous_rate = self.periods_per_year * np.log1p(zero_rate / self.periods_per_year)
+
+        # Then convert from continuous to target
+        if target_compounding_freq == CompoundingFreq.CONTINUOUS:
+            return continuous_rate
+        elif target_compounding_freq == CompoundingFreq.SIMPLE:
+            return np.expm1(continuous_rate)
+        else:
+            return target_compounding_freq.periods_per_year * np.expm1(continuous_rate / target_compounding_freq.periods_per_year)
+
 
 class PeriodFreq(Enum):
     # If storing instrument definitions in CDM, use 'code' to define valid fieldnames
