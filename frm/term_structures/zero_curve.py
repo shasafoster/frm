@@ -11,7 +11,7 @@ from dateutil.relativedelta import relativedelta
 # Own project imports
 from frm.utils import day_count, year_frac, clean_tenor, tenor_to_date_offset, convert_column_to_consistent_data_type
 from frm.enums import DayCountBasis, CompoundingFreq, RFRFixingCalcMethod, TermRate, ZeroCurveInterpMethod, ZeroCurveExtrapMethod
-from frm.term_structures.zero_curve_helpers import zero_rate_from_discount_factor, discount_factor_from_zero_rate
+from frm.term_structures.zero_curve_helpers import discount_factor_from_zero_rate
 
 @dataclass
 class ZeroCurve: 
@@ -87,46 +87,61 @@ class ZeroCurve:
         pillar_df = convert_column_to_consistent_data_type(pillar_df)
             
         if Y_column_name == 'zero_rate':
-            pillar_df['discount_factor'] = discount_factor_from_zero_rate(
+            pillar_df['discount_factor'] = compounding_freq.calc_discount_factor_from_zero_rate(
                 years=pillar_df['years'],
-                zero_rate=pillar_df['zero_rate'],
-                compounding_freq=compounding_freq)
+                zero_rate=pillar_df['zero_rate'])
+            pillar_df['cczr'] = compounding_freq.convert_rate_to(zero_rate=pillar_df['zero_rate'], target_compounding_freq=CompoundingFreq.CONTINUOUS)
             pillar_df.drop(columns=['zero_rate'], inplace=True)
+        else:
+            # Add continuously compounded interest rate for internal use
+            pillar_df['cczr'] = -1 * np.log(pillar_df['discount_factor']) / pillar_df['years']
 
-        # Add continuously compounded interest rate for internal use
-        pillar_df['cczr'] = -1 * np.log(pillar_df['discount_factor']) / pillar_df['years']
+        # Add pillar points at t=0. Short end extrapolation is per the 'interp_method' parameter.
+        # TODO: I'm not that happy with this approach.
+        #  Want to make the short end extrapolation more explicit in the documentation.
+        #  HW1F model needs a zero rate at t=0 so that is a requirement to at least make clear to user in error message or documentation.
+        if pillar_df['years'].iloc[0] != 0:
+            first_row = {'years': 0.0, 'discount_factor': 1.0}
+            if 'tenor' in pillar_df.columns:
+                first_row['tenor'] = ''
+            if 'date' in pillar_df.columns:
+                first_row['date'] = self.curve_date
+            if 'days' in pillar_df.columns:
+                first_row['days'] = 0
 
-        # Add pillar points at t=0.
-        # This is a dependency to the HW1F class which requires a short rate at t=0
-        first_row = {'years': 0.0, 'discount_factor': 1.0}
-        if 'tenor' in pillar_df.columns:
-            first_row['tenor'] = ''
-        if 'date' in pillar_df.columns:
-            first_row['date'] = self.curve_date
-        if 'days' in pillar_df.columns:
-            first_row['days'] = 0.0
+            match self.interp_method:
+                case ZeroCurveInterpMethod.LINEAR_ON_LN_DISCOUNT:
+                    first_row['cczr'] = pillar_df['cczr'].iloc[0]
+                case ZeroCurveInterpMethod.CUBIC_SPLINE_ON_LN_DISCOUNT:
+                    x = [0.0] + pillar_df['years'].to_list()
+                    y = [0.0] + np.log(pillar_df['discount_factor']).to_list()
+                    self.cubic_spline_definition = splrep(x=x, y=y, k=3)
+                    dt = 1e-6 # small number to avoid division by zero
+                    first_row['cczr'] = -1 * splev(x=dt, tck=self.cubic_spline_definition, der=0) / dt
+                case ZeroCurveInterpMethod.CUBIC_SPLINE_ON_CCZR:
+                    x = pillar_df['years'].to_list()
+                    y = pillar_df['cczr'].to_list()
+                    self.cubic_spline_definition = splrep(x=x, y=y, k=3)
+                    first_row['cczr'] = splev(x=0, tck=self.cubic_spline_definition, der=0)
+                case _:
+                    raise ValueError(f"Invalid interpolation method {self.interp_method}")
 
-        match self.interp_method:
-            case ZeroCurveInterpMethod.LINEAR_ON_LN_DISCOUNT:
-                first_row['cczr'] = pillar_df['cczr'].iloc[0]
-                self.cubic_spline_definition = None
-            case ZeroCurveInterpMethod.CUBIC_SPLINE_ON_LN_DISCOUNT:
-                x = [0.0] + pillar_df['years'].to_list()
-                y = [0.0] + np.log(pillar_df['discount_factor']).to_list()
-                self.cubic_spline_definition = splrep(x=x, y=y, k=3)
-                dt = 1e-6
-                first_row['cczr'] = -1 * splev(dt, self.cubic_spline_definition, der=0) / dt
-            case ZeroCurveInterpMethod.CUBIC_SPLINE_ON_CCZR:
-                x = pillar_df['years'].to_list()
-                y = pillar_df['cczr'].to_list()
-                self.cubic_spline_definition = splrep(x=x, y=y, k=3)
-                first_row['cczr'] = splev(0, self.cubic_spline_definition, der=0)
-            case _:
-                raise ValueError(f"Invalid interpolation method {self.interp_method}")
+            first_row_df = pd.DataFrame([first_row], columns=pillar_df.columns)
+            pillar_df = pd.concat([first_row_df, pillar_df])
+            pillar_df.reset_index(inplace=True, drop=True)
 
-        first_row_df = pd.DataFrame([first_row], columns=pillar_df.columns)
-        pillar_df = pd.concat([first_row_df, pillar_df])
-        pillar_df.reset_index(inplace=True, drop=True)
+        else:
+            match self.interp_method:
+                case ZeroCurveInterpMethod.CUBIC_SPLINE_ON_LN_DISCOUNT:
+                    x = pillar_df['years'].to_list()
+                    y = np.log(pillar_df['discount_factor']).to_list()
+                    self.cubic_spline_definition = splrep(x=x, y=y, k=3)
+                case ZeroCurveInterpMethod.CUBIC_SPLINE_ON_CCZR:
+                    x = pillar_df['years'].to_list()
+                    y = pillar_df['cczr'].to_list()
+                    self.cubic_spline_definition = splrep(x=x, y=y, k=3)
+                case _:
+                    raise ValueError(f"Invalid interpolation method {self.interp_method}")
 
         # Reorder the columns into a consistent format
         column_order = ['tenor','date','days','years','cczr','discount_factor']
@@ -294,13 +309,10 @@ class ZeroCurve:
                       ) -> np.array:
                 
         df = self.index_daily_data(dates, days, years)
-
         if compounding_freq == CompoundingFreq.CONTINUOUS:
             result = df['cczr'].values
         else:
-            result = zero_rate_from_discount_factor(years=df['years'].values,
-                                                       discount_factor=df['discount_factor'].values,
-                                                       compounding_freq=compounding_freq)
+            result = compounding_freq.calc_zero_rate_from_discount_factor(df['years'].values, df['discount_factor'].values)
         return float(result[0]) if len(result) == 1 else result
         
         
