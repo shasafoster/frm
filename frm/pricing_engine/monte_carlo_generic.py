@@ -1,42 +1,36 @@
 # -*- coding: utf-8 -*-
 import numpy as np
 
-from frm.utils import MAX_SIMULATIONS_PER_LOOP
+from frm.utils import MAX_SIMULATIONS_PER_LOOP, DEFAULT_NB_SIMULATIONS
 
 def generate_rand_nbs(nb_steps: int,
                       nb_rand_vars: int=1,
-                      nb_simulations: int=100_000,
+                      nb_simulations: int=DEFAULT_NB_SIMULATIONS,
                       apply_antithetic_variates: bool=False,
                       random_seed: int=0):
-    
     """
-    Generate random numbers for Monte Carlo simulations with an option to apply antithetic variates.
-
-    This function generates normally distributed random numbers for use in Monte Carlo simulations.
-    It can optionally generate antithetic variates to help in variance reduction. The function is
-    designed to support simulations across multiple periods and can handle a large number of simulations.
+    Generate random numbers for Monte Carlo simulations with options for variance reduction.
+    # TODO: Consider extenstions for stratified sampling, sobol and halton sequences.
 
     Parameters:
-    nb_steps (int): The number of periods for which random numbers need to be generated.
-    nb_rand_vars (int) The number of random numbers
-    nb_simulations (int, optional): The total number of simulations. Default is 100,000.
-    flag_apply_antithetic_variates (bool, optional): Flag to indicate whether antithetic variates should
-                                                     be applied for variance reduction. Default is True.
+    -----------
+    nb_steps : int
+        The number of periods for which random numbers need to be generated.
+    nb_rand_vars : int
+        The number of random numbers
+    nb_simulations : int, optional
+        The total number of simulations. Default is 100,000.
+    apply_antithetic_variates : bool, optional
+        Flag to indicate whether antithetic variates should be applied. Default is False.
+    random_seed : int, optional
+        Seed for random number generation. Default is 0.
 
     Returns:
-    np.array: A 2D array of random numbers. Each row corresponds to a simulation path, and each
-              column corresponds to a period.
+    --------
+    np.array: Array of shape (nb_steps, nb_rand_vars, nb_simulations) containing random numbers.
 
     Raises:
-    ValueError: If the number of simulations exceeds 10 million, as this may lead to memory issues.
-
-    Notes:
-    - If `flag_apply_antithetic_variates` is True, the function generates half the number of 
-      normal simulations and then creates antithetic variates for these. The results are concatenated
-      to form the final set of simulations.
-    - The function ensures that the total number of simulations (normal and antithetic) matches the
-      specified `nb_simulations`.
-    - The generated random numbers follow a standard normal distribution (mean 0, standard deviation 1).
+    ValueError: If the number of random numbers to be generated exceeds 10 million, as this can lead to memory issues.
     """
 
     np.random.seed(random_seed)
@@ -53,14 +47,17 @@ def generate_rand_nbs(nb_steps: int,
         raise ValueError("Too many steps & simulations for one refresh; may lead to memory leak")    
         
     if apply_antithetic_variates and nb_simulations == 1:
-        raise ValueError("Antithetic variates requiries >=2 simulations") 
-        
+        raise ValueError("Antithetic variates requiries >=2 simulations")
+
     if apply_antithetic_variates:
-        nb_antithetic_variate_simulations = nb_simulations // 2
-        nb_normal_simulations = nb_simulations - nb_antithetic_variate_simulations
-        rand_nbs_normal = np.random.normal(0, 1, (nb_steps, nb_rand_vars, nb_normal_simulations)) # standard normal random numbers
-        rand_nbs_antithetic_variate = -1 * rand_nbs_normal[:,:,:nb_antithetic_variate_simulations]
+        nb_pairs = nb_simulations // 2
+        rand_nbs_normal = np.random.normal(0, 1, (nb_steps, nb_rand_vars, nb_simulations - nb_pairs)) # standard normal random numbers
+        rand_nbs_antithetic_variate = -1 * rand_nbs_normal[:,:,:nb_pairs]
         rand_nbs = np.concatenate([rand_nbs_normal, rand_nbs_antithetic_variate], axis=2)
+
+        # Reindex to pair normal with antithetic variates
+        idx = np.column_stack((np.arange(nb_pairs), np.arange(nb_pairs) + nb_pairs)).flatten()
+        rand_nbs = rand_nbs[:, :, idx]
     else:    
         rand_nbs = np.random.normal(0, 1, (nb_steps, nb_rand_vars, nb_simulations))
     
