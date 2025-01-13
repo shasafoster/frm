@@ -11,7 +11,7 @@ from dateutil.relativedelta import relativedelta
 # Own project imports
 from frm.utils import day_count, year_frac, clean_tenor, tenor_to_date_offset, convert_column_to_consistent_data_type
 from frm.enums import DayCountBasis, CompoundingFreq, RFRFixingCalcMethod, TermRate, ZeroCurveInterpMethod, ZeroCurveExtrapMethod
-from frm.term_structures.zero_curve_helpers import discount_factor_from_zero_rate
+
 
 @dataclass
 class ZeroCurve: 
