@@ -48,6 +48,7 @@ EXCEL_AMT_FORMAT = '#,##0_-;(#,##0)_-;-_-'
 
 
 MAX_SIMULATIONS_PER_LOOP = 100_000_000  # Maximum number of total random numbers per loop
+DEFAULT_NB_SIMULATIONS = 10_000
 
 # Default number of monte carlo paths
 
