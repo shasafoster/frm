@@ -167,6 +167,8 @@ if __name__ == "__main__":
 
 if __name__ == "__main__":
 
+    print("Read from excel")
+
     # Create code for static holidays definition
     df = pd.read_excel(utils_dir + "\\calendar_map.xlsx", usecols=range(6))
     holiday_dict = {}
@@ -175,6 +177,8 @@ if __name__ == "__main__":
     ccy_holiday_dict_str = "CCY_HOLIDAY = dict(sorted({\n"
 
     for i, row in df.iterrows():
+        print("Processing row", i, "of", len(df))
+
         eval_str = None
         ccy = row["ISOCurrencyCode"]
         ui_string = row["UIString"]
@@ -217,7 +221,7 @@ if __name__ == "__main__":
     print(ccy_holiday_dict_str)
 
 
-
+    print("Writing to excel")
 
     # Initialize Excel writer
     # Prepare the output file path
@@ -231,7 +235,7 @@ if __name__ == "__main__":
     # Define column mappings for each currency
     col_start = 1  # Initial column start in openpyxl (1-based index)
 
-    for ccy in ['aud', 'eur', 'gbp', 'jpy', 'nzd', 'usd']:
+    for ccy in ['aud', 'cny', 'eur', 'gbp', 'hkd', 'jpy', 'nzd', 'sgd', 'usd']:
         # Prepare data for each currency
         dates = list(CCY_HOLIDAY[ccy.upper()].keys())
         holiday_name = list(CCY_HOLIDAY[ccy.upper()].values())

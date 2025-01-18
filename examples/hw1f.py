@@ -43,8 +43,8 @@ cp = 1 # Call option
 
 # Price call option
 analytical_price = hw1f.price_zero_coupon_bond_option(
-    expiry_years=expiry,
-    maturity_years=maturity,
+    option_expiry=expiry,
+    bond_maturity=maturity,
     K=K,
     cp=cp
 )

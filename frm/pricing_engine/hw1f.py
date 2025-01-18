@@ -151,7 +151,7 @@ class HullWhite1Factor:
                  random_seed: int=None,
                  method: str='euler'):
         """
-        Euler simulation of the Δt rate, R. Note this is not the short-rate, r.
+        Euler simulation of the Δt rate, R, from t=0. Note this is not the short-rate, r.
         For a small Δt, we assume R follows the same dynamics os r, i.e. dR = (θ(t) - αR)dt + σdW.
         From the rates R, we integrate to get the discount factors and zero rates for each simulation.
 
@@ -268,7 +268,7 @@ class HullWhite1Factor:
         sim_cczrs = -1 * np.log(sim_dsc_factors) / years_grid[:, np.newaxis]
 
         # Averages - these should align to the discount factor / zero rates term structure if our discretization is effective.
-        # Note the average must be done over the average discount factors (vs averaging the zero rates in each simulation).
+        # Note the average must be done over the average discount factors (averaging zero rates does not get the same result).
         avg_sim_dsc_factors = np.mean(sim_dsc_factors, axis=1)
         avg_cczrs = -1 * np.log(avg_sim_dsc_factors) / years_grid
         averages_df = pd.DataFrame({'years': years_grid, 'discount_factor': avg_sim_dsc_factors, 'cczr': avg_cczrs})
@@ -283,8 +283,8 @@ class HullWhite1Factor:
 
 
     def price_zero_coupon_bond_option(self,
-                                      expiry_years: float,
-                                      maturity_years: float,
+                                      option_expiry: float,
+                                      bond_maturity: float,
                                       K: float,
                                       cp: int,
                                       t0: float=0):
@@ -314,8 +314,8 @@ class HullWhite1Factor:
 
         σ = self.vol
         α = self.mean_rev_lvl
-        T = np.atleast_1d(expiry_years) # Per notation in [1]
-        S = np.atleast_1d(maturity_years) # Per notation in [1]
+        T = np.atleast_1d(option_expiry) # Per notation in [1]
+        S = np.atleast_1d(bond_maturity) # Per notation in [1]
 
         if not np.all(S > T):
             raise ValueError("Maturities must be after the expiries")
@@ -396,6 +396,8 @@ class HullWhite1Factor:
         """
         Calculates the discount factor (i.e. the zero coupon bond price), for the ODE:
         DF(t1,t2) = exp(a(t1,t2)-b(t1,t2) * r(t1))
+        Note the "a(t1,t2)" function is different to calc_discount_factor_by_solving_ode_2.
+        This calculation numerically integrates over the period t1, t2 and the theta spline function.
 
         Args:
             t1: Time t at which to evaluate the discount factor
@@ -409,8 +411,13 @@ class HullWhite1Factor:
         [1] MAFS525 – Computational Methods for Pricing Structured Products, Slide 3/41
         """
         def calc_a():
-            def integrand_1(t_): return self.calc_b(t1, t2) ** 2
-            def integrand_2(t_): return scipy.interpolate.splev(t_, self.theta_spline) * self.calc_b(t1, t2)
+            def integrand_1(t):
+                # Integration of b(t,t2) ** 2 over t1 to t2
+                return self.calc_b(t, t2) ** 2
+
+            def integrand_2(t):
+                # Integration of b(t,t2) * θ(t) over t1 to t2
+                return scipy.interpolate.splev(t, self.theta_spline) * self.calc_b(t, t2)
 
             integrand_1_res = scipy.integrate.quad(func=integrand_1, a=t1, b=t2)[0]
             # The 2nd integral is trickier. Increase limit to 100 (from default of 50) for better accuracy.
@@ -418,15 +425,15 @@ class HullWhite1Factor:
 
             return 0.5 * self.vol ** 2 * integrand_1_res - integrand_2_res
 
-        assert t2 > t2, 't2 must be greater than t1'
-
-        b = self.calc_b(t1, t2)
-        a = calc_a()
+        assert t2 > t1, 't2 must be greater than t1'
 
         if t1 == 0:
             r_t1 = self.r0
         else:
             assert r_t1 is not None, 'For t1>0, the short rate must be provided.'
+
+        b = self.calc_b(t1, t2)
+        a = calc_a()
 
         return np.exp(a - r_t1*b)
 
@@ -434,7 +441,9 @@ class HullWhite1Factor:
     def calc_discount_factor_by_solving_ode_2(self, t1, t2, r_t1=None):
         """
         Calculates the discount factor (i.e. the zero coupon bond price), for another ODE:
-        DF(t1,t2) = exp(a(t1,t2)-b(t1,t2) * r(t1))
+        DF(t1,t2) = a(t1,t2) * exp(-b(t1,t2) * r(t1))
+        Note the "a(t1,t2)" function is different to calc_discount_factor_by_solving_ode_1.
+        This calculation uses the zero curve object to get the instantaneous forward rate and discount factors.
 
         Args:
             t1: Time t at which to evaluate the discount factor
@@ -461,14 +470,16 @@ class HullWhite1Factor:
                     B_t_T * f_t - (σ ** 2 / (4 * α)) * (1 - np.exp(-2 * α * t1)) * B_t_T ** 2
                 )
 
+        assert t2 > t1, 't2 must be greater than t1'
+
         if t1 == 0:
             r_t1 = self.r0
         else:
             assert r_t1 is not None, 'For t1>0, the short rate must be provided.'
 
         b = self.calc_b(t1, t2)
-        a2 = calc_a()
-        return a2 * np.exp(- b * r_t1)
+        a = calc_a()
+        return a * np.exp(- b * r_t1)
 
     # def price_swaption(self):
     #     """
