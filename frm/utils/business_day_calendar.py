@@ -235,7 +235,7 @@ if __name__ == "__main__":
     # Define column mappings for each currency
     col_start = 1  # Initial column start in openpyxl (1-based index)
 
-    for ccy in ['aud', 'cny', 'eur', 'gbp', 'hkd', 'jpy', 'nzd', 'sgd', 'usd']:
+    for ccy in ['aud', 'cad', 'cny', 'eur', 'gbp', 'hkd', 'jpy', 'nzd', 'sgd', 'usd']:
         # Prepare data for each currency
         dates = list(CCY_HOLIDAY[ccy.upper()].keys())
         holiday_name = list(CCY_HOLIDAY[ccy.upper()].values())
