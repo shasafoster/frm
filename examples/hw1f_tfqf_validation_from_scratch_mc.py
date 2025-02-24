@@ -182,9 +182,527 @@ y_t = tf.math.exp(-2 * mr_t * t) * y_t
 
 
 
+#
+#
+#
+# #%%
+#
+#
+#
+#
+# #%%
+# # def conditional_mean_x(model, t, mr_t, sigma_t):
+# #     """Computes the drift term in [1], Eq. 10.39."""
+# #     # Shape [dim, num_times]
+# #     t = tf.broadcast_to(t, tf.concat([[model._dim], tf.shape(t)], axis=-1))
+# #     time_index = tf.searchsorted(model._jump_locations, t)
+# #     vn = tf.concat([model._zero_padding, model._jump_locations], axis=1)
+# #     y_between_vol_knots = model._y_integral(model._padded_knots,
+# #                                            model._jump_locations,
+# #                                            model._jump_values_vol,
+# #                                            model._jump_values_mr)
+# #
+# #     y_at_vol_knots = tf.concat(
+# #         [model._zero_padding,
+# #          utils.cumsum_using_matvec(y_between_vol_knots)], axis=1)
+# #
+# #     ex_between_vol_knots = model._ex_integral(model._padded_knots,
+# #                                              model._jump_locations,
+# #                                              model._jump_values_vol,
+# #                                              model._jump_values_mr,
+# #                                              y_at_vol_knots[:, :-1])
+# #
+# #     ex_at_vol_knots = tf.concat(
+# #         [model._zero_padding,
+# #          utils.cumsum_using_matvec(ex_between_vol_knots)], axis=1)
+# #
+# #     c = tf.gather(y_at_vol_knots, time_index, batch_dims=1)
+# #     exp_x_t = model._ex_integral(
+# #         tf.gather(vn, time_index, batch_dims=1), t, sigma_t, mr_t, c)
+# #     exp_x_t = exp_x_t + tf.gather(ex_at_vol_knots, time_index, batch_dims=1)
+# #     exp_x_t = (exp_x_t[:, 1:] - exp_x_t[:, :-1]) * tf.math.exp(
+# #         -tf.broadcast_to(mr_t, tf.shape(t))[:, 1:] * t[:, 1:])
+# #     return exp_x_t
+# #
+# # def ex_integral(t0, t, vol, k, y_t0):
+# #     """Function computes the integral for the drift calculation."""
+# #     # Computes int_t0^t (exp(k*s)*y(s)) ds,
+# #     # where y(s)=y(t0) + int_t0^s exp(-2*(s-u)) vol(u)^2 du."""
+# #     value = (np.exp(k * t) - np.exp(k * t0) + np.exp(2 * k * t0) * (np.exp(-k * t) - np.exp(-k * t0)))
+# #     value = value * vol**2 / (2 * k * k) + y_t0 * (np.exp(-k * t0) - np.exp(-k * t)) / k
+# #     return value
+# #
+# # def conditional_mean_x_scalar(t, mr_t, sigma_t):
+# #     exp_x_t = ex_integral(t0=0, t=t, vol=sigma_t, k=mr_t, y_t0=0)
+# #     exp_x_t = (exp_x_t[:, 1:] - exp_x_t[:, :-1]) * np.exp(-np.broadcast_to(mr_t, t.shape)[:, 1:] * t[:, 1:])
+# #     return exp_x_t
+# #
+# #
+# # t = times
+# # mr_t = mean_reversion
+# # sigma_t = volatility
+# #
+# # t = tf.broadcast_to(t, tf.concat([[model._dim], tf.shape(t)], axis=-1))
+# # var_x_between_vol_knots = model._variance_int(model._padded_knots,
+# #                                              model._jump_locations,
+# #                                              model._jump_values_vol,
+# #                                              model._jump_values_mr)
+# # varx_at_vol_knots = tf.concat(
+# #     [model._zero_padding,
+# #      utils.cumsum_using_matvec(var_x_between_vol_knots)],
+# #     axis=1)
+# #
+# # time_index = tf.searchsorted(model._jump_locations, t)
+# # vn = tf.concat(
+# #     [model._zero_padding,
+# #      model._jump_locations], axis=1)
+# #
+# #
+# # def variance_int(t0, t, vol, k):
+# #     """Computes int_t0^t exp(2*k*s) vol(s)^2 ds."""
+# #     return vol * vol / (2 * k) * (
+# #             tf.math.exp(2 * k * t) - tf.math.exp(2 * k * t0))
+# #
+# # var_x_t = variance_int(t0=0, t=t, vol=sigma_t, k=mr_t)
+# # var_x_t = (var_x_t[:, 1:] - var_x_t[:, :-1]) * tf.math.exp(
+# #     -2 * tf.broadcast_to(mr_t, tf.shape(t))[:, 1:] * t[:, 1:])
+#
+#
+#
+# #%%
+#
+# initial_x = tf.zeros((num_samples, model._dim), dtype=model._dtype)
+# f0_t = model._instant_forward_rate_fn(times[0])
+#
+# normal_draws = None
+# corr_matrix_root = None
+# num_requested_times = sim_times.shape[0] # shape of 'sim_times'
+# record_samples = True
+#
+# new_sim_times = tf.concat([tf.constant([0.0], dtype=tf.float64), sim_times], axis=0) # [0.0, 0.1, 0.2, ..., 1.0]
+#
+# dt = new_sim_times[1:] - new_sim_times[:-1]
+# keep_mask = tf.constant([False] + [True] * len(sim_times)) # [False, True, True, ..., True]. 1 false, 10 trues
+# written_count = 0
+#
+# mean_reversion = model._mean_reversion(new_sim_times)
+# volatility = model._volatility(new_sim_times)
+#
+# exp_x_t = model._conditional_mean_x(new_sim_times, mean_reversion, volatility)
+# var_x_t = model._conditional_variance_x(new_sim_times, mean_reversion, volatility)
+#
+# element_shape = initial_x.shape
+# rate_paths = tf.TensorArray(dtype=new_sim_times.dtype,
+#                             size=num_requested_times,
+#                             element_shape=element_shape,
+#                             clear_after_read=False)
+# # Include initial state, if necessary
+# rate_paths = rate_paths.write(written_count, initial_x + f0_t)
+#
+#
+# if dt.shape.is_fully_defined():
+#     steps_num = dt.shape.as_list()[-1]
+# else:
+#     steps_num = tf.shape(dt)[-1]
+#
+#
+# def cond_fn(i, written_count, *args):
+#     # It can happen that `times_grid[-1] > times[-1]` in which case we have
+#     # to terminate when `written_count` reaches `num_requested_times`
+#     del args
+#     return tf.math.logical_and(i < tf.size(dt), written_count < num_requested_times)
+#
+#
+# def body_fn(i, written_count, current_x, rate_paths):
+#     """Simulate hull-white process to the next time point."""
+#     if normal_draws is None:
+#         normals = random.mv_normal_sample(
+#             (num_samples,),
+#             mean=tf.zeros((model._dim,), dtype=mean_reversion.dtype),
+#             random_type=random_type, seed=seed)
+#     else:
+#         normals = normal_draws[i]
+#
+#     if corr_matrix_root is not None:
+#         normals = tf.linalg.matvec(corr_matrix_root[i], normals)
+#     vol_x_t = tf.math.sqrt(tf.nn.relu(tf.transpose(var_x_t)[i]))
+#     # If numerically `vol_x_t == 0`, the gradient of `vol_x_t` becomes `NaN`.
+#     # To prevent this, we explicitly set `vol_x_t` to zero tensor at zero
+#     # values so that the gradient is set to zero at this values.
+#     vol_x_t = tf.where(vol_x_t > 0.0, vol_x_t, 0.0)
+#     next_x = (tf.math.exp(-tf.transpose(mean_reversion)[i + 1] * dt[i])
+#               * current_x
+#               + tf.transpose(exp_x_t)[i]
+#               + vol_x_t * normals)
+#     f_0_t = model._instant_forward_rate_fn(new_sim_times[i + 1])
+#
+#     # Update `rate_paths`
+#     if record_samples:
+#         rate_paths = rate_paths.write(written_count, next_x + f_0_t)
+#     else:
+#         rate_paths = next_x + f_0_t
+#     written_count += tf.cast(keep_mask[i + 1], dtype=tf.int32)
+#     return (i + 1, written_count, next_x, rate_paths)
+#
+#
+#
+# # TODO(b/157232803): Use tf.cumsum instead?
+# # Sample paths
+#
+# _, _, _, rate_paths = tf.while_loop(
+#     cond_fn, body_fn, (0, written_count, initial_x, rate_paths))
+#
+# if not record_samples:
+#     # shape [num_samples, 1, dim]
+#     rate_paths = tf.expand_dims(rate_paths, axis=-2)
+# # Shape [num_time_points] + [num_samples, dim]
+# rate_paths = rate_paths.stack()
+# # transpose to shape [num_samples, num_time_points, dim]
+# n = rate_paths.shape.rank
+# perm = list(range(1, n - 1)) + [0, n - 1]
+# rate_paths = tf.transpose(rate_paths, perm)
+#
+#
+# normal_draws = None
+#
+# normal_draws = [random.mv_normal_sample(
+#     (num_samples,),
+#     mean=tf.zeros((model._dim,), dtype=mean_reversion.dtype),
+#     random_type=random_type, seed=seed) for _ in range(10)]
+#
+# #%% Condensed code
+#
+#
+# validate_args = False
+#
+# # Note: all the notations below are the same as in [1].
+# num_requested_times = tff_utils.get_shape(times)[0]
+# params = [model._mean_reversion, model._volatility]
+# if model._corr_matrix is not None:
+#     params = params + [model._corr_matrix]
+#
+# sim_times_grid = tf.concat([tf.constant([0.0], dtype=times.dtype), times], axis=0)
+# keep_mask = sim_times_grid > 0
+#
+# # Add zeros as a starting location
+# dt = sim_times_grid[1:] - sim_times_grid[:-1]
+# steps_num = dt.shape.as_list()[-1]
+#
+#
+#
+#
+# # The below is OK because we support exact discretization with piecewise
+# # constant mr and vol.
+# mean_reversion = model._mean_reversion(sim_times_grid)
+# volatility = model._volatility(sim_times_grid)
+# if model._corr_matrix is not None:
+#     pass
+# else:
+#     corr_matrix_root = None
+#
+# exp_x_t = model._conditional_mean_x(sim_times_grid, mean_reversion, volatility)
+# var_x_t = model._conditional_variance_x(sim_times_grid, mean_reversion, volatility)
+# if model._dim == 1:
+#     mean_reversion = tf.expand_dims(mean_reversion, axis=0)
+#
+# # Initial state
+# initial_x = tf.zeros((num_samples, model._dim), dtype=model._dtype)
+# f0_t = model._instant_forward_rate_fn(sim_times_grid[0])
+# # Prepare results format
+# written_count = 0
+#
+# # If more than one sample has to be recorded, create a TensorArray
+# record_samples = True
+# element_shape = initial_x.shape
+# rate_paths = tf.TensorArray(dtype=sim_times_grid.dtype,
+#                             size=num_requested_times,
+#                             element_shape=element_shape,
+#                             clear_after_read=False)
+# # Include initial state, if necessary
+# rate_paths = rate_paths.write(written_count, initial_x + f0_t)
+#
+# written_count += tf.cast(keep_mask[0], dtype=tf.int32)
+#
+#
+# #%%
+#
+# # # Define sampling while_loop body function
+# # def cond_fn(i, written_count, *args):
+# #     # It can happen that `times_grid[-1] > times[-1]` in which case we have
+# #     # to terminate when `written_count` reaches `num_requested_times`
+# #     del args
+# #     return tf.math.logical_and(i < tf.size(dt), written_count < num_requested_times)
+# #
+# #
+# # def body_fn(i, written_count, current_x, rate_paths):
+# #     """Simulate hull-white process to the next time point."""
+# #
+# #     normals = normal_draws[i]
+# #
+# #     vol_x_t = tf.math.sqrt(tf.nn.relu(tf.transpose(var_x_t)[i]))
+# #     # If numerically `vol_x_t == 0`, the gradient of `vol_x_t` becomes `NaN`.
+# #     # To prevent this, we explicitly set `vol_x_t` to zero tensor at zero
+# #     # values so that the gradient is set to zero at this values.
+# #     vol_x_t = tf.where(vol_x_t > 0.0, vol_x_t, 0.0)
+# #     next_x = (tf.math.exp(-tf.transpose(mean_reversion)[i + 1] * dt[i])
+# #               * current_x
+# #               + tf.transpose(exp_x_t)[i]
+# #               + vol_x_t * normals)
+# #     f_0_t = model._instant_forward_rate_fn(sim_times_grid[i + 1])
+# #
+# #     # Update `rate_paths`
+# #     rate_paths = rate_paths.write(written_count, next_x + f_0_t)
+# #
+# #     written_count += tf.cast(keep_mask[i + 1], dtype=tf.int32)
+# #     return (i + 1, written_count, next_x, rate_paths)
+# #
+# #
+# #
+# # # Sample paths
+# # _, _, _, rate_paths = tf.while_loop(cond_fn, body_fn, (0, written_count, initial_x, rate_paths))
+#
+#
+# #%%% 010194103663829428
+#
+# i = tf.constant(0)
+# current_x = initial_x
+#
+# while tf.math.logical_and(i < tf.size(dt), written_count < num_requested_times):
+#     normals = normal_draws[i]
+#     vol_x_t = tf.math.sqrt(tf.nn.relu(tf.transpose(var_x_t)[i]))
+#     vol_x_t = tf.where(vol_x_t > 0.0, vol_x_t, 0.0)
+#     next_x = (tf.math.exp(-tf.transpose(mean_reversion)[i + 1] * dt[i])
+#               * current_x
+#               + tf.transpose(exp_x_t)[i]
+#               + vol_x_t * normals)
+#     f_0_t = model._instant_forward_rate_fn(sim_times_grid[i + 1])
+#     rate_paths = rate_paths.write(written_count, next_x + f_0_t)
+#     written_count += tf.cast(keep_mask[i + 1], dtype=tf.int32)
+#     i += 1
+#     current_x = next_x
+#
+#
+#
+# #%% 010194103663829428
+#
+# # Shape [num_time_points] + [num_samples, dim]
+# rate_paths = rate_paths.stack()
+# # transpose to shape [num_samples, num_time_points, dim]
+# n = rate_paths.shape.rank
+# perm = list(range(1, n - 1)) + [0, n - 1]
+# rate_paths = tf.transpose(rate_paths, perm)
+#
+#
+# average_rate = np.mean(rate_paths[:,-1,0])
+# print("Average of last rate: ", average_rate)
+#
+# assert np.isclose(average_rate, 0.01019410366382943, atol=1e-4), "Average rate does not match Google's implementation"
+#
+#
+# #%%
+#
+#
+#
+#
+#
+# #%% Original code
+#
+#
+#
+# def _prepare_grid(times, times_grid, *params):
+#   """Prepares grid of times for path generation.
+#
+#   Args:
+#     times:  Rank 1 `Tensor` of increasing positive real values. The times at
+#       which the path points are to be evaluated.
+#     times_grid: An optional rank 1 `Tensor` representing time discretization
+#       grid. If `times` are not on the grid, then the nearest points from the
+#       grid are used.
+#     *params: Parameters of the Heston model. Either scalar `Tensor`s of the
+#       same `dtype` or instances of `PiecewiseConstantFunc`.
+#
+#   Returns:
+#     Tuple `(all_times, mask)`.
+#     `all_times` is a 1-D real `Tensor` containing all points from 'times`, the
+#     uniform grid of points between `[0, times[-1]]` with grid size equal to
+#     `time_step`, and jump locations of piecewise constant parameters The
+#     `Tensor` is sorted in ascending order and may contain duplicates.
+#     `mask` is a boolean 1-D `Tensor` of the same shape as 'all_times', showing
+#     which elements of 'all_times' correspond to THE values from `times`.
+#     Guarantees that times[0]=0 and mask[0]=False.
+#   """
+#   if times_grid is None:
+#     additional_times = []
+#     for param in params:
+#       if hasattr(param, 'is_piecewise_constant'):
+#         if param.is_piecewise_constant:
+#           # Flatten all jump locations
+#           additional_times.append(tf.reshape(param.jump_locations(), [-1]))
+#     zeros = tf.constant([0], dtype=times.dtype)
+#     all_times = tf.concat([zeros] + [times] + additional_times, axis=0)
+#     all_times = tf.sort(all_times)
+#     time_indices = tf.searchsorted(all_times, times, out_type=tf.int32)
+#   else:
+#     all_times = times_grid
+#     time_indices = tf.searchsorted(times_grid, times, out_type=tf.int32)
+#     # Adjust indices to bring `times` closer to `times_grid`.
+#     times_diff_1 = tf.gather(times_grid, time_indices) - times
+#     times_diff_2 = tf.gather(times_grid, tf.nn.relu(time_indices-1)) - times
+#     time_indices = tf.where(
+#         tf.math.abs(times_diff_2) > tf.math.abs(times_diff_1),
+#         time_indices,
+#         tf.nn.relu(time_indices - 1))
+#   # Create a boolean mask to identify the iterations that have to be recorded.
+#   mask = tf.scatter_nd(
+#       indices=tf.expand_dims(tf.cast(time_indices, dtype=tf.int64), axis=1),
+#       updates=tf.fill(tf.shape(times), True),
+#       shape=tf.shape(all_times, out_type=tf.int64))
+#   return all_times, mask
+#
+# validate_args = False
+#
+# # Note: all the notations below are the same as in [1].
+# num_requested_times = tff_utils.get_shape(times)[0]
+# params = [model._mean_reversion, model._volatility]
+# if model._corr_matrix is not None:
+#     params = params + [model._corr_matrix]
+# times, keep_mask = _prepare_grid(
+#     times, times_grid, *params)
+# # Add zeros as a starting location
+# dt = times[1:] - times[:-1]
+# if dt.shape.is_fully_defined():
+#     steps_num = dt.shape.as_list()[-1]
+# else:
+#     steps_num = tf.shape(dt)[-1]
+#     # TODO(b/148133811): Re-enable Sobol test when TF 2.2 is released.
+#     if random_type == random.RandomType.SOBOL:
+#         raise ValueError('Sobol sequence for Euler sampling is temporarily '
+#                          'unsupported when `time_step` or `times` have a '
+#                          'non-constant value')
+# if normal_draws is None:
+#     # In order to use low-discrepancy random_type we need to generate the
+#     # sequence of independent random normals upfront. We also precompute
+#     # random numbers for stateless random type in order to ensure independent
+#     # samples for multiple function calls whith different seeds.
+#     if random_type in (random.RandomType.SOBOL,
+#                        random.RandomType.HALTON,
+#                        random.RandomType.HALTON_RANDOMIZED,
+#                        random.RandomType.STATELESS,
+#                        random.RandomType.STATELESS_ANTITHETIC):
+#         normal_draws = utils.generate_mc_normal_draws(
+#             num_normal_draws=model._dim, num_time_steps=steps_num,
+#             num_sample_paths=num_samples, random_type=random_type,
+#             seed=seed,
+#             dtype=model._dtype, skip=skip)
+#     else:
+#         normal_draws = None
+# else:
+#     if validate_args:
+#         draws_times = tf.shape(normal_draws)[0]
+#         asserts = tf.assert_equal(
+#             draws_times, tf.shape(times)[0] - 1,  # We have added `0` to `times`
+#             message='`tf.shape(normal_draws)[1]` should be equal to the '
+#                     'number of all `times` plus the number of all jumps of '
+#                     'the piecewise constant parameters.')
+#         with tf.compat.v1.control_dependencies([asserts]):
+#             normal_draws = tf.identity(normal_draws)
+# # The below is OK because we support exact discretization with piecewise
+# # constant mr and vol.
+# mean_reversion = model._mean_reversion(times)
+# volatility = model._volatility(times)
+# if model._corr_matrix is not None:
+#     pass
+# else:
+#     corr_matrix_root = None
+#
+# exp_x_t = model._conditional_mean_x(times, mean_reversion, volatility)
+# var_x_t = model._conditional_variance_x(times, mean_reversion, volatility)
+# if model._dim == 1:
+#     mean_reversion = tf.expand_dims(mean_reversion, axis=0)
+#
+# # Initial state
+# initial_x = tf.zeros((num_samples, model._dim), dtype=model._dtype)
+# f0_t = model._instant_forward_rate_fn(times[0])
+# # Prepare results format
+# written_count = 0
+# if isinstance(num_requested_times, int) and num_requested_times == 1:
+#     record_samples = False
+#     rate_paths = initial_x + f0_t
+# else:
+#     # If more than one sample has to be recorded, create a TensorArray
+#     record_samples = True
+#     element_shape = initial_x.shape
+#     rate_paths = tf.TensorArray(dtype=times.dtype,
+#                                 size=num_requested_times,
+#                                 element_shape=element_shape,
+#                                 clear_after_read=False)
+#     # Include initial state, if necessary
+#     rate_paths = rate_paths.write(written_count, initial_x + f0_t)
+# written_count += tf.cast(keep_mask[0], dtype=tf.int32)
+#
+#
+# # Define sampling while_loop body function
+# def cond_fn(i, written_count, *args):
+#     # It can happen that `times_grid[-1] > times[-1]` in which case we have
+#     # to terminate when `written_count` reaches `num_requested_times`
+#     del args
+#     return tf.math.logical_and(i < tf.size(dt),
+#                                written_count < num_requested_times)
+#
+#
+# def body_fn(i, written_count, current_x, rate_paths):
+#     """Simulate hull-white process to the next time point."""
+#     if normal_draws is None:
+#         normals = random.mv_normal_sample(
+#             (num_samples,),
+#             mean=tf.zeros((model._dim,), dtype=mean_reversion.dtype),
+#             random_type=random_type, seed=seed)
+#     else:
+#         normals = normal_draws[i]
+#
+#     if corr_matrix_root is not None:
+#         normals = tf.linalg.matvec(corr_matrix_root[i], normals)
+#     vol_x_t = tf.math.sqrt(tf.nn.relu(tf.transpose(var_x_t)[i]))
+#     # If numerically `vol_x_t == 0`, the gradient of `vol_x_t` becomes `NaN`.
+#     # To prevent this, we explicitly set `vol_x_t` to zero tensor at zero
+#     # values so that the gradient is set to zero at this values.
+#     vol_x_t = tf.where(vol_x_t > 0.0, vol_x_t, 0.0)
+#     next_x = (tf.math.exp(-tf.transpose(mean_reversion)[i + 1] * dt[i])
+#               * current_x
+#               + tf.transpose(exp_x_t)[i]
+#               + vol_x_t * normals)
+#     f_0_t = model._instant_forward_rate_fn(times[i + 1])
+#
+#     # Update `rate_paths`
+#     if record_samples:
+#         rate_paths = rate_paths.write(written_count, next_x + f_0_t)
+#     else:
+#         rate_paths = next_x + f_0_t
+#     written_count += tf.cast(keep_mask[i + 1], dtype=tf.int32)
+#     return (i + 1, written_count, next_x, rate_paths)
+#
+#
+# # TODO(b/157232803): Use tf.cumsum instead?
+# # Sample paths
+# _, _, _, rate_paths = tf.while_loop(
+#     cond_fn, body_fn, (0, written_count, initial_x, rate_paths))
+# if not record_samples:
+#     # shape [num_samples, 1, dim]
+#     rate_paths_2 =  tf.expand_dims(rate_paths, axis=-2)
+# # Shape [num_time_points] + [num_samples, dim]
+# rate_paths = rate_paths.stack()
+# # transpose to shape [num_samples, num_time_points, dim]
+# n = rate_paths.shape.rank
+# perm = list(range(1, n - 1)) + [0, n - 1]
+# rate_paths = tf.transpose(rate_paths, perm)
+#
+#
+# average_rate = np.mean(rate_paths[:,-1,0])
+# print("Average of last rate: ", average_rate)
+#
+# assert np.isclose(average_rate, 0.010194103663829423, atol=1e-4), "Average rate does not match Google's implementation"
 
-
-rate_paths_ = model.sample_paths(
+rate_paths = model.sample_paths(
     times=times,
     num_samples=num_samples,
     random_type=random_type,
@@ -195,384 +713,11 @@ rate_paths_ = model.sample_paths(
     validate_args=False,
     seed=seed)
 
-
-
 #%%
 
-
-
-
-#%%
-# def conditional_mean_x(model, t, mr_t, sigma_t):
-#     """Computes the drift term in [1], Eq. 10.39."""
-#     # Shape [dim, num_times]
-#     t = tf.broadcast_to(t, tf.concat([[model._dim], tf.shape(t)], axis=-1))
-#     time_index = tf.searchsorted(model._jump_locations, t)
-#     vn = tf.concat([model._zero_padding, model._jump_locations], axis=1)
-#     y_between_vol_knots = model._y_integral(model._padded_knots,
-#                                            model._jump_locations,
-#                                            model._jump_values_vol,
-#                                            model._jump_values_mr)
-#
-#     y_at_vol_knots = tf.concat(
-#         [model._zero_padding,
-#          utils.cumsum_using_matvec(y_between_vol_knots)], axis=1)
-#
-#     ex_between_vol_knots = model._ex_integral(model._padded_knots,
-#                                              model._jump_locations,
-#                                              model._jump_values_vol,
-#                                              model._jump_values_mr,
-#                                              y_at_vol_knots[:, :-1])
-#
-#     ex_at_vol_knots = tf.concat(
-#         [model._zero_padding,
-#          utils.cumsum_using_matvec(ex_between_vol_knots)], axis=1)
-#
-#     c = tf.gather(y_at_vol_knots, time_index, batch_dims=1)
-#     exp_x_t = model._ex_integral(
-#         tf.gather(vn, time_index, batch_dims=1), t, sigma_t, mr_t, c)
-#     exp_x_t = exp_x_t + tf.gather(ex_at_vol_knots, time_index, batch_dims=1)
-#     exp_x_t = (exp_x_t[:, 1:] - exp_x_t[:, :-1]) * tf.math.exp(
-#         -tf.broadcast_to(mr_t, tf.shape(t))[:, 1:] * t[:, 1:])
-#     return exp_x_t
-#
-# def ex_integral(t0, t, vol, k, y_t0):
-#     """Function computes the integral for the drift calculation."""
-#     # Computes int_t0^t (exp(k*s)*y(s)) ds,
-#     # where y(s)=y(t0) + int_t0^s exp(-2*(s-u)) vol(u)^2 du."""
-#     value = (np.exp(k * t) - np.exp(k * t0) + np.exp(2 * k * t0) * (np.exp(-k * t) - np.exp(-k * t0)))
-#     value = value * vol**2 / (2 * k * k) + y_t0 * (np.exp(-k * t0) - np.exp(-k * t)) / k
-#     return value
-#
-# def conditional_mean_x_scalar(t, mr_t, sigma_t):
-#     exp_x_t = ex_integral(t0=0, t=t, vol=sigma_t, k=mr_t, y_t0=0)
-#     exp_x_t = (exp_x_t[:, 1:] - exp_x_t[:, :-1]) * np.exp(-np.broadcast_to(mr_t, t.shape)[:, 1:] * t[:, 1:])
-#     return exp_x_t
-#
-#
-# t = times
-# mr_t = mean_reversion
-# sigma_t = volatility
-#
-# t = tf.broadcast_to(t, tf.concat([[model._dim], tf.shape(t)], axis=-1))
-# var_x_between_vol_knots = model._variance_int(model._padded_knots,
-#                                              model._jump_locations,
-#                                              model._jump_values_vol,
-#                                              model._jump_values_mr)
-# varx_at_vol_knots = tf.concat(
-#     [model._zero_padding,
-#      utils.cumsum_using_matvec(var_x_between_vol_knots)],
-#     axis=1)
-#
-# time_index = tf.searchsorted(model._jump_locations, t)
-# vn = tf.concat(
-#     [model._zero_padding,
-#      model._jump_locations], axis=1)
-#
-#
-# def variance_int(t0, t, vol, k):
-#     """Computes int_t0^t exp(2*k*s) vol(s)^2 ds."""
-#     return vol * vol / (2 * k) * (
-#             tf.math.exp(2 * k * t) - tf.math.exp(2 * k * t0))
-#
-# var_x_t = variance_int(t0=0, t=t, vol=sigma_t, k=mr_t)
-# var_x_t = (var_x_t[:, 1:] - var_x_t[:, :-1]) * tf.math.exp(
-#     -2 * tf.broadcast_to(mr_t, tf.shape(t))[:, 1:] * t[:, 1:])
-
-
-
-#%%
-
-initial_x = tf.zeros((num_samples, model._dim), dtype=model._dtype)
-f0_t = model._instant_forward_rate_fn(times[0])
-
-normal_draws = None
-corr_matrix_root = None
-num_requested_times = sim_times.shape[0] # shape of 'sim_times'
-record_samples = True
-
-new_sim_times = tf.concat([tf.constant([0.0], dtype=tf.float64), sim_times], axis=0) # [0.0, 0.1, 0.2, ..., 1.0]
-
-dt = new_sim_times[1:] - new_sim_times[:-1]
-keep_mask = tf.constant([False] + [True] * len(sim_times)) # [False, True, True, ..., True]. 1 false, 10 trues
-written_count = 0
-
-mean_reversion = model._mean_reversion(new_sim_times)
-volatility = model._volatility(new_sim_times)
-
-exp_x_t = model._conditional_mean_x(new_sim_times, mean_reversion, volatility)
-var_x_t = model._conditional_variance_x(new_sim_times, mean_reversion, volatility)
-
-element_shape = initial_x.shape
-rate_paths = tf.TensorArray(dtype=new_sim_times.dtype,
-                            size=num_requested_times,
-                            element_shape=element_shape,
-                            clear_after_read=False)
-# Include initial state, if necessary
-rate_paths = rate_paths.write(written_count, initial_x + f0_t)
-
-
-#%%
-
-if dt.shape.is_fully_defined():
-    steps_num = dt.shape.as_list()[-1]
-else:
-    steps_num = tf.shape(dt)[-1]
-
-
-def cond_fn(i, written_count, *args):
-    # It can happen that `times_grid[-1] > times[-1]` in which case we have
-    # to terminate when `written_count` reaches `num_requested_times`
-    del args
-    return tf.math.logical_and(i < tf.size(dt), written_count < num_requested_times)
-
-
-def body_fn(i, written_count, current_x, rate_paths):
-    """Simulate hull-white process to the next time point."""
-    if normal_draws is None:
-        normals = random.mv_normal_sample(
-            (num_samples,),
-            mean=tf.zeros((model._dim,), dtype=mean_reversion.dtype),
-            random_type=random_type, seed=seed)
-    else:
-        normals = normal_draws[i]
-
-    if corr_matrix_root is not None:
-        normals = tf.linalg.matvec(corr_matrix_root[i], normals)
-    vol_x_t = tf.math.sqrt(tf.nn.relu(tf.transpose(var_x_t)[i]))
-    # If numerically `vol_x_t == 0`, the gradient of `vol_x_t` becomes `NaN`.
-    # To prevent this, we explicitly set `vol_x_t` to zero tensor at zero
-    # values so that the gradient is set to zero at this values.
-    vol_x_t = tf.where(vol_x_t > 0.0, vol_x_t, 0.0)
-    next_x = (tf.math.exp(-tf.transpose(mean_reversion)[i + 1] * dt[i])
-              * current_x
-              + tf.transpose(exp_x_t)[i]
-              + vol_x_t * normals)
-    f_0_t = model._instant_forward_rate_fn(times[i + 1])
-
-    # Update `rate_paths`
-    if record_samples:
-        rate_paths = rate_paths.write(written_count, next_x + f_0_t)
-    else:
-        rate_paths = next_x + f_0_t
-    written_count += tf.cast(keep_mask[i + 1], dtype=tf.int32)
-    return (i + 1, written_count, next_x, rate_paths)
-
-
-
-# TODO(b/157232803): Use tf.cumsum instead?
-# Sample paths
-
-_, _, _, rate_paths = tf.while_loop(
-    cond_fn, body_fn, (0, written_count, initial_x, rate_paths))
-
-if not record_samples:
-    # shape [num_samples, 1, dim]
-    rate_paths = tf.expand_dims(rate_paths, axis=-2)
-# Shape [num_time_points] + [num_samples, dim]
-rate_paths = rate_paths.stack()
-# transpose to shape [num_samples, num_time_points, dim]
-n = rate_paths.shape.rank
-perm = list(range(1, n - 1)) + [0, n - 1]
-rate_paths = tf.transpose(rate_paths, perm)
-
-
-#%%
-
-normal_draws = None
-
-def _prepare_grid(times, times_grid, *params):
-  """Prepares grid of times for path generation.
-
-  Args:
-    times:  Rank 1 `Tensor` of increasing positive real values. The times at
-      which the path points are to be evaluated.
-    times_grid: An optional rank 1 `Tensor` representing time discretization
-      grid. If `times` are not on the grid, then the nearest points from the
-      grid are used.
-    *params: Parameters of the Heston model. Either scalar `Tensor`s of the
-      same `dtype` or instances of `PiecewiseConstantFunc`.
-
-  Returns:
-    Tuple `(all_times, mask)`.
-    `all_times` is a 1-D real `Tensor` containing all points from 'times`, the
-    uniform grid of points between `[0, times[-1]]` with grid size equal to
-    `time_step`, and jump locations of piecewise constant parameters The
-    `Tensor` is sorted in ascending order and may contain duplicates.
-    `mask` is a boolean 1-D `Tensor` of the same shape as 'all_times', showing
-    which elements of 'all_times' correspond to THE values from `times`.
-    Guarantees that times[0]=0 and mask[0]=False.
-  """
-  if times_grid is None:
-    additional_times = []
-    for param in params:
-      if hasattr(param, 'is_piecewise_constant'):
-        if param.is_piecewise_constant:
-          # Flatten all jump locations
-          additional_times.append(tf.reshape(param.jump_locations(), [-1]))
-    zeros = tf.constant([0], dtype=times.dtype)
-    all_times = tf.concat([zeros] + [times] + additional_times, axis=0)
-    all_times = tf.sort(all_times)
-    time_indices = tf.searchsorted(all_times, times, out_type=tf.int32)
-  else:
-    all_times = times_grid
-    time_indices = tf.searchsorted(times_grid, times, out_type=tf.int32)
-    # Adjust indices to bring `times` closer to `times_grid`.
-    times_diff_1 = tf.gather(times_grid, time_indices) - times
-    times_diff_2 = tf.gather(times_grid, tf.nn.relu(time_indices-1)) - times
-    time_indices = tf.where(
-        tf.math.abs(times_diff_2) > tf.math.abs(times_diff_1),
-        time_indices,
-        tf.nn.relu(time_indices - 1))
-  # Create a boolean mask to identify the iterations that have to be recorded.
-  mask = tf.scatter_nd(
-      indices=tf.expand_dims(tf.cast(time_indices, dtype=tf.int64), axis=1),
-      updates=tf.fill(tf.shape(times), True),
-      shape=tf.shape(all_times, out_type=tf.int64))
-  return all_times, mask
-
-validate_args = False
-
-# Note: all the notations below are the same as in [1].
-num_requested_times = tff_utils.get_shape(times)[0]
-params = [model._mean_reversion, model._volatility]
-if model._corr_matrix is not None:
-    params = params + [model._corr_matrix]
-times, keep_mask = _prepare_grid(
-    times, times_grid, *params)
-# Add zeros as a starting location
-dt = times[1:] - times[:-1]
-if dt.shape.is_fully_defined():
-    steps_num = dt.shape.as_list()[-1]
-else:
-    steps_num = tf.shape(dt)[-1]
-    # TODO(b/148133811): Re-enable Sobol test when TF 2.2 is released.
-    if random_type == random.RandomType.SOBOL:
-        raise ValueError('Sobol sequence for Euler sampling is temporarily '
-                         'unsupported when `time_step` or `times` have a '
-                         'non-constant value')
-if normal_draws is None:
-    # In order to use low-discrepancy random_type we need to generate the
-    # sequence of independent random normals upfront. We also precompute
-    # random numbers for stateless random type in order to ensure independent
-    # samples for multiple function calls whith different seeds.
-    if random_type in (random.RandomType.SOBOL,
-                       random.RandomType.HALTON,
-                       random.RandomType.HALTON_RANDOMIZED,
-                       random.RandomType.STATELESS,
-                       random.RandomType.STATELESS_ANTITHETIC):
-        normal_draws = utils.generate_mc_normal_draws(
-            num_normal_draws=model._dim, num_time_steps=steps_num,
-            num_sample_paths=num_samples, random_type=random_type,
-            seed=seed,
-            dtype=model._dtype, skip=skip)
-    else:
-        normal_draws = None
-else:
-    if validate_args:
-        draws_times = tf.shape(normal_draws)[0]
-        asserts = tf.assert_equal(
-            draws_times, tf.shape(times)[0] - 1,  # We have added `0` to `times`
-            message='`tf.shape(normal_draws)[1]` should be equal to the '
-                    'number of all `times` plus the number of all jumps of '
-                    'the piecewise constant parameters.')
-        with tf.compat.v1.control_dependencies([asserts]):
-            normal_draws = tf.identity(normal_draws)
-# The below is OK because we support exact discretization with piecewise
-# constant mr and vol.
-mean_reversion = model._mean_reversion(times)
-volatility = model._volatility(times)
-if model._corr_matrix is not None:
-    pass
-else:
-    corr_matrix_root = None
-
-exp_x_t = model._conditional_mean_x(times, mean_reversion, volatility)
-var_x_t = model._conditional_variance_x(times, mean_reversion, volatility)
-if model._dim == 1:
-    mean_reversion = tf.expand_dims(mean_reversion, axis=0)
-
-# Initial state
-initial_x = tf.zeros((num_samples, model._dim), dtype=model._dtype)
-f0_t = model._instant_forward_rate_fn(times[0])
-# Prepare results format
-written_count = 0
-if isinstance(num_requested_times, int) and num_requested_times == 1:
-    record_samples = False
-    rate_paths = initial_x + f0_t
-else:
-    # If more than one sample has to be recorded, create a TensorArray
-    record_samples = True
-    element_shape = initial_x.shape
-    rate_paths = tf.TensorArray(dtype=times.dtype,
-                                size=num_requested_times,
-                                element_shape=element_shape,
-                                clear_after_read=False)
-    # Include initial state, if necessary
-    rate_paths = rate_paths.write(written_count, initial_x + f0_t)
-written_count += tf.cast(keep_mask[0], dtype=tf.int32)
-
-
-# Define sampling while_loop body function
-def cond_fn(i, written_count, *args):
-    # It can happen that `times_grid[-1] > times[-1]` in which case we have
-    # to terminate when `written_count` reaches `num_requested_times`
-    del args
-    return tf.math.logical_and(i < tf.size(dt),
-                               written_count < num_requested_times)
-
-
-def body_fn(i, written_count, current_x, rate_paths):
-    """Simulate hull-white process to the next time point."""
-    if normal_draws is None:
-        normals = random.mv_normal_sample(
-            (num_samples,),
-            mean=tf.zeros((model._dim,), dtype=mean_reversion.dtype),
-            random_type=random_type, seed=seed)
-    else:
-        normals = normal_draws[i]
-
-    if corr_matrix_root is not None:
-        normals = tf.linalg.matvec(corr_matrix_root[i], normals)
-    vol_x_t = tf.math.sqrt(tf.nn.relu(tf.transpose(var_x_t)[i]))
-    # If numerically `vol_x_t == 0`, the gradient of `vol_x_t` becomes `NaN`.
-    # To prevent this, we explicitly set `vol_x_t` to zero tensor at zero
-    # values so that the gradient is set to zero at this values.
-    vol_x_t = tf.where(vol_x_t > 0.0, vol_x_t, 0.0)
-    next_x = (tf.math.exp(-tf.transpose(mean_reversion)[i + 1] * dt[i])
-              * current_x
-              + tf.transpose(exp_x_t)[i]
-              + vol_x_t * normals)
-    f_0_t = model._instant_forward_rate_fn(times[i + 1])
-
-    # Update `rate_paths`
-    if record_samples:
-        rate_paths = rate_paths.write(written_count, next_x + f_0_t)
-    else:
-        rate_paths = next_x + f_0_t
-    written_count += tf.cast(keep_mask[i + 1], dtype=tf.int32)
-    return (i + 1, written_count, next_x, rate_paths)
-
-
-# TODO(b/157232803): Use tf.cumsum instead?
-# Sample paths
-_, _, _, rate_paths = tf.while_loop(
-    cond_fn, body_fn, (0, written_count, initial_x, rate_paths))
-if not record_samples:
-    # shape [num_samples, 1, dim]
-    rate_paths_2 =  tf.expand_dims(rate_paths, axis=-2)
-# Shape [num_time_points] + [num_samples, dim]
-rate_paths = rate_paths.stack()
-# transpose to shape [num_samples, num_time_points, dim]
-n = rate_paths.shape.rank
-perm = list(range(1, n - 1)) + [0, n - 1]
-rate_paths_2 = tf.transpose(rate_paths, perm)
-
-
-
-
-
-#%%
+average_rate = np.mean(rate_paths[:,-1,0])
+print("Average of last rate: ", average_rate)
+assert np.isclose(average_rate, 0.010194103663829423, atol=1e-4), "Average rate does not match Google's implementation"
 
 short_rate = tf.expand_dims(rate_paths, axis=1)
 
@@ -585,8 +730,9 @@ times = tf.reshape(times, (1, 1, num_sim_steps))
 curve_times = tf.reshape(curve_times, (1, num_curve_nodes, 1))
 # curve_times = tf.repeat(curve_times, self._dim, axis=-1)
 
-mean_reversion = tf.reshape(
-    mean_reversion, (1, 1, model._dim, num_sim_steps))
+#%%
+
+mean_reversion = tf.reshape(mean_reversion, (1, 1, model._dim, num_sim_steps))
 # Transpose so the `dim` is the trailing dimension.
 mean_reversion = tf.transpose(mean_reversion, [0, 1, 3, 2])
 
@@ -599,6 +745,25 @@ p_t_tau, r_t = model._bond_reconstitution(times, times + curve_times,
                                  y_t), rate_paths
 
 
+
+#%%
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#%%
 
 dim = p_t_tau.shape[-1]
 

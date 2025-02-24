@@ -9,6 +9,7 @@ from typing import Optional
 import warnings
 from frm.enums import CompoundingFreq
 from prettytable import PrettyTable
+
 from frm.term_structures.zero_curve import ZeroCurve
 from frm.pricing_engine.monte_carlo_generic import generate_rand_nbs
 from frm.enums import ZeroCurveInterpMethod
@@ -119,28 +120,77 @@ var_x_t_check = np.array([[3.98802402e-05, 3.98802402e-05, 3.98802402e-05, 3.988
 assert np.all((np.abs(exp_x_t - exp_x_t_check) / exp_x_t_check) < 1e-6)
 assert np.all((np.abs(var_x_t - var_x_t_check) / var_x_t_check) < 1e-6)
 
-
-#%%
-
 initial_x = np.zeros((num_samples, 1))
 f0_t = zero_curve.get_instantaneous_forward_rate(years=sim_times[0])
 
-num_requested_times = sim_times.shape[0]
-record_samples = True
-dt = sim_times[1:] - sim_times[:-1]
+#%%
+
+dt = sim_grid[1:] - sim_grid[:-1]
+nb_iterations = dt.shape[0]
 keep_mask = np.array([False] + [True] * len(sim_times))
+normal_draws = [np.random.multivariate_normal(mean=np.zeros(1), cov=np.eye(1), size=num_samples) for _ in range(len(dt))]
 
-
+rate_paths = np.full((nb_iterations, 1, num_samples), np.nan)
+rate_paths[0, 0, :] = (f0_t + initial_x).flatten()
 
 #%%
 
+i = 0
+current_x = initial_x
+
+while i < nb_iterations:
+   normals = normal_draws[i]
+   vol_x_t = np.sqrt(np.maximum(var_x_t.T[i], 0))
+   vol_x_t = np.where(vol_x_t > 0.0, vol_x_t, 0.0)
+   next_x = (np.exp(-mean_reversion.T[i + 1] * dt[i])
+             * current_x
+             + exp_x_t.T[i]
+             + vol_x_t * normals)
+   f_0_t = zero_curve.get_instantaneous_forward_rate(years=sim_grid[i + 1])
+   rate_paths[i,0,:] = (next_x + f_0_t).flatten()
+   i += 1
+   current_x = next_x
 
 
+average_rate = np.mean(rate_paths[-1,0,:])
+print("Average of last rate: ", average_rate)
 
+#%%
 
+short_rate = rate_paths
 
+num_curve_nodes = 1
+num_sim_steps = len(sim_times)
+#curve_times = tf.reshape(curve_times, (1, num_curve_nodes, 1))
+mean_reversion = np.full_like(sim_times, mean_reversion_scalar)
 
+f_0_t = zero_curve.get_instantaneous_forward_rate(years=sim_times)
+f_0_t = f_0_t[:, np.newaxis, np.newaxis]  # reshapes (N,) to (N,1,1)
 
+x_t = rate_paths - f_0_t
+
+p_0_t = zero_curve.get_discount_factors(years=sim_times)
+p_0_t_tau = zero_curve.get_discount_factors(years=(sim_times + tau)) / p_0_t
+g_t_tau = (1. - np.exp(-mean_reversion * tau)) / mean_reversion
+
+term1 = x_t * g_t_tau[:, np.newaxis, np.newaxis]
+term2 = y_t * g_t_tau ** 2
+term2 = term2[:, np.newaxis, np.newaxis]
+
+p_t_tau = p_0_t_tau[:, np.newaxis, np.newaxis] * np.exp(-term1 - 0.5 * term2)
+r_t = rate_paths
+
+print("Average:", np.mean(p_t_tau[-1,:,:]))
+print("SD:", np.std(p_t_tau[-1,:,:]))
+
+#%%
+
+dt_ = np.concat(([0.], dt[1:]))
+period_discount_factors = np.exp(-r_t * dt_[:, np.newaxis, np.newaxis])
+cumulative_discount_factors = np.cumprod(period_discount_factors, axis=0)
+
+bond_option_prices = cp * np.maximum(cp * (p_t_tau[-1,:,:] - strikes), 0.) * cumulative_discount_factors[-1,:,:]
+print(np.mean(bond_option_prices))
 
 
 #%%
