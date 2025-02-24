@@ -51,48 +51,17 @@ print(f"Analytical discount factor at 1Y: {hw1f.zero_curve.get_discount_factors(
 print(f"ODE 1 discount factor at 1Y:      {hw1f.calc_discount_factor_by_solving_ode_1(t1=effective, t2=maturity):.10f}")
 print(f"ODE 2 discount factor at 1Y:      {hw1f.calc_discount_factor_by_solving_ode_2(t1=effective, t2=maturity):.10f}")
 
-for method in ['euler','exact']:
-    for antithetic in [True, False]:
-        for step_size in [0.1, 1, 10, 100, 1000]:
-            nb_steps = int(step_size * maturity * 365)
-            sim_results = []
-            t1 = time.time()
-            for i in range(N):
-
-                sim_result = hw1f.simulate(
-                    tau=maturity,
-                    nb_steps=nb_steps,
-                    nb_simulations=100,
-                    flag_apply_antithetic_variates=antithetic,
-                    method=method
-                )
-                sim_results.append(sim_result['averages_df'].iloc[-1])
-            mean_discount_factor = np.mean([v['discount_factor'] for v in sim_results])
-            t2 = time.time()
-            print(f"Simulated discount factor at 1Y:  {np.mean(mean_discount_factor):.10f}   (step_size={step_size}, method={method}, antithetic={antithetic})    {round(t2-t1,2)}")
 
 #%%
 
-# Need to understand why ODE 1 is not great and adjust if necessary.
-# We should want ODE 2 to align to ODE 1 & analytical solution.
-
-
-
-
-#%%
-
-
-
-#r_T = sim_results['R'][-1, :]
-#bond_prices = hw1f.calc_discount_factor_by_solving_ode_2(t1=effective, t2=maturity, r_t1=r_T)
 
 
 
 #%% Scalar test case
 
 # Test parameters
-expiry = 1
-maturity = 5
+expiry = 10
+maturity = 15
 K = np.exp(-0.01 * maturity) / np.exp(-0.01 * expiry)  # Strike calculation from test
 cp = 1 # call option
 
@@ -104,79 +73,116 @@ analytical_price = hw1f.price_zero_coupon_bond_option(
     cp=cp
 )
 
-expected_price = 0.02817777
+expected_price = 8.720313 / 100
 
-print("Price: ", analytical_price)
+print("Price: ", analytical_price[0])
 print("Expected Price: ", expected_price)
-print("Difference: ", analytical_price - expected_price)
+print("Difference: ", analytical_price[0] - expected_price)
+
+print(f"Analytical ZCBO Price (%): {100 * analytical_price[0]:.6f}")
+
+#%%%
+
+# Simulate to maturity
+sim_result = hw1f.simulate(
+    tau=expiry,
+    nb_steps=expiry * 365,
+    nb_simulations=20_000,
+    flag_apply_antithetic_variates=True,
+    method='exact'
+)
+print(sim_result['averages_df'].iloc[-1],'\n')
+
+R_expiry = sim_result['R'][-1,:] # discount factors at expiry
+
+#%%
+
+bond_prices_expiry = sim_result['sim_dsc_factor'][-1, :]
+print(f"Average simulated discount factor at expiry: {np.mean(bond_prices_expiry):.6f}")
+print(f"Average simulated CCZR at expiry: {-1 * np.log(np.mean(bond_prices_expiry)) / expiry:.6f}")
+print(f"Expected discount factor at expiry: {np.exp(-0.01 * expiry):.6f}")
+
+bond_prices = hw1f.calc_discount_factor_by_solving_ode_1(t1=expiry, t2=maturity, r_t1=R_expiry)
+print(f"Average simulated discount factor at maturity: {np.mean(bond_prices):.6f}")
+print(f"Expected bond price: {K}")
+
+
+print(f"Average bond price: {np.mean(bond_prices)}")
+
+print(f"Expected bond price: {1/K}")
+
+payoffs = np.maximum(cp * (bond_prices - K), 0)
+
+print(f"Analytical ZCBO Price (%): {100 * analytical_price[0]:.6f}")
+print(f"MC Price (%): {100 * np.mean(payoffs):.6f}")
+
+
+
+
+#%%
+
+
+
+# Run simulation up to expiry (95% of the run time is spent here)
+sim_results = hw1f.simulate(
+    tau=expiry,
+    nb_steps=maturity * 365, # daily steps
+    nb_simulations=10_000,
+    flag_apply_antithetic_variates=True,
+    method='euler'
+)
+
+# Extract simulated rates at expiry
+r_T = sim_results['R'][-1, :]
+bond_prices = hw1f.calc_discount_factor_by_solving_ode_2(t1=expiry, t2=maturity, r_t1=r_T)
+# Calculate payoffs for the option
+payoffs = np.maximum(cp * (bond_prices - K), 0)
+# Discount payoffs back to t=0
+discount_factor_to_expiry = hw1f.zero_curve.get_discount_factors(years=expiry)
+present_values = payoffs #* discount_factor_to_expiry
+# Calculate Monte Carlo price estimate
+mc_price = np.mean(present_values)
+
+mc_std_error = np.std(present_values) / np.sqrt(len(present_values))
 
 print(f"Analytical ZCBO Price: {100 * analytical_price[0]:.6f}")
+print(f"\nMonte Carlo Results:")
+print(f"MC Price: {100 * mc_price:.6f}")
+print(f"MC Std Error: {100 * mc_std_error:.6f}")
+print(f"MC 95% CI: [{100 * (mc_price - 1.96 * mc_std_error):.6f}, {100 * (mc_price + 1.96 * mc_std_error):.6f}]")
+print(f"Difference from Analytical: {100 * (mc_price - analytical_price[0]):.6f}")
 
+#%%
 
+# Analytical result: 0.02444878
+# Result with 5_000_000 simulations with ODE 1: 0.024131199310247316
+# Result with 5_000_000 simulations with ODE 2: 0.024141808579278154
 
+# Calculate cumulative statistics
+cumulative_means = np.cumsum(present_values) / np.arange(1, len(present_values) + 1)
+cumulative_stds = np.array([np.std(present_values[:i+1]) for i in range(len(present_values))])
+cumulative_se = cumulative_stds / np.sqrt(np.arange(1, len(present_values) + 1))
+ci_lower = cumulative_means - 1.96 * cumulative_se
+ci_upper = cumulative_means + 1.96 * cumulative_se
 
-#
-#
-#
-#
-# # Run simulation up to expiry (95% of the run time is spent here)
-# sim_results = hw1f.simulate(
-#     tau=expiry,
-#     nb_steps=maturity * 365, # daily steps
-#     nb_simulations=10_000,
-#     flag_apply_antithetic_variates=True,
-#     method='euler'
-# )
-#
-# # Extract simulated rates at expiry
-# r_T = sim_results['R'][-1, :]
-# bond_prices = hw1f.calc_discount_factor_by_solving_ode_2(t1=expiry, t2=maturity, r_t1=r_T)
-# # Calculate payoffs for the option
-# payoffs = np.maximum(cp * (bond_prices - K), 0)
-# # Discount payoffs back to t=0
-# discount_factor_to_expiry = hw1f.zero_curve.get_discount_factors(years=expiry)
-# present_values = payoffs * discount_factor_to_expiry
-# # Calculate Monte Carlo price estimate
-# mc_price = np.mean(present_values)
-#
-# mc_std_error = np.std(present_values) / np.sqrt(len(present_values))
-#
-# print(f"Analytical ZCBO Price: {100 * analytical_price[0]:.6f}")
-# print(f"\nMonte Carlo Results:")
-# print(f"MC Price: {100 * mc_price:.6f}")
-# print(f"MC Std Error: {100 * mc_std_error:.6f}")
-# print(f"MC 95% CI: [{100 * (mc_price - 1.96 * mc_std_error):.6f}, {100 * (mc_price + 1.96 * mc_std_error):.6f}]")
-# print(f"Difference from Analytical: {100 * (mc_price - analytical_price[0]):.6f}")
-#
-# # Analytical result: 0.02444878
-# # Result with 5_000_000 simulations with ODE 1: 0.024131199310247316
-# # Result with 5_000_000 simulations with ODE 2: 0.024141808579278154
-#
-# # Calculate cumulative statistics
-# cumulative_means = np.cumsum(present_values) / np.arange(1, len(present_values) + 1)
-# cumulative_stds = np.array([np.std(present_values[:i+1]) for i in range(len(present_values))])
-# cumulative_se = cumulative_stds / np.sqrt(np.arange(1, len(present_values) + 1))
-# ci_lower = cumulative_means - 1.96 * cumulative_se
-# ci_upper = cumulative_means + 1.96 * cumulative_se
-#
-# # Create plot
-# # Ignore 1st 30 averages to allow for burn-in so plot isn't dominated by early values
-# min_samples = 100
-# plt.figure(figsize=(10, 6))
-# plt.plot(range(min_samples, len(cumulative_means)), 100 * cumulative_means[min_samples:], label='MC Price')
-# plt.fill_between(range(min_samples, len(cumulative_means)),
-#                100 * ci_lower[min_samples:],
-#                100 * ci_upper[min_samples:],
-#                alpha=0.2,
-#                label='95% CI')
-# plt.axhline(y=100 * analytical_price[0], color='r', linestyle='--', label='Analytical Price')
-# plt.xlabel('Number of Simulations')
-# plt.ylabel('Option Price (%)')
-# plt.title('Monte Carlo Price Convergence')
-# plt.legend()
-# plt.grid(True)
-# plt.show()
-#
+# Create plot
+# Ignore 1st 30 averages to allow for burn-in so plot isn't dominated by early values
+min_samples = 100
+plt.figure(figsize=(10, 6))
+plt.plot(range(min_samples, len(cumulative_means)), 100 * cumulative_means[min_samples:], label='MC Price')
+plt.fill_between(range(min_samples, len(cumulative_means)),
+               100 * ci_lower[min_samples:],
+               100 * ci_upper[min_samples:],
+               alpha=0.2,
+               label='95% CI')
+plt.axhline(y=100 * analytical_price[0], color='r', linestyle='--', label='Analytical Price')
+plt.xlabel('Number of Simulations')
+plt.ylabel('Option Price (%)')
+plt.title('Monte Carlo Price Convergence')
+plt.legend()
+plt.grid(True)
+plt.show()
+
 #
 #
 #

@@ -23,8 +23,130 @@ from frm.utils import DEFAULT_NB_SIMULATIONS
 # [3] Gurrieri, Sebastien and Nakabayashi, Masaki and Wong, Tony, Calibration Methods of Hull-White Model (November 27, 2009).pdf
 
 
+
+option_expiries = 1.0
+bond_maturities = 5.0
+strikes = np.exp(-0.01 * bond_maturities) / np.exp(-0.01 * option_expiries)
+cp = 1 # 1 for call, -1 for put
+mean_reversion_scalar = 0.03
+volatility_scalar = 0.02
+num_samples = 500000
+time_step = 0.1
+seed = None
+skip = 0
+
+# Create flat 1% zero curve for your implementation
+years = np.linspace(0, 10, 11)
+rates = np.full_like(years, 0.01)
+zero_curve = ZeroCurve(
+    curve_date=pd.Timestamp('2024-04-01'),
+    pillar_df=pd.DataFrame({'years': years, 'zero_rate': rates}),
+    compounding_freq=CompoundingFreq.CONTINUOUS,
+    interp_method=ZeroCurveInterpMethod.CUBIC_SPLINE_ON_CCZR
+)
+
+
+strikes = np.atleast_1d(strikes).astype(np.float64)
+option_expiries = np.atleast_1d(option_expiries).astype(np.float64)
+bond_maturities = np.atleast_1d(bond_maturities).astype(np.float64)
+cp =  np.atleast_1d(cp).astype(np.int_)
+
+sim_times = np.arange(time_step, np.max(option_expiries), time_step)
+sim_times = np.concatenate([sim_times, np.array([np.max(option_expiries)])])
+
+tau = bond_maturities - option_expiries
+curve_times = np.unique(np.reshape(tau, -1))
+curve_times.sort()
+
+mean_reversion = np.full_like(sim_times, mean_reversion_scalar)
+volatility = np.full_like(sim_times, volatility_scalar)
+
+def y_integral(t0, t, vol, k):
+    """Computes int_t0^t sigma(u)^2 exp(2*k*u) du."""
+    return (vol * vol) / (2 * k) * (
+            np.exp(2 * k * t) - np.exp(2 * k * t0))
+
+t = sim_times
+mr_t = mean_reversion
+sigma_t = volatility
+
+# Note, this calculation is for a scalar volatility.
+# It needs to be extended to support a term structure of volatilities.
+y_t = np.exp(-2 * mr_t * t) * y_integral(t0=0, t=t, vol=sigma_t, k=mr_t)
+
+
+def ex_integral(t0, t, vol, k, y_t0):
+    """Function computes the integral for the drift calculation."""
+    # Computes int_t0^t (exp(k*s)*y(s)) ds,
+    # where y(s)=y(t0) + int_t0^s exp(-2*(s-u)) vol(u)^2 du."""
+    value = (np.exp(k * t) - np.exp(k * t0) + np.exp(2 * k * t0) * (np.exp(-k * t) - np.exp(-k * t0)))
+    value = value * vol**2 / (2 * k * k) + y_t0 * (np.exp(-k * t0) - np.exp(-k * t)) / k
+    return value
+
+def conditional_mean_x_scalar(t, mr_t, sigma_t):
+    # Note, this calculation is for a scalar volatility.
+    # It needs to be extended to support a term structure of volatilities.
+    exp_x_t = ex_integral(t0=0, t=t, vol=sigma_t, k=mr_t, y_t0=0)
+    exp_x_t = (exp_x_t[1:] - exp_x_t[:-1]) * np.exp(-np.broadcast_to(mr_t, t.shape)[1:] * t[1:])
+    return exp_x_t
+
+def variance_int(t0, t, vol, k):
+    """Computes int_t0^t exp(2*k*s) vol(s)^2 ds."""
+    return vol * vol / (2 * k) * (np.exp(2 * k * t) - np.exp(2 * k * t0))
+
+def conditional_variance_x_scalar(t, mr_t, sigma_t):
+    # Note, this calculation is for a scalar volatility.
+    # It needs to be extended to support a term structure of volatilities.
+    var_x_t = variance_int(t0=0, t=t, vol=sigma_t, k=mr_t)
+    var_x_t = (var_x_t[1:] - var_x_t[:-1]) * np.exp(-2 * np.broadcast_to(mr_t, t.shape)[1:] * t[1:])
+    return var_x_t
+
+
+
+sim_grid = np.concatenate((np.array([0]), sim_times))
+mean_reversion = np.full_like(sim_grid, mean_reversion_scalar)
+volatility = np.full_like(sim_grid, volatility_scalar)
+
+exp_x_t = conditional_mean_x_scalar(sim_grid, mean_reversion, volatility)
+var_x_t = conditional_variance_x_scalar(sim_grid, mean_reversion, volatility)
+
+exp_x_t_check = np.array([[1.99401055e-06, 5.96413033e-06, 9.91050071e-06, 1.38332638e-05, 1.77325607e-05,
+                           2.16085319e-05, 2.54613169e-05, 2.92910544e-05, 3.30978823e-05, 3.68819318e-05]])
+
+var_x_t_check = np.array([[3.98802402e-05, 3.98802402e-05, 3.98802402e-05, 3.98802402e-05, 3.98802402e-05,
+                           3.98802402e-05, 3.98802402e-05, 3.98802402e-05, 3.98802402e-05, 3.98802343e-05]])
+
+assert np.all((np.abs(exp_x_t - exp_x_t_check) / exp_x_t_check) < 1e-6)
+assert np.all((np.abs(var_x_t - var_x_t_check) / var_x_t_check) < 1e-6)
+
+
+#%%
+
+initial_x = np.zeros((num_samples, 1))
+f0_t = zero_curve.get_instantaneous_forward_rate(years=sim_times[0])
+
+num_requested_times = sim_times.shape[0]
+record_samples = True
+dt = sim_times[1:] - sim_times[:-1]
+keep_mask = np.array([False] + [True] * len(sim_times))
+
+
+
+#%%
+
+
+
+
+
+
+
+
+
+
+#%%
+
 @dataclass
-class HullWhite1Factor:
+class HullWhite1Factor2:
     zero_curve: ZeroCurve
     mean_rev_lvl: float # Mean reversion level of the short rate
     vol: float # Volatility of the short rate. As mean_rev_lvl → 0, short rate vol → bachelier vol x T.

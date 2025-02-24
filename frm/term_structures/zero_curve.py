@@ -297,8 +297,9 @@ class ZeroCurve:
                             days: Optional[Union[int, pd.Series]]=None,
                             years: Optional[Union[float, pd.Series]]=None) -> np.array:
 
+        input_arg = next(x for x in (dates, days, years) if x is not None)
         result = self.index_daily_data(dates, days, years)['discount_factor'].values
-        return float(result[0]) if len(result) == 1 else result
+        return float(result[0]) if not hasattr(input_arg, '__len__') else result
            
         
     def get_zero_rates(self,
@@ -307,13 +308,14 @@ class ZeroCurve:
                       days:  Optional[Union[int, pd.Series]]=None,
                       years: Optional[Union[float, pd.Series]]=None
                       ) -> np.array:
-                
+
+        input_arg = next(x for x in (dates, days, years) if x is not None)
         df = self.index_daily_data(dates, days, years)
         if compounding_freq == CompoundingFreq.CONTINUOUS:
             result = df['cczr'].values
         else:
             result = compounding_freq.calc_zero_rate_from_discount_factor(df['years'].values, df['discount_factor'].values)
-        return float(result[0]) if len(result) == 1 else result
+        return float(result[0]) if not hasattr(input_arg, '__len__') else result
         
         
     def index_daily_data(self, 
