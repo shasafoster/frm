@@ -62,24 +62,59 @@ curve_times.sort()
 mean_reversion = np.full_like(sim_times, mean_reversion_scalar)
 volatility = np.full_like(sim_times, volatility_scalar)
 
-def y_integral(t0, t, vol, k):
-    """Computes int_t0^t sigma(u)^2 exp(2*k*u) du."""
-    return (vol * vol) / (2 * k) * (
-            np.exp(2 * k * t) - np.exp(2 * k * t0))
-
 t = sim_times
 mr_t = mean_reversion
 sigma_t = volatility
 
+
+def y_integral_inner_term(t0, t, vol, k):
+    # TODO see last Claude Chat -
+    #  e⁻²∫ᵗᵘx(s)ds ≈ e⁻²ᵏ⁽ᵗ⁻ᵘ⁾
+    #  e⁻²ᵏᵗ · e²ᵏᵘ
+    # y(t) = e⁻²ᵏᵗ · ∫₀ᵗ e²ᵏᵘ σ² du
+    # k = χ, chi = mean reversion
+
+    """Computes int_t0^t sigma(u)^2 exp(2*k*u) du."""
+    result = (vol**2) / (2 * k) * (np.exp(2 * k * t) - np.exp(2 * k * t0))
+    return result
+
 # Note, this calculation is for a scalar volatility.
 # It needs to be extended to support a term structure of volatilities.
-y_t = np.exp(-2 * mr_t * t) * y_integral(t0=0, t=t, vol=sigma_t, k=mr_t)
+y_t = np.exp(-2 * mr_t * t) * y_integral_inner_term(t0=0, t=t, vol=sigma_t, k=mr_t)
 
 
 def ex_integral(t0, t, vol, k, y_t0):
-    """Function computes the integral for the drift calculation."""
-    # Computes int_t0^t (exp(k*s)*y(s)) ds,
-    # where y(s)=y(t0) + int_t0^s exp(-2*(s-u)) vol(u)^2 du."""
+    """
+    Compute the analytical solution for the integral used in drift calculation.
+
+    Evaluates ∫(t0→t) [exp(k*s)*y(s)] ds, where:
+    y(s) = y(t0) + ∫(t0→s) [exp(-2*(s-u))*vol(u)^2] du
+
+    This is used in models with mean reversion, such as Hull-White or extended Vasicek.
+
+    Parameters
+    ----------
+    t0 : float
+        Initial time point.
+    t : float
+        Terminal time point.
+    vol : float
+        Constant volatility parameter.
+    k : float
+        Mean reversion rate.
+    y_t0 : float
+        Initial value of y at time t0.
+
+    Returns
+    -------
+    float
+        Value of the integral.
+
+    Notes
+    -----
+    Assumes constant volatility. For time-dependent volatility, a numerical
+    integration approach would be required.
+    """
     value = (np.exp(k * t) - np.exp(k * t0) + np.exp(2 * k * t0) * (np.exp(-k * t) - np.exp(-k * t0)))
     value = value * vol**2 / (2 * k * k) + y_t0 * (np.exp(-k * t0) - np.exp(-k * t)) / k
     return value
@@ -157,11 +192,19 @@ print("Average of last rate: ", average_rate)
 
 
 short_rate = rate_paths
-
 num_curve_nodes = 1
 num_sim_steps = len(sim_times)
-#curve_times = tf.reshape(curve_times, (1, num_curve_nodes, 1))
 mean_reversion = np.full_like(sim_times, mean_reversion_scalar)
+
+
+# Compute discount bond prices using Eq. 10.18 in
+
+
+# Compute the discount bond price per Equation 10.18 in
+# Leif B. G. Andersen and Vladimir V. Piterbarg. Interest Rate Modeling. Volume II: Term Structure Models.
+# P(t,T) = (P(0,T) / P(0,t)) * exp(-x(t) G(t,T) - 0.5 * y(t) G(t,T)^2)
+# x(t) = r(t) - f(0,t)
+
 
 f_0_t = zero_curve.get_instantaneous_forward_rate(years=sim_times)
 f_0_t = f_0_t[:, np.newaxis, np.newaxis]  # reshapes (N,) to (N,1,1)
@@ -177,6 +220,10 @@ term2 = y_t * g_t_tau ** 2
 term2 = term2[:, np.newaxis, np.newaxis]
 
 p_t_tau = p_0_t_tau[:, np.newaxis, np.newaxis] * np.exp(-term1 - 0.5 * term2)
+
+
+
+
 r_t = rate_paths
 
 print("Average:", np.mean(p_t_tau[-1,:,:]))
